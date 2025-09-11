@@ -1,7 +1,7 @@
 {
-  "name": "<PACKAGE>",
+  "name": "ai-retry",
   "version": "1.0.0",
-  "description": "<DESCRIPTION>",
+  "description": "AI SDK Retry",
   "packageManager": "pnpm@9.0.0",
   "main": "dist/index.cjs",
   "module": "dist/index.mjs",
@@ -23,11 +23,11 @@
     "typecheck": "attw --pack ."
   },
   "keywords": [],
-  "author": "<AUTHOR>",
-  "license": "<LICENSE>",
+  "author": "Chris Cook",
+  "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/<USERNAME>/<REPO>"
+    "url": "https://github.com/zirkelc/ai-retry"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.17.0",
