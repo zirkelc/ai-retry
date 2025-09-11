@@ -1,0 +1,120 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  checks: write         # needed for checks
+  id-token: write       # needed for npm publish with provenance
+  contents: write       # needed for github release
+  pull-requests: write  # needed for coverage comment
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Biome
+        uses: biomejs/setup-biome@v2
+
+      - name: Lint
+        run: biome ci --no-errors-on-unmatched .
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup and Install
+        id: install
+        uses: zirkelc/setup-and-install@v1
+        with:
+          node-version: 20
+
+      - name: Build
+        run: pnpm build
+
+      - name: Test
+        run: pnpm test
+
+  # TODO: PREVIEW
+  # Uncomment to create preview releases or delete this section
+  # preview:
+  #   name: Preview
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+
+  #     - run: corepack enable
+
+  #     - name: Setup and Install
+  #       id: install
+  #       uses: zirkelc/setup-and-install@v1
+  #       with:
+  #         node-version: 20
+
+  #     - name: Build
+  #       run: pnpm build
+
+  #     - name: Publish Preview
+  #       run: npx pkg-pr-new publish --pnpm --packageManager=pnpm
+
+  # TODO: PUBLISH
+  # Uncomment to release package to NPM or delete this section
+  # release:
+  #   name: Release
+  #   runs-on: ubuntu-latest
+  #   needs: [lint, test]
+  #   if: github.ref == 'refs/heads/main'
+
+  #   steps:
+  #     - uses: actions/checkout@v4
+
+      # - name: Setup and Install
+      #   id: install
+      #   uses: zirkelc/setup-and-install@v1
+      #   with:
+      #     node-version: 20
+
+  #     - name: Build
+  #       run: pnpm build
+
+  #     - name: Publish to NPM
+  #       id: publish
+  #       uses: JS-DevTools/npm-publish@v3
+  #       with:
+  #         token: ${{ secrets.NPM_TOKEN }}
+  #         dry-run: false
+  #         provenance: true
+
+  #     - name: Post publish
+  #       if: steps.publish.outputs.type != ''
+  #       run: |
+  #         echo "Published ${{ steps.publish.outputs.type }} version: ${{ steps.publish.outputs.version }}"
+
+  #     - name: Publish skipped
+  #       if: steps.publish.outputs.type == ''
+  #       run: |
+  #         echo "Version in package.json has not changed. Skipping."
+  #         exit 0
+
+  #     - name: Create Release
+  #       if: steps.publish.outputs.type != ''
+  #       id: release
+  #       uses: ncipollo/release-action@v1
+  #       with:
+  #         allowUpdates: true
+  #         generateReleaseNotes: true
+  #         commit: ${{ github.sha }}
+  #         draft: false
+  #         name: v${{ steps.publish.outputs.version }}
+  #         tag: v${{ steps.publish.outputs.version }}

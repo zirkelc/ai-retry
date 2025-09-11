@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+
+if git status --short | grep --quiet '^MM'; then
+  printf '%s\n' "ERROR: Some staged files have unstaged changes" >&2
+  exit 1;
+fi
+
+# https://biomejs.dev/recipes/git-hooks/#shell-script
+npx @biomejs/biome check --write --staged --files-ignore-unknown=true --no-errors-on-unmatched
+
+git update-index --again

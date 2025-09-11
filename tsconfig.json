@@ -1,0 +1,6 @@
+{
+  // https://github.com/total-typescript/tsconfig
+  "extends": "@total-typescript/tsconfig/tsc/no-dom/library",
+  "compilerOptions": {},
+  "include": ["src", "test"]
+}

@@ -1,0 +1,20 @@
+{
+  // https://code.visualstudio.com/docs/editor/debugging
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "node-terminal",
+      "name": "Test (vitest)",
+      "request": "launch",
+      "command": "pnpm vitest ${fileBasenameNoExtension}",
+      "cwd": "${fileDirname}"
+    },
+    {
+      "type": "node-terminal",
+      "name": "Debug (tsx)",
+      "request": "launch",
+      "command": "pnpm tsx ${relativeFile}",
+      "cwd": "${workspaceFolder}"
+    }
+  ]
+}
