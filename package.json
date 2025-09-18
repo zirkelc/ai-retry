@@ -3,24 +3,23 @@
   "version": "0.0.0",
   "description": "AI SDK Retry",
   "packageManager": "pnpm@9.0.0",
-  "main": "dist/index.cjs",
-  "module": "dist/index.mjs",
+  "module": "dist/index.js",
   "types": "dist/index.d.ts",
   "type": "module",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "exports": {
-    ".": {
-      "import": "./dist/index.mjs",
-      "require": "./dist/index.cjs"
-    }
+    ".": "./dist/index.js",
+    "./retryables": "./dist/retryables/index.js"
   },
   "scripts": {
     "prepublishOnly": "pnpm build && pnpm typecheck",
-    "build": "unbuild",
+    "build": "tsdown",
     "test": "vitest",
     "lint": "biome check . --write",
     "prepare": "husky",
-    "typecheck": "attw --pack ."
+    "types": "TARBALL=$(pnpm pack | tail -n1) && attw $TARBALL && rm -f $TARBALL"
   },
   "keywords": [],
   "author": "Chris Cook",
@@ -30,15 +29,25 @@
     "url": "https://github.com/zirkelc/ai-retry"
   },
   "devDependencies": {
-    "@arethetypeswrong/cli": "^0.17.0",
-    "@biomejs/biome": "^1.9.4",
+    "@ai-sdk/azure": "^2.0.30",
+    "@ai-sdk/openai": "^2.0.30",
+    "@arethetypeswrong/cli": "^0.18.2",
+    "@biomejs/biome": "^2.2.4",
     "@total-typescript/tsconfig": "^1.0.4",
-    "@types/node": "^22.7.7",
-    "husky": "^9.1.6",
-    "pkg-pr-new": "^0.0.30",
-    "tsx": "^4.19.3",
-    "typescript": "^5.7.3",
-    "unbuild": "^3.3.1",
-    "vitest": "^2.1.3"
+    "@types/node": "^24.3.3",
+    "ai": "^5.0.44",
+    "husky": "^9.1.7",
+    "msw": "^2.11.2",
+    "pkg-pr-new": "^0.0.60",
+    "tsdown": "^0.15.2",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2",
+    "unbuild": "^3.6.1",
+    "vitest": "^3.2.4",
+    "zod": "^4.1.8"
+  },
+  "dependencies": {
+    "@ai-sdk/provider": "^2.0.0",
+    "@ai-sdk/provider-utils": "^3.0.9"
   }
 }
