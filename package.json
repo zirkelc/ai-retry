@@ -14,7 +14,8 @@
     "./retryables": "./dist/retryables/index.js"
   },
   "scripts": {
-    "prepublishOnly": "pnpm build && pnpm typecheck",
+    "prepublishOnly": "pnpm build && pnpm types",
+    "publish:alpha": "pnpm version prerelease --preid alpha && pnpm publish --tag alpha",
     "build": "tsdown",
     "test": "vitest",
     "lint": "biome check . --write",
