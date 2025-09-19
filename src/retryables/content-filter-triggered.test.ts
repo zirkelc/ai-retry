@@ -4,7 +4,7 @@ import { APICallError, generateText, NoObjectGeneratedError } from 'ai';
 import { expect, it } from 'vitest';
 import { createRetryable } from '../create-retryable-model.js';
 import { createMockModel } from '../test-utils.js';
-import { finishReasonContentFilter } from './finish-reason-content-filter.js';
+import { contentFilterTriggered } from './content-filter-triggered.js';
 
 type LanguageModelV2GenerateFn = LanguageModelV2['doGenerate'];
 
@@ -53,7 +53,7 @@ const errors = [
   }),
 ];
 
-describe('finishReasonContentFilter', () => {
+describe('contentFilterTriggered', () => {
   it('should succeed without errors', async () => {
     // Arrange
     const baseModel = createMockModel(mockResult);
@@ -63,7 +63,7 @@ describe('finishReasonContentFilter', () => {
     const result = await generateText({
       model: createRetryable({
         model: baseModel,
-        retries: [finishReasonContentFilter(retryModel)],
+        retries: [contentFilterTriggered(retryModel)],
       }),
       prompt: 'Hello!',
     });
@@ -84,7 +84,7 @@ describe('finishReasonContentFilter', () => {
       const result = await generateText({
         model: createRetryable({
           model: baseModel,
-          retries: [finishReasonContentFilter(retryModel)],
+          retries: [contentFilterTriggered(retryModel)],
         }),
         prompt: 'Hello!',
         maxRetries: 0,
@@ -125,7 +125,7 @@ describe('finishReasonContentFilter', () => {
     const result = generateText({
       model: createRetryable({
         model: baseModel,
-        retries: [finishReasonContentFilter(retryModel)],
+        retries: [contentFilterTriggered(retryModel)],
       }),
       prompt: 'Hello!',
       maxRetries: 0,

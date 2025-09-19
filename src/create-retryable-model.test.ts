@@ -1,8 +1,7 @@
-import type { AISDKError, LanguageModelV2 } from '@ai-sdk/provider';
+import type { LanguageModelV2 } from '@ai-sdk/provider';
 import { APICallError, generateText } from 'ai';
-import { MockLanguageModelV2 } from 'ai/test';
 import { expect, it } from 'vitest';
-import { createRetryable, retry } from './create-retryable-model.js';
+import { createRetryable } from './create-retryable-model.js';
 import { createMockModel } from './test-utils.js';
 
 type LanguageModelV2GenerateFn = LanguageModelV2['doGenerate'];

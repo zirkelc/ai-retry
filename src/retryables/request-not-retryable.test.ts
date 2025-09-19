@@ -3,7 +3,7 @@ import { APICallError, generateText } from 'ai';
 import { describe, expect, it } from 'vitest';
 import { createRetryable } from '../create-retryable-model.js';
 import { createMockModel } from '../test-utils.js';
-import { fallbackNotRetryable } from './fallback-not-retryable.js';
+import { requestNotRetryable } from './request-not-retryable.js';
 
 type LanguageModelV2GenerateFn = LanguageModelV2['doGenerate'];
 
@@ -54,7 +54,7 @@ const retryableError = new APICallError({
   },
 });
 
-describe('fallbackNotRetryable', () => {
+describe('requestNotRetryable', () => {
   it('should succeed without errors', async () => {
     // Arrange
     const baseModel = createMockModel(mockResult);
@@ -64,7 +64,7 @@ describe('fallbackNotRetryable', () => {
     const result = await generateText({
       model: createRetryable({
         model: baseModel,
-        retries: [fallbackNotRetryable(retryModel)],
+        retries: [requestNotRetryable(retryModel)],
       }),
       prompt: 'Hello!',
     });
@@ -83,7 +83,7 @@ describe('fallbackNotRetryable', () => {
     const result = await generateText({
       model: createRetryable({
         model: baseModel,
-        retries: [fallbackNotRetryable(retryModel)],
+        retries: [requestNotRetryable(retryModel)],
       }),
       prompt: 'Hello!',
       maxRetries: 0,
@@ -104,7 +104,7 @@ describe('fallbackNotRetryable', () => {
     const result = generateText({
       model: createRetryable({
         model: baseModel,
-        retries: [fallbackNotRetryable(retryModel)],
+        retries: [requestNotRetryable(retryModel)],
       }),
       prompt: 'Hello!',
       maxRetries: 0,
@@ -126,7 +126,7 @@ describe('fallbackNotRetryable', () => {
     const result = generateText({
       model: createRetryable({
         model: baseModel,
-        retries: [fallbackNotRetryable(retryModel)],
+        retries: [requestNotRetryable(retryModel)],
       }),
       prompt: 'Hello!',
       maxRetries: 0,

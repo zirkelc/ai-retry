@@ -4,9 +4,9 @@ import type { Retryable, RetryModel } from '../create-retryable-model.js';
 import { isObject, isString } from '../utils.js';
 
 /**
- *
+ * Fallback to a different model if the content filter was triggered.
  */
-export function finishReasonContentFilter(
+export function contentFilterTriggered(
   input: LanguageModelV2 | RetryModel,
 ): Retryable {
   return (context) => {

@@ -3,7 +3,7 @@ import { APICallError, generateText } from 'ai';
 import { describe, expect, it } from 'vitest';
 import { createRetryable } from '../create-retryable-model.js';
 import { createMockModel } from '../test-utils.js';
-import { fallbackAfterTimeout } from './fallback-after-timeout.js';
+import { requestTimeout } from './request-timeout.js';
 
 type LanguageModelV2GenerateFn = LanguageModelV2['doGenerate'];
 
@@ -35,7 +35,7 @@ const genericError = new APICallError({
   },
 });
 
-describe('fallbackAfterTimeout', () => {
+describe('requestTimeout', () => {
   it('should succeed without errors', async () => {
     // Arrange
     const baseModel = createMockModel(mockResult);
@@ -45,7 +45,7 @@ describe('fallbackAfterTimeout', () => {
     const result = await generateText({
       model: createRetryable({
         model: baseModel,
-        retries: [fallbackAfterTimeout(retryModel)],
+        retries: [requestTimeout(retryModel)],
       }),
       prompt: 'Hello!',
     });
@@ -81,7 +81,7 @@ describe('fallbackAfterTimeout', () => {
     const result = await generateText({
       model: createRetryable({
         model: baseModel,
-        retries: [fallbackAfterTimeout(retryModel)],
+        retries: [requestTimeout(retryModel)],
       }),
       prompt: 'Hello!',
       maxRetries: 0,
@@ -103,7 +103,7 @@ describe('fallbackAfterTimeout', () => {
     const result = generateText({
       model: createRetryable({
         model: baseModel,
-        retries: [fallbackAfterTimeout(retryModel)],
+        retries: [requestTimeout(retryModel)],
       }),
       prompt: 'Hello!',
       maxRetries: 0,

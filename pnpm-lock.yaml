@@ -45,9 +45,12 @@ importers:
       pkg-pr-new:
         specifier: ^0.0.60
         version: 0.0.60
+      publint:
+        specifier: ^0.3.13
+        version: 0.3.13
       tsdown:
         specifier: ^0.15.2
-        version: 0.15.2(@arethetypeswrong/core@0.18.2)(typescript@5.9.2)
+        version: 0.15.2(@arethetypeswrong/core@0.18.2)(publint@0.3.13)(typescript@5.9.2)
       tsx:
         specifier: ^4.20.5
         version: 4.20.5
@@ -507,6 +510,10 @@ packages:
 
   '@oxc-project/types@0.89.0':
     resolution: {integrity: sha512-yuo+ECPIW5Q9mSeNmCDC2im33bfKuwW18mwkaHMQh8KakHYDzj4ci/q7wxf2qS3dMlVVCIyrs3kFtH5LmnlYnw==}
+
+  '@publint/pack@0.1.2':
+    resolution: {integrity: sha512-S+9ANAvUmjutrshV4jZjaiG8XQyuJIZ8a4utWmN/vW1sgQ9IfBnPndwkmQYw53QmouOIytT874u65HEmu6H5jw==}
+    engines: {node: '>=18'}
 
   '@quansync/fs@0.1.5':
     resolution: {integrity: sha512-lNS9hL2aS2NZgNW7BBj+6EBl4rOf8l+tQ0eRY6JWCI8jI2kc53gSoqbjojU0OnAWhzoXiOjFyGsHcDGePB3lhA==}
@@ -1320,6 +1327,10 @@ packages:
   mlly@1.8.0:
     resolution: {integrity: sha512-l8D9ODSRWLe2KHJSifWGwBqpTZXIXTeo8mlKjY+E2HAakaTeNpqAyBZ8GSqLzHgw4XmHmC8whvpjJNMbFZN7/g==}
 
+  mri@1.2.0:
+    resolution: {integrity: sha512-tzzskb3bG8LvYGFF/mDTpq3jpI6Q9wc3LEmBaghu+DdCssd1FakN7Bc0hVNmEyGq1bq3RgfkCb3cmQLpNPOroA==}
+    engines: {node: '>=4'}
+
   ms@2.1.3:
     resolution: {integrity: sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==}
 
@@ -1368,6 +1379,9 @@ packages:
 
   outvariant@1.4.3:
     resolution: {integrity: sha512-+Sl2UErvtsoajRDKCE5/dBz4DIvHXQQnAxtQTF04OJxY0+DyZXSo5P5Bb7XYWOh81syohlYL24hbDwxedPUJCA==}
+
+  package-manager-detector@1.3.0:
+    resolution: {integrity: sha512-ZsEbbZORsyHuO00lY1kV3/t72yp6Ysay6Pd17ZAlNGuGwmWDLCJxFpRs0IzfXfj1o4icJOkUEioexFHzyPurSQ==}
 
   parse5-htmlparser2-tree-adapter@6.0.1:
     resolution: {integrity: sha512-qPuWvbLgvDGilKc5BoicRovlT4MtYT6JfJyBOMDsKoiT+GiuP5qyrPCnR9HcPECIJJmZh5jRndyNThnhhb/vlA==}
@@ -1595,6 +1609,11 @@ packages:
     resolution: {integrity: sha512-285/jRCYIbMGDciDdrw0KPNC4LKEEwz/bwErcYNxSJOi4CpGUuLpb9gQpg3XJP0XYj9ldSRluXxih4lX2YN8Xw==}
     engines: {node: '>=20'}
 
+  publint@0.3.13:
+    resolution: {integrity: sha512-NC+lph09+BRO9LJgKlIy3WQXyu6/6WDQ0dCA60KALUwdKVf3PfGuC6fY8I+oKB/5kEPh50aOSUz+6yWy1n4EfA==}
+    engines: {node: '>=18'}
+    hasBin: true
+
   quansync@0.2.11:
     resolution: {integrity: sha512-AifT7QEbW9Nri4tAwR5M/uzpBuqfZf+zwaEM/QkzEjj7NBuFD2rBuy0K3dE+8wltbezDV7JMA0WfnCPYRSYbXA==}
 
@@ -1664,6 +1683,10 @@ packages:
     resolution: {integrity: sha512-78E9voJHwnXQMiQdiqswVLZwJIzdBKJ1GdI5Zx6XwoFKUIk09/sSrr+05QFzvYb8q6Y9pPV45zzDuYa3907TZA==}
     engines: {node: '>=18.0.0', npm: '>=8.0.0'}
     hasBin: true
+
+  sade@1.8.1:
+    resolution: {integrity: sha512-xal3CZX1Xlo/k4ApwCFrHVACi9fBqJ7V+mwhBsuf/1IOKbBy098Fex+Wa/5QMubw09pSZ/u8EY8PWgevJsXp1A==}
+    engines: {node: '>=6'}
 
   sax@1.4.1:
     resolution: {integrity: sha512-+aWOz7yVScEGoKNd4PA10LZ8sk0A/z5+nXQG5giUO5rprX9jgYsTdov9qCchZiPIZezbZH+jRut8nPodFAX4Jg==}
@@ -2434,6 +2457,8 @@ snapshots:
 
   '@oxc-project/types@0.89.0': {}
 
+  '@publint/pack@0.1.2': {}
+
   '@quansync/fs@0.1.5':
     dependencies:
       quansync: 0.2.11
@@ -3129,6 +3154,8 @@ snapshots:
       pkg-types: 1.3.1
       ufo: 1.6.1
 
+  mri@1.2.0: {}
+
   ms@2.1.3: {}
 
   msw@2.11.2(@types/node@24.3.3)(typescript@5.9.2):
@@ -3189,6 +3216,8 @@ snapshots:
       wrappy: 1.0.2
 
   outvariant@1.4.3: {}
+
+  package-manager-detector@1.3.0: {}
 
   parse5-htmlparser2-tree-adapter@6.0.1:
     dependencies:
@@ -3404,6 +3433,13 @@ snapshots:
 
   pretty-bytes@7.0.1: {}
 
+  publint@0.3.13:
+    dependencies:
+      '@publint/pack': 0.1.2
+      package-manager-detector: 1.3.0
+      picocolors: 1.1.1
+      sade: 1.8.1
+
   quansync@0.2.11: {}
 
   query-registry@3.0.1:
@@ -3510,6 +3546,10 @@ snapshots:
       '@rollup/rollup-win32-ia32-msvc': 4.50.1
       '@rollup/rollup-win32-x64-msvc': 4.50.1
       fsevents: 2.3.3
+
+  sade@1.8.1:
+    dependencies:
+      mri: 1.2.0
 
   sax@1.4.1: {}
 
@@ -3623,7 +3663,7 @@ snapshots:
 
   tree-kill@1.2.2: {}
 
-  tsdown@0.15.2(@arethetypeswrong/core@0.18.2)(typescript@5.9.2):
+  tsdown@0.15.2(@arethetypeswrong/core@0.18.2)(publint@0.3.13)(typescript@5.9.2):
     dependencies:
       ansis: 4.1.0
       cac: 6.7.14
@@ -3641,6 +3681,7 @@ snapshots:
       unconfig: 7.3.3
     optionalDependencies:
       '@arethetypeswrong/core': 0.18.2
+      publint: 0.3.13
       typescript: 5.9.2
     transitivePeerDependencies:
       - '@ts-macro/tsc'

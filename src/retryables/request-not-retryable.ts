@@ -4,7 +4,7 @@ import type { Retryable, RetryModel } from '../create-retryable-model.js';
 /**
  * Fallback to a different model if the error is non-retryable.
  */
-export function fallbackNotRetryable(
+export function requestNotRetryable(
   input: LanguageModelV2 | RetryModel,
 ): Retryable {
   return (context) => {

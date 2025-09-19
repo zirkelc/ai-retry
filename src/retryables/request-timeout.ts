@@ -6,9 +6,7 @@ import type { Retryable, RetryModel } from '../create-retryable-model.js';
  * Fallback to a different model after a timeout/abort error.
  * Use in combination with the `abortSignal` option in `generateText`.
  */
-export function fallbackAfterTimeout(
-  input: LanguageModelV2 | RetryModel,
-): Retryable {
+export function requestTimeout(input: LanguageModelV2 | RetryModel): Retryable {
   return (context) => {
     const { error } = context;
     const model = 'model' in input ? input.model : input;
