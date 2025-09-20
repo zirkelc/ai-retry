@@ -29,11 +29,13 @@ import { contentFilterTriggered, requestTimeout } from 'ai-retry/retryables';
 
 // Create a retryable model
 const retryableModel = createRetryable({
-  model: azure('gpt-4-mini'), // Base model
+  // Base model
+  model: azure('gpt-4-mini'), 
+  // Retry strategies
   retries: [
-    contentFilterTriggered(openai('gpt-4-mini')), // Switch if content filtered
-    requestTimeout(azure('gpt-4')), // Switch on timeout
-    openai('gpt-4-mini'), // Final fallback to OpenAI
+    contentFilterTriggered(openai('gpt-4-mini')), 
+    requestTimeout(azure('gpt-4')), 
+    openai('gpt-4-mini'),
   ],
 });
 
@@ -136,7 +138,7 @@ const result = await generateText({
 
 ### Request Not Retryable
 
-Handle cases where the primary model cannot process the request:
+Handle cases where the base model fails with a non-retryable error (e.g., unsupported features):
 
 ```typescript
 import { requestNotRetryable } from 'ai-retry/retryables';
@@ -151,7 +153,7 @@ const retryable = createRetryable({
 
 ### Custom Retryables
 
-Create your own retry handlers for specific use cases:
+Create your own retryables for specific use cases:
 
 ```typescript
 import type { Retryable } from 'ai-retry';
@@ -183,7 +185,7 @@ Track retry attempts and errors:
 ```typescript
 const retryable = createRetryable({
   model: primaryModel,
-  retries: [/* your retries */],
+  retries: [/* your retryables */],
   onError: (context) => {
     console.log(`Attempt ${context.totalAttempts} failed:`, context.error);
     console.log(`Tried models:`, Array.from(context.triedModels.keys()));
@@ -193,28 +195,62 @@ const retryable = createRetryable({
 
 ## API Reference
 
-### `createRetryable(options)`
+### `createRetryable(options: CreateRetryableOptions): LanguageModelV2`
 
-Creates a retryable model wrapper.
+Creates a retryable language model.
 
-**Options:**
-- `model`: Primary AI model to use
-- `retries`: Array of retry strategies or fallback models
-- `onError`: Optional callback for error monitoring
+```ts
+interface CreateRetryableOptions {
+  model: LanguageModelV2;
+  retries: Array<Retryable | LanguageModelV2>;
+  onError?: (context: RetryContext) => void;
+}
+```
 
-**Returns:** A `LanguageModelV2` compatible model
+### `Retryable`
 
-### Retry Context
+A `Retryable` is a function that receives a `RetryContext` with the current error and model and all previously tried models.
+It should evaluate the error and decide whether to retry by returning a new model or to skip by returning `undefined`.
 
-Each retry handler receives a context object:
+```ts
+type Retryable = (context: RetryContext) => RetryModel | Promise<RetryModel> | undefined;
+```
+
+### `RetryModel`
+
+A `RetryModel` specifies the model to retry with and an optional `maxAttempts` to limit how many times this model can be retried.
+
+```typescript
+interface RetryModel {
+  model: LanguageModelV2;
+  maxAttempts?: number;
+}
+```
+
+### `RetryContext`
+
+The `RetryContext` object contains information about the current error and previously tried models.
 
 ```typescript
 interface RetryContext {
-  error: unknown;              // The error that triggered the retry
-  baseModel: LanguageModelV2;  // Original model
-  currentModel: LanguageModelV2; // Model that just failed
-  triedModels: Map<string, RetryState>; // Previously tried models
-  totalAttempts: number;       // Total attempts across all models
+  error: unknown;                       
+  baseModel: LanguageModelV2;           
+  currentModel: LanguageModelV2;        
+  triedModels: Map<string, RetryState>; 
+  totalAttempts: number;                
+}
+```
+
+### `RetryState`
+
+The `RetryState` tracks the state of each model that has been tried, including the number of attempts and any errors encountered. The `modelKey` is a unique identifier for the model instance to keep track of models without relying on object reference equality.
+
+```typescript
+interface RetryState {
+  modelKey: string;
+  model: LanguageModelV2;
+  attempts: number;
+  errors: Array<unknown>;
 }
 ```
 

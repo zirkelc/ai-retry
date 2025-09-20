@@ -1,15 +1,10 @@
 import type {
   LanguageModelV2,
   LanguageModelV2CallOptions,
-  LanguageModelV2StreamPart,
 } from '@ai-sdk/provider';
 import { getErrorMessage } from '@ai-sdk/provider-utils';
-import {
-  APICallError,
-  NoObjectGeneratedError,
-  RetryError,
-  TypeValidationError,
-} from 'ai';
+import { RetryError } from 'ai';
+import { getModelKey } from './get-model-key.js';
 
 type LanguageModelV2Generate = Awaited<
   ReturnType<LanguageModelV2['doGenerate']>
@@ -68,13 +63,6 @@ class RetryableModel implements LanguageModelV2 {
     return this.currentModel.supportedUrls;
   }
 
-  /**
-   * Unique key for a model to track which models have been tried
-   */
-  private getModelKey(model: LanguageModelV2): string {
-    return `${model.provider}/${model.modelId}`;
-  }
-
   constructor(options: CreateRetryableOptions) {
     this.options = options;
     this.baseModel = options.model;
@@ -105,7 +93,7 @@ class RetryableModel implements LanguageModelV2 {
       try {
         return await this.currentModel.doGenerate(options);
       } catch (error) {
-        const currentModelKey = this.getModelKey(this.currentModel);
+        const currentModelKey = getModelKey(this.currentModel);
         const prevState = triedModels.get(currentModelKey);
 
         /**
@@ -148,7 +136,7 @@ class RetryableModel implements LanguageModelV2 {
               : defaultRetryModel(retry);
 
           if (retryModel) {
-            const retryModelKey = this.getModelKey(retryModel.model);
+            const retryModelKey = getModelKey(retryModel.model);
             const retryState = triedModels.get(retryModelKey);
 
             /**

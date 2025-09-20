@@ -3,6 +3,7 @@
   "version": "0.0.1-alpha.1",
   "description": "AI SDK Retry",
   "packageManager": "pnpm@9.0.0",
+  "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "type": "module",
@@ -18,13 +19,12 @@
     "access": "public"
   },
   "scripts": {
-    "prepublishOnly": "pnpm build && pnpm types",
+    "prepublishOnly": "pnpm build",
     "publish:alpha": "pnpm version prerelease --preid alpha && pnpm publish --tag alpha",
     "build": "tsdown",
     "test": "vitest",
     "lint": "biome check . --write",
-    "prepare": "husky",
-    "types": "TARBALL=$(pnpm pack | tail -n1) && attw $TARBALL && rm -f $TARBALL"
+    "prepare": "husky"
   },
   "keywords": [],
   "author": "Chris Cook",
