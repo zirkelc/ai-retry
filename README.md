@@ -1,7 +1,5 @@
 ### ai-retry
 
-🚧 **WORK IN PROGRESS - DO NOT USE IN PRODUCTION**
-
 Intelligent retry and fallback mechanisms for AI SDK models. Automatically handle API failures, content filtering, timeouts, and schema mismatches by switching between different AI models.
 
 #### How?
@@ -10,12 +8,13 @@ Intelligent retry and fallback mechanisms for AI SDK models. Automatically handl
 
 ### Installation
 
+This library only supports AI SDK v5.
+
+> [!WARNING]  
+> `ai-retry` is in alpha stage and the API may change in future releases.
+
 ```bash
-npm install ai-retry
-# or
-pnpm add ai-retry
-# or
-yarn add ai-retry
+npm install ai-retry@alpha
 ```
 
 ### Usage
@@ -56,7 +55,7 @@ const result = await generateText({
 #### Retryables
 
 A retryable is a function that receives the current failed attempt and determines whether to retry with a different model based on the error and any previous attempts. 
-`ai-retry` includes several built-in retryables:
+There are several built-in retryables:
 
 - `contentFilterTriggered`: Content filter was triggered based on the prompt or completion.
 - `responseSchemaMismatch`: Structured output validation failed.
