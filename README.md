@@ -1,14 +1,14 @@
-# ai-retry
+### ai-retry
 
 🚧 **WORK IN PROGRESS - DO NOT USE IN PRODUCTION**
 
 Intelligent retry and fallback mechanisms for AI SDK models. Automatically handle API failures, content filtering, timeouts, and schema mismatches by switching between different AI models.
 
-## How It Works
+#### How?
 
-`ai-retry` wraps the provided base model with a set of retry conditions (retryables). When a request fails due to specific errors (like content filtering or timeouts), it iterates through the given retryables to find a suitable fallback model. It tracks which models have been tried and how many attempts have been made to prevent infinite loops.
+`ai-retry` wraps the provided base model with a set of retry conditions (retryables). When a request fails due to specific errors (like content filtering or timeouts), it iterates through the given retryables to find a suitable fallback model. It automatically tracks which models have been tried and how many attempts have been made to prevent infinite loops.
 
-## Installation
+### Installation
 
 ```bash
 npm install ai-retry
@@ -18,7 +18,13 @@ pnpm add ai-retry
 yarn add ai-retry
 ```
 
-## Usage
+### Usage
+
+Create a retryable model by providing a base model and a list of retryables or fallback models.
+
+> [!WARNING]  
+> `ai-retry` currently only supports `generateText` and `generateObject` calls.
+> Streaming via `streamText` and `streamObject` is not supported yet.
 
 ```typescript
 import { azure } from '@ai-sdk/azure';
@@ -47,35 +53,21 @@ const result = await generateText({
 });
 ```
 
-### Default Fallback
+#### Retryables
 
-If you always want to fallback to a different model on any error, you can simply provide a list of models:
-
-```typescript
-const retryableModel = createRetryable({
-  model: azure('gpt-4'),
-  retries: [
-    openai('gpt-4'), 
-    anthropic('claude-3-haiku-20240307')
-  ],
-});
-```
-
-## Retryables
-
-A retryable is a function that receives an error and determines whether to retry with a different model based on the error and context of previous attempts. 
+A retryable is a function that receives the current failed attempt and determines whether to retry with a different model based on the error and any previous attempts. 
 `ai-retry` includes several built-in retryables:
 
-- `contentFilterTriggered`: Automatically switch to a different model when content filtering blocks your request.
-- `responseSchemaMismatch`: Retry with different models when structured output validation fails.
-- `requestTimeout`: Handle timeouts by switching to potentially faster models.
-- `requestNotRetryable`: Handle cases where the primary model cannot process the request.
+- `contentFilterTriggered`: Content filter was triggered based on the prompt or completion.
+- `responseSchemaMismatch`: Structured output validation failed.
+- `requestTimeout`: Request timeout occurred.
+- `requestNotRetryable`: Request failed with a non-retryable error.
 
 By default, each retryable will only attempt to retry once per model to avoid infinite loops. You can customize this behavior by returning a `maxAttempts` value from your retryable function.
 
-### Content Filter Triggered
+##### Content Filter Triggered
 
-Automatically switch to a different model when content filtering blocks your request:
+Automatically switch to a different model when content filtering blocks your request.
 
 ```typescript
 import { contentFilterTriggered } from 'ai-retry/retryables';
@@ -88,7 +80,7 @@ const retryableModel = createRetryable({
 });
 ```
 
-### Response Schema Mismatch
+##### Response Schema Mismatch
 
 Retry with different models when structured output validation fails:
 
@@ -98,7 +90,7 @@ import { responseSchemaMismatch } from 'ai-retry/retryables';
 const retryableModel = createRetryable({
   model: azure('gpt-4-mini'),
   retries: [
-    responseSchemaMismatch(azure('gpt-4')), // Try full model for better structure output
+    responseSchemaMismatch(azure('gpt-4')), // Try full model for better structured output
   ],
 });
 
@@ -115,9 +107,12 @@ const result = await generateObject({
 });
 ```
 
-### Request Timeout
+##### Request Timeout
 
-Handle timeouts by switching to potentially faster models:
+Handle timeouts by switching to potentially faster models.
+
+> [!NOTE] 
+> You need to set an `abortSignal` with a timeout on your request for this to work. 
 
 ```typescript
 import { requestTimeout } from 'ai-retry/retryables';
@@ -136,9 +131,9 @@ const result = await generateText({
 });
 ```
 
-### Request Not Retryable
+##### Request Not Retryable
 
-Handle cases where the base model fails with a non-retryable error (e.g., unsupported features):
+Handle cases where the base model fails with a non-retryable error.
 
 ```typescript
 import { requestNotRetryable } from 'ai-retry/retryables';
@@ -151,7 +146,7 @@ const retryable = createRetryable({
 });
 ```
 
-### Custom Retryables
+##### Custom Retryables
 
 Create your own retryables for specific use cases:
 
@@ -159,10 +154,10 @@ Create your own retryables for specific use cases:
 import type { Retryable } from 'ai-retry';
 
 const customRetry: Retryable = (context) => {
-  const { error, triedModels, totalAttempts } = context;
+  const { current, attempts, totalAttempts } = context;
   
   // Your custom logic here
-  if (shouldRetryWithDifferentModel(error)) {
+  if (shouldRetryWithDifferentModel(current.error)) {
     return {
       model: myFallbackModel,
       maxAttempts: 3,
@@ -178,24 +173,73 @@ const retryable = createRetryable({
 });
 ```
 
-### Error Monitoring
+#### Default Fallback
 
-Track retry attempts and errors:
+If you always want to fallback to a different model on any error, you can simply provide a list of models.
 
 ```typescript
-const retryable = createRetryable({
-  model: primaryModel,
+const retryableModel = createRetryable({
+  model: azure('gpt-4'),
+  retries: [
+    openai('gpt-4'), 
+    anthropic('claude-3-haiku-20240307')
+  ],
+});
+```
+
+#### All Retries Failed
+
+If all retry attempts failed, a `RetryError` is thrown containing all individual errors.
+If no retry was attempted (e.g. because all retryables returned `undefined`), the original error is thrown directly.
+
+```typescript
+import { RetryError } from 'ai';
+
+const retryableModel = createRetryable({
+  model: azure('gpt-4'),
+  retries: [
+    openai('gpt-4'), 
+    anthropic('claude-3-haiku-20240307')
+  ],
+});
+
+try {
+  const result = await generateText({
+    model: retryableModel,
+    prompt: 'Hello world!',
+  });
+} catch (error) {
+  // RetryError is an official AI SDK error
+  if (error instanceof RetryError) {
+    console.error('All retry attempts failed:', error.errors);
+  } else {
+    console.error('Request failed:', error);
+  }
+}
+```
+
+#### Logging
+
+You can use the following callbacks to log retry attempts and errors:
+- `onError` is invoked if an error occurs. 
+- `onRetry` is invoked before attempting a retry.
+
+```typescript
+const retryableModel = createRetryable({
+  model: openai('gpt-4-mini'),
   retries: [/* your retryables */],
   onError: (context) => {
-    console.log(`Attempt ${context.totalAttempts} failed:`, context.error);
-    console.log(`Tried models:`, Array.from(context.triedModels.keys()));
+    console.log(`Attempt ${context.totalAttempts} with ${context.current.model.provider}/${context.current.model.modelId} failed:`, context.current.error);
+  },
+  onRetry: (context) => {
+    console.log(`Retrying with model ${context.current.model.provider}/${context.current.model.modelId}...`);
   },
 });
 ```
 
-## API Reference
+### API Reference
 
-### `createRetryable(options: CreateRetryableOptions): LanguageModelV2`
+#### `createRetryable(options: CreateRetryableOptions): LanguageModelV2`
 
 Creates a retryable language model.
 
@@ -204,21 +248,23 @@ interface CreateRetryableOptions {
   model: LanguageModelV2;
   retries: Array<Retryable | LanguageModelV2>;
   onError?: (context: RetryContext) => void;
+  onRetry?: (context: RetryContext) => void;
 }
 ```
 
-### `Retryable`
+#### `Retryable`
 
-A `Retryable` is a function that receives a `RetryContext` with the current error and model and all previously tried models.
-It should evaluate the error and decide whether to retry by returning a new model or to skip by returning `undefined`.
+A `Retryable` is a function that receives a `RetryContext` with the current error and model and all previous attempts.
+It should evaluate the error and decide whether to retry by returning a `RetryModel` or to skip by returning `undefined`.
 
 ```ts
 type Retryable = (context: RetryContext) => RetryModel | Promise<RetryModel> | undefined;
 ```
 
-### `RetryModel`
+#### `RetryModel`
 
-A `RetryModel` specifies the model to retry with and an optional `maxAttempts` to limit how many times this model can be retried.
+A `RetryModel` specifies the model to retry and an optional `maxAttempts` to limit how many times this model can be retried.
+By default, each retryable will only attempt to retry once per model. This can be customized by setting the `maxAttempts` property.
 
 ```typescript
 interface RetryModel {
@@ -227,38 +273,29 @@ interface RetryModel {
 }
 ```
 
-### `RetryContext`
+#### `RetryContext`
 
-The `RetryContext` object contains information about the current error and previously tried models.
+The `RetryContext` object contains information about the current attempt and all previous attempts.
 
 ```typescript
 interface RetryContext {
-  error: unknown;                       
-  baseModel: LanguageModelV2;           
-  currentModel: LanguageModelV2;        
-  triedModels: Map<string, RetryState>; 
-  totalAttempts: number;                
+  current: RetryAttempt;
+  attempts: Array<RetryAttempt>;
+  totalAttempts: number;
 }
 ```
 
-### `RetryState`
+#### `RetryAttempt`
 
-The `RetryState` tracks the state of each model that has been tried, including the number of attempts and any errors encountered. The `modelKey` is a unique identifier for the model instance to keep track of models without relying on object reference equality.
+A `RetryAttempt` represents a single failed attempt with a specific model.
 
 ```typescript
-interface RetryState {
-  modelKey: string;
+interface RetryAttempt {
+  error: unknown;
   model: LanguageModelV2;
-  attempts: number;
-  errors: Array<unknown>;
 }
 ```
 
-## Requirements
-
-- AI SDK v2.0+
-- Node.js 16+
-
-## License
+### License
 
 MIT

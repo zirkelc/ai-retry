@@ -1,7 +1,6 @@
-import { describe } from 'node:test';
 import type { LanguageModelV2 } from '@ai-sdk/provider';
 import { APICallError, generateText, NoObjectGeneratedError } from 'ai';
-import { expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { createRetryable } from '../create-retryable-model.js';
 import { createMockModel } from '../test-utils.js';
 import { contentFilterTriggered } from './content-filter-triggered.js';

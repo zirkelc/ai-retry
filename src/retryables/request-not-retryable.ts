@@ -8,7 +8,7 @@ export function requestNotRetryable(
   input: LanguageModelV2 | RetryModel,
 ): Retryable {
   return (context) => {
-    const { error } = context;
+    const { error } = context.current;
     const model = 'model' in input ? input.model : input;
 
     if (APICallError.isInstance(error) && error.isRetryable === false) {

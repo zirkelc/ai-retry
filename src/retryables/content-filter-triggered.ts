@@ -10,7 +10,7 @@ export function contentFilterTriggered(
   input: LanguageModelV2 | RetryModel,
 ): Retryable {
   return (context) => {
-    const { error } = context;
+    const { error } = context.current;
     const model = 'model' in input ? input.model : input;
 
     if (

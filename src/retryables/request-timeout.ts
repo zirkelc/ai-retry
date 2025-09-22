@@ -8,7 +8,7 @@ import type { Retryable, RetryModel } from '../create-retryable-model.js';
  */
 export function requestTimeout(input: LanguageModelV2 | RetryModel): Retryable {
   return (context) => {
-    const { error } = context;
+    const { error } = context.current;
     const model = 'model' in input ? input.model : input;
 
     /**

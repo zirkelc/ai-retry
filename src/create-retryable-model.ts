@@ -11,34 +11,46 @@ type LanguageModelV2Generate = Awaited<
 >;
 type LanguageModelV2Stream = Awaited<ReturnType<LanguageModelV2['doStream']>>;
 
+/**
+ * The context provided to Retryables with the current attempt and all previous attempts.
+ */
 export interface RetryContext {
-  error: unknown;
-  baseModel: LanguageModelV2;
-  currentModel: LanguageModelV2;
-  triedModels: Map<string, RetryState>;
+  current: RetryAttempt;
+  attempts: Array<RetryAttempt>;
   totalAttempts: number;
 }
 
+/**
+ * A retry attempt with the error and model used
+ */
+export interface RetryAttempt {
+  error: unknown;
+  model: LanguageModelV2;
+}
+
+/**
+ * A model to retry with and the maximum number of attempts for that model.
+ */
 export type RetryModel = {
   model: LanguageModelV2;
   maxAttempts: number;
 };
 
+/**
+ * A function that determines whether to retry with a different model based on the current attempt and all previous attempts.
+ */
 export type Retryable = (
   context: RetryContext,
 ) => RetryModel | Promise<RetryModel> | undefined;
 
-export type RetryState = {
-  modelKey: string;
-  model: LanguageModelV2;
-  attempts: number;
-  errors: Array<unknown>;
-};
-
+/**
+ * Options for creating a retryable model.
+ */
 export interface CreateRetryableOptions {
   model: LanguageModelV2;
   retries: Array<Retryable | LanguageModelV2>;
   onError?: (context: RetryContext) => void;
+  onRetry?: (context: RetryContext) => void;
 }
 
 function defaultRetryModel(model: LanguageModelV2): RetryModel {
@@ -83,39 +95,71 @@ class RetryableModel implements LanguageModelV2 {
     let totalAttempts = 0;
 
     /**
-     * Track models that have already been tried to avoid infinite loops
+     * Track all attempts.
      */
-    const triedModels = new Map<string, RetryState>();
+    const attempts: Array<RetryAttempt> = [];
+
+    /**
+     * The error occured in the previous attempt or undefined if this is the first attempt
+     */
+    let currentError: unknown | undefined;
 
     while (true) {
-      totalAttempts++;
-
-      try {
-        return await this.currentModel.doGenerate(options);
-      } catch (error) {
-        const currentModelKey = getModelKey(this.currentModel);
-        const prevState = triedModels.get(currentModelKey);
-
+      /**
+       * Call the onRetry handler if provided.
+       * Skip on the first attempt since no error occured yet.
+       */
+      if (currentError) {
         /**
-         * Save failed attempt with the current model
+         * Current attempt with previous error
          */
-        const newState: RetryState = {
-          modelKey: currentModelKey,
+        const currentAttempt: RetryAttempt = {
+          error: currentError,
           model: this.currentModel,
-          attempts: (prevState?.attempts ?? 0) + 1,
-          errors: [...(prevState?.errors ?? []), error],
         };
-
-        triedModels.set(currentModelKey, newState);
-
         /**
-         * Prepare context for the retry handlers
+         * Context for the onRetry handler
          */
         const context: RetryContext = {
-          error,
-          baseModel: this.baseModel,
-          currentModel: this.currentModel,
-          triedModels: triedModels,
+          current: currentAttempt,
+          attempts: attempts,
+          totalAttempts,
+        };
+
+        /**
+         * Call the onRetry handler if provided
+         */
+        this.options.onRetry?.(context);
+      }
+
+      try {
+        totalAttempts++;
+        return await this.currentModel.doGenerate(options);
+      } catch (error) {
+        /**
+         * Save the error of the current attempt for the retry of the next iteration
+         */
+        currentError = error;
+
+        /**
+         * Current attempt with current error
+         */
+        const currentAttempt: RetryAttempt = {
+          error: currentError,
+          model: this.currentModel,
+        };
+
+        /**
+         * Save the current attempt
+         */
+        attempts.push(currentAttempt);
+
+        /**
+         * Context for the retryables and onError handler
+         */
+        const context: RetryContext = {
+          current: currentAttempt,
+          attempts: attempts,
           totalAttempts,
         };
 
@@ -136,13 +180,22 @@ class RetryableModel implements LanguageModelV2 {
               : defaultRetryModel(retry);
 
           if (retryModel) {
+            /**
+             * The model key uniquely identifies a model instance (provider + modelId)
+             */
             const retryModelKey = getModelKey(retryModel.model);
-            const retryState = triedModels.get(retryModelKey);
+
+            /**
+             * Find all attempts with the same model
+             */
+            const retryAttempts = attempts.filter(
+              (a) => getModelKey(a.model) === retryModelKey,
+            );
 
             /**
              * Check if the model can still be retried based on maxAttempts
              */
-            if (!retryState || retryState.attempts < retryModel.maxAttempts) {
+            if (retryAttempts.length < retryModel.maxAttempts) {
               nextModel = retryModel.model;
               break;
             }
@@ -156,14 +209,12 @@ class RetryableModel implements LanguageModelV2 {
         if (!nextModel) {
           if (totalAttempts > 1) {
             const errorMessage = getErrorMessage(error);
-            const newErrors = Array.from(triedModels.values()).flatMap(
-              (state) => state.errors,
-            );
+            const errors = attempts.flatMap((a) => a.error);
 
             throw new RetryError({
               message: `Failed after ${totalAttempts} attempts. Last error: ${errorMessage}`,
               reason: 'maxRetriesExceeded',
-              errors: newErrors,
+              errors,
             });
           }
 
