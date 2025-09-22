@@ -118,7 +118,7 @@ it('should retry with fallback models', async () => {
       retries: [fallbackModel1, fallbackModel2],
     }),
     prompt: 'Hello!',
-    maxRetries: 0,
+    //
   });
 
   // Assert
@@ -142,7 +142,6 @@ it('should call onError handler when an error occurs', async () => {
       onError: onErrorSpy,
     }),
     prompt: 'Hello!',
-    maxRetries: 0,
   });
 
   // Assert
@@ -169,7 +168,6 @@ it('should call onError handler for each error in multiple attempts', async () =
       onError: onErrorSpy,
     }),
     prompt: 'Hello!',
-    maxRetries: 0,
   });
 
   // Assert
@@ -202,7 +200,6 @@ it('should call onRetry handler before retrying', async () => {
       onRetry: onRetrySpy,
     }),
     prompt: 'Hello!',
-    maxRetries: 0,
   });
 
   // Assert
@@ -229,7 +226,6 @@ it('should call onRetry handler for each retry attempt', async () => {
       onRetry: onRetrySpy,
     }),
     prompt: 'Hello!',
-    maxRetries: 0,
   });
 
   // Assert
@@ -283,7 +279,6 @@ it('should call both onError and onRetry handlers when retrying', async () => {
       onRetry: onRetrySpy,
     }),
     prompt: 'Hello!',
-    maxRetries: 0,
   });
 
   // Assert
@@ -314,7 +309,6 @@ it('should try each model only once by default', async () => {
       ],
     }),
     prompt: 'Hello!',
-    maxRetries: 0,
   });
 
   // Assert
@@ -343,7 +337,6 @@ it('should try models multiple times if maxAttempts is set', async () => {
       ],
     }),
     prompt: 'Hello!',
-    maxRetries: 0,
   });
 
   // Assert
@@ -367,7 +360,6 @@ it('should throw RetryError when all retry attempts are exhausted', async () => 
         retries: [fallbackModel1, fallbackModel2],
       }),
       prompt: 'Hello!',
-      maxRetries: 0,
     });
     expect.unreachable(
       'Should throw RetryError when all attempts are exhausted',
@@ -384,7 +376,7 @@ it('should throw RetryError when all retry attempts are exhausted', async () => 
   }
 });
 
-it('should throw original error directly on first attempt with no retries', async () => {
+it('should throw original error directly on first attempt with no retryables', async () => {
   // Arrange
   const baseModel = createMockModel(retryableError);
 
@@ -396,7 +388,7 @@ it('should throw original error directly on first attempt with no retries', asyn
         retries: [], // No retry models
       }),
       prompt: 'Hello!',
-      maxRetries: 0,
+      maxRetries: 0, // No automatic retries
     });
     expect.unreachable(
       'Should throw original error on first attempt with no retries',
@@ -407,7 +399,7 @@ it('should throw original error directly on first attempt with no retries', asyn
   }
 });
 
-it('should throw original error directly when retry models return undefined', async () => {
+it('should throw original error directly when retryable returns undefined', async () => {
   // Arrange
   const baseModel = createMockModel(nonRetryableError);
 
@@ -419,7 +411,7 @@ it('should throw original error directly when retry models return undefined', as
         retries: [() => undefined],
       }),
       prompt: 'Hello!',
-      maxRetries: 0,
+      maxRetries: 0, // No automatic retries
     });
     expect.unreachable(
       'Should throw original error when retry models return undefined',
@@ -427,5 +419,49 @@ it('should throw original error directly when retry models return undefined', as
   } catch (error) {
     expect(error).not.toBeInstanceOf(RetryError);
     expect(error).toBe(nonRetryableError);
+  }
+});
+
+it('should ignore maxRetries setting when retryable matches', async () => {
+  // Arrange
+  const baseModel = createMockModel(retryableError);
+  const fallbackModel = createMockModel(nonRetryableError);
+
+  // Act & Assert
+  try {
+    await generateText({
+      model: createRetryable({
+        model: baseModel,
+        retries: [fallbackModel],
+      }),
+      prompt: 'Hello!',
+      maxRetries: 1, // Should be ignored since RetryError is thrown
+    });
+    expect.unreachable('Should throw RetryError');
+  } catch (error) {
+    expect(error).toBeInstanceOf(RetryError);
+    expect(baseModel.doGenerateCalls.length).toBe(1);
+    expect(fallbackModel.doGenerateCalls.length).toBe(1);
+  }
+});
+
+it('should respect maxRetries setting when no retryable matches', async () => {
+  // Arrange
+  const baseModel = createMockModel(retryableError);
+
+  // Act & Assert
+  try {
+    await generateText({
+      model: createRetryable({
+        model: baseModel,
+        retries: [],
+      }),
+      prompt: 'Hello!',
+      maxRetries: 1, // Should be ignored since RetryError is thrown
+    });
+    expect.unreachable('Should throw RetryError');
+  } catch (error) {
+    expect(error).toBeInstanceOf(RetryError);
+    expect(baseModel.doGenerateCalls.length).toBe(2); // 1 initial + 1 retry
   }
 });
