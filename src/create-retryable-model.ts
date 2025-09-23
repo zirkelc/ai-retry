@@ -5,27 +5,53 @@ import type {
 import { getErrorMessage } from '@ai-sdk/provider-utils';
 import { RetryError } from 'ai';
 import { getModelKey } from './get-model-key.js';
-
-type LanguageModelV2Generate = Awaited<
-  ReturnType<LanguageModelV2['doGenerate']>
->;
-type LanguageModelV2Stream = Awaited<ReturnType<LanguageModelV2['doStream']>>;
+import type {
+  LanguageModelV2Generate,
+  LanguageModelV2Stream,
+} from './types.js';
 
 /**
  * The context provided to Retryables with the current attempt and all previous attempts.
  */
-export interface RetryContext {
-  current: RetryAttempt;
+export interface RetryContext<CURRENT extends RetryAttempt = RetryAttempt> {
+  current: CURRENT;
   attempts: Array<RetryAttempt>;
   totalAttempts: number;
 }
 
-/**
- * A retry attempt with the error and model used
- */
-export interface RetryAttempt {
+type RetryErrorAttempt = {
+  type: 'error';
   error: unknown;
   model: LanguageModelV2;
+};
+
+type RetryResultAttempt = {
+  type: 'result';
+  result: LanguageModelV2Generate;
+  model: LanguageModelV2;
+};
+
+/**
+ * A retry attempt with either an error or a result and the model used
+ */
+export type RetryAttempt = RetryErrorAttempt | RetryResultAttempt;
+
+/**
+ * Type guard to check if a retry attempt is an error attempt
+ */
+export function isErrorAttempt(
+  attempt: RetryAttempt,
+): attempt is RetryErrorAttempt {
+  return attempt.type === 'error';
+}
+
+/**
+ * Type guard to check if a retry attempt is a result attempt
+ */
+export function isResultAttempt(
+  attempt: RetryAttempt,
+): attempt is RetryResultAttempt {
+  return attempt.type === 'result';
 }
 
 /**
@@ -33,7 +59,7 @@ export interface RetryAttempt {
  */
 export type RetryModel = {
   model: LanguageModelV2;
-  maxAttempts: number;
+  maxAttempts?: number;
 };
 
 /**
@@ -49,12 +75,10 @@ export type Retryable = (
 export interface CreateRetryableOptions {
   model: LanguageModelV2;
   retries: Array<Retryable | LanguageModelV2>;
-  onError?: (context: RetryContext) => void;
-  onRetry?: (context: RetryContext) => void;
-}
-
-function defaultRetryModel(model: LanguageModelV2): RetryModel {
-  return { model, maxAttempts: 1 };
+  onError?: (context: RetryContext<RetryErrorAttempt>) => void;
+  onRetry?: (
+    context: RetryContext<RetryErrorAttempt | RetryResultAttempt>,
+  ) => void;
 }
 
 class RetryableModel implements LanguageModelV2 {
@@ -81,6 +105,57 @@ class RetryableModel implements LanguageModelV2 {
     this.currentModel = options.model;
   }
 
+  /**
+   * Find the next model to retry with based on the retry context
+   */
+  private async findNextModel(
+    context: RetryContext,
+  ): Promise<LanguageModelV2 | undefined> {
+    /**
+     * Filter retryables based on attempt type:
+     * - Result-based attempts: Only consider function retryables (skip plain models)
+     * - Error-based attempts: Consider all retryables (functions + plain models)
+     */
+    const applicableRetries = isResultAttempt(context.current)
+      ? this.options.retries.filter((retry) => typeof retry === 'function')
+      : this.options.retries;
+
+    /**
+     * Iterate through the applicable retryables to find a model to retry with
+     */
+    for (const retry of applicableRetries) {
+      const retryModel =
+        typeof retry === 'function'
+          ? await retry(context)
+          : { model: retry, maxAttempts: 1 };
+
+      if (retryModel) {
+        /**
+         * The model key uniquely identifies a model instance (provider + modelId)
+         */
+        const retryModelKey = getModelKey(retryModel.model);
+
+        /**
+         * Find all attempts with the same model
+         */
+        const retryAttempts = context.attempts.filter(
+          (a) => getModelKey(a.model) === retryModelKey,
+        );
+
+        const maxAttempts = retryModel.maxAttempts ?? 1;
+
+        /**
+         * Check if the model can still be retried based on maxAttempts
+         */
+        if (retryAttempts.length < maxAttempts) {
+          return retryModel.model;
+        }
+      }
+    }
+
+    return undefined;
+  }
+
   async doGenerate(
     options: LanguageModelV2CallOptions,
   ): Promise<LanguageModelV2Generate> {
@@ -100,23 +175,24 @@ class RetryableModel implements LanguageModelV2 {
     const attempts: Array<RetryAttempt> = [];
 
     /**
-     * The error occured in the previous attempt or undefined if this is the first attempt
+     * The previous attempt that triggered a retry, or undefined if this is the first attempt
      */
-    let currentError: unknown | undefined;
+    let previousAttempt: RetryAttempt | undefined;
 
     while (true) {
       /**
        * Call the onRetry handler if provided.
-       * Skip on the first attempt since no error occured yet.
+       * Skip on the first attempt since no previous attempt exists yet.
        */
-      if (currentError) {
+      if (previousAttempt) {
         /**
-         * Current attempt with previous error
+         * Current attempt context with the retry model
          */
         const currentAttempt: RetryAttempt = {
-          error: currentError,
+          ...previousAttempt,
           model: this.currentModel,
         };
+
         /**
          * Context for the onRetry handler
          */
@@ -132,33 +208,75 @@ class RetryableModel implements LanguageModelV2 {
         this.options.onRetry?.(context);
       }
 
-      try {
-        totalAttempts++;
-        return await this.currentModel.doGenerate(options);
-      } catch (error) {
-        /**
-         * Save the error of the current attempt for the retry of the next iteration
-         */
-        currentError = error;
+      totalAttempts++;
 
+      try {
+        const result = await this.currentModel.doGenerate(options);
+
+        /**
+         * Check if the result should trigger a retry
+         */
+        const resultAttempt: RetryResultAttempt = {
+          type: 'result',
+          result,
+          model: this.currentModel,
+        };
+
+        /**
+         * Add the current attempt to the list before checking for retries
+         */
+        attempts.push(resultAttempt);
+
+        const resultContext: RetryContext = {
+          current: resultAttempt,
+          attempts: attempts,
+          totalAttempts,
+        };
+
+        const nextModel = await this.findNextModel(resultContext);
+
+        if (nextModel) {
+          /**
+           * Set the model for the next attempt
+           */
+          this.currentModel = nextModel;
+
+          /**
+           * Set the previous attempt that triggered this retry
+           */
+          previousAttempt = resultAttempt;
+
+          /**
+           * Continue to the next iteration to retry
+           */
+          continue;
+        }
+
+        /**
+         * No retry needed, remove the attempt since it was successful and return the result
+         */
+        attempts.pop();
+        return result;
+      } catch (error) {
         /**
          * Current attempt with current error
          */
-        const currentAttempt: RetryAttempt = {
-          error: currentError,
+        const errorAttempt: RetryErrorAttempt = {
+          type: 'error',
+          error: error,
           model: this.currentModel,
         };
 
         /**
          * Save the current attempt
          */
-        attempts.push(currentAttempt);
+        attempts.push(errorAttempt);
 
         /**
          * Context for the retryables and onError handler
          */
-        const context: RetryContext = {
-          current: currentAttempt,
+        const context: RetryContext<RetryErrorAttempt> = {
+          current: errorAttempt,
           attempts: attempts,
           totalAttempts,
         };
@@ -168,39 +286,7 @@ class RetryableModel implements LanguageModelV2 {
          */
         this.options.onError?.(context);
 
-        let nextModel: LanguageModelV2 | undefined;
-
-        /**
-         * Iterate through the retryables to find a model to retry with
-         */
-        for (const retry of this.options.retries) {
-          const retryModel =
-            typeof retry === 'function'
-              ? await retry(context)
-              : defaultRetryModel(retry);
-
-          if (retryModel) {
-            /**
-             * The model key uniquely identifies a model instance (provider + modelId)
-             */
-            const retryModelKey = getModelKey(retryModel.model);
-
-            /**
-             * Find all attempts with the same model
-             */
-            const retryAttempts = attempts.filter(
-              (a) => getModelKey(a.model) === retryModelKey,
-            );
-
-            /**
-             * Check if the model can still be retried based on maxAttempts
-             */
-            if (retryAttempts.length < retryModel.maxAttempts) {
-              nextModel = retryModel.model;
-              break;
-            }
-          }
-        }
+        const nextModel = await this.findNextModel(context);
 
         /**
          * Handler didn't return any models to try next, rethrow the error.
@@ -209,7 +295,11 @@ class RetryableModel implements LanguageModelV2 {
         if (!nextModel) {
           if (totalAttempts > 1) {
             const errorMessage = getErrorMessage(error);
-            const errors = attempts.flatMap((a) => a.error);
+            const errors = attempts.flatMap((a) =>
+              isErrorAttempt(a)
+                ? a.error
+                : `Result with finishReason: ${a.result.finishReason}`,
+            );
 
             throw new RetryError({
               message: `Failed after ${totalAttempts} attempts. Last error: ${errorMessage}`,
@@ -225,6 +315,11 @@ class RetryableModel implements LanguageModelV2 {
          * Set the model for the next attempt
          */
         this.currentModel = nextModel;
+
+        /**
+         * Set the previous attempt that triggered this retry
+         */
+        previousAttempt = errorAttempt;
       }
     }
   }

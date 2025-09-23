@@ -1,18 +1,28 @@
-import { APICallError, type LanguageModelV2 } from '@ai-sdk/provider';
-import type { Retryable, RetryModel } from '../create-retryable-model.js';
+import type { LanguageModelV2 } from '@ai-sdk/provider';
+import { APICallError } from 'ai';
+import {
+  isErrorAttempt,
+  type Retryable,
+  type RetryModel,
+} from '../create-retryable-model.js';
 
 /**
  * Fallback to a different model if the error is non-retryable.
  */
 export function requestNotRetryable(
-  input: LanguageModelV2 | RetryModel,
+  model: LanguageModelV2,
+  options?: Omit<RetryModel, 'model'>,
 ): Retryable {
   return (context) => {
-    const { error } = context.current;
-    const model = 'model' in input ? input.model : input;
+    const { current } = context;
 
-    if (APICallError.isInstance(error) && error.isRetryable === false) {
-      return { model, maxAttempts: 1 };
+    if (isErrorAttempt(current)) {
+      if (
+        APICallError.isInstance(current.error) &&
+        current.error.isRetryable === false
+      ) {
+        return { model, maxAttempts: 1, ...options };
+      }
     }
 
     return undefined;

@@ -1,4 +1,3 @@
-import type { LanguageModelV2 } from '@ai-sdk/provider';
 import {
   APICallError,
   generateText,
@@ -9,17 +8,12 @@ import { describe, expect, it } from 'vitest';
 import z from 'zod';
 import { createRetryable } from '../create-retryable-model.js';
 import { createMockModel } from '../test-utils.js';
+import type { LanguageModelV2Generate } from '../types.js';
 import { responseSchemaMismatch } from './response-schema-mismatch.js';
-
-type LanguageModelV2GenerateFn = LanguageModelV2['doGenerate'];
-
-type LanguageModelV2GenerateResult = Awaited<
-  ReturnType<LanguageModelV2GenerateFn>
->;
 
 const mockResultText = 'Hello, world!';
 
-const mockResult: LanguageModelV2GenerateResult = {
+const mockResult: LanguageModelV2Generate = {
   finishReason: 'stop',
   usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
   content: [{ type: 'text', text: mockResultText }],

@@ -1,20 +1,26 @@
 import type { LanguageModelV2 } from '@ai-sdk/provider';
 import { NoObjectGeneratedError, TypeValidationError } from 'ai';
-import type { Retryable, RetryModel } from '../create-retryable-model.js';
+import {
+  isErrorAttempt,
+  type Retryable,
+  type RetryModel,
+} from '../create-retryable-model.js';
 
 export function responseSchemaMismatch(
-  input: LanguageModelV2 | RetryModel,
+  model: LanguageModelV2,
+  options?: Omit<RetryModel, 'model'>,
 ): Retryable {
   return (context) => {
-    const { error } = context.current;
-    const model = 'model' in input ? input.model : input;
+    const { current } = context;
 
-    if (
-      NoObjectGeneratedError.isInstance(error) &&
-      error.finishReason === 'stop' &&
-      TypeValidationError.isInstance(error.cause)
-    ) {
-      return { model, maxAttempts: 1 };
+    if (isErrorAttempt(current)) {
+      if (
+        NoObjectGeneratedError.isInstance(current.error) &&
+        current.error.finishReason === 'stop' &&
+        TypeValidationError.isInstance(current.error.cause)
+      ) {
+        return { model, maxAttempts: 1, ...options };
+      }
     }
 
     return undefined;

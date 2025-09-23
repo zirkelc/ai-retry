@@ -1,4 +1,4 @@
-import type { AISDKError, LanguageModelV2 } from '@ai-sdk/provider';
+import type { LanguageModelV2 } from '@ai-sdk/provider';
 import { MockLanguageModelV2 } from 'ai/test';
 
 type LanguageModelV2GenerateFn = LanguageModelV2['doGenerate'];
