@@ -1,12 +1,12 @@
-# ai-retry: Intelligent retry and fallback mechanisms for AI SDK models
+# ai-retry: Retry and fallback mechanisms for AI SDK
 
-Automatically handle API failures, content filtering, timeouts, and schema mismatches by switching between different AI models.
+Automatically handle API failures, content filtering and timeouts by switching between different AI models.
 
 `ai-retry` wraps the provided base model with a set of retry conditions (retryables). When a request fails with an error or the response is not satisfying, it iterates through the given retryables to find a suitable fallback model. It automatically tracks which models have been tried and how many attempts have been made to prevent infinite loops.
 
 It supports two types of retries:
-- Error-based retries: Triggered when the model throws an error (e.g. timeouts, API errors, etc.)
-- Result-based retries: Triggered when the model returns a successful response that needs retrying (e.g. content filtering)
+- Error-based retries: when the model throws an error (e.g. timeouts, API errors, etc.)
+- Result-based retries: when the model returns a successful response that needs retrying (e.g. content filtering, etc.)
 
 ### Installation
 

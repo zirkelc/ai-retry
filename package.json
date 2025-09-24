@@ -26,7 +26,12 @@
     "lint": "biome check . --write",
     "prepare": "husky"
   },
-  "keywords": [],
+  "keywords": [
+    "ai",
+    "ai-sdk",
+    "retry",
+    "fallback"
+  ],
   "author": "Chris Cook",
   "license": "MIT",
   "repository": {
