@@ -36,13 +36,9 @@ import { contentFilterTriggered, requestTimeout } from 'ai-retry/retryables';
 
 // Create a retryable model
 const retryableModel = createRetryable({
-  // Base model
-  model: azure('gpt-4-mini'), 
-  // Retry strategies
+  model: azure('gpt-4-mini'), // Base model
   retries: [
-    contentFilterTriggered(openai('gpt-4-mini')), 
-    requestTimeout(azure('gpt-4')), 
-    openai('gpt-4-mini'),
+    // Retry strategies and fallbacks...
   ],
 });
 
@@ -50,7 +46,6 @@ const retryableModel = createRetryable({
 const result = await generateText({
   model: retryableModel,
   prompt: 'Hello world!',
-  abortSignal: AbortSignal.timeout(10_000), 
 });
 ```
 
@@ -119,7 +114,7 @@ const retryableModel = createRetryable({
 const result = await generateText({
   model: retryableModel,
   prompt: 'Write a vegetarian lasagna recipe for 4 people.',
-  abortSignal: AbortSignal.timeout(10_000), 
+  abortSignal: AbortSignal.timeout(60_000), 
 });
 ```
 
@@ -137,7 +132,7 @@ import { requestNotRetryable } from 'ai-retry/retryables';
 const retryable = createRetryable({
   model: azure('gpt-4-mini'),
   retries: [
-    requestNotRetryable(openai('gpt-4')), // Switch providers entirely
+    requestNotRetryable(openai('gpt-4')), // Switch provider if error is not retryable
   ],
 });
 ```
@@ -243,7 +238,6 @@ A retryable is a function that receives the current attempt and determines wheth
 There are several built-in retryables:
 
 - [`contentFilterTriggered`](./src/retryables/content-filter-triggered.ts): Content filter was triggered based on the prompt or completion.
-<!-- - `responseSchemaMismatch`: Structured output validation failed. -->
 - [`requestTimeout`](./src/retryables/request-timeout.ts): Request timeout occurred.
 - [`requestNotRetryable`](./src/retryables/request-not-retryable.ts): Request failed with a non-retryable error.
 
