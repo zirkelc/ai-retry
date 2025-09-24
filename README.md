@@ -1,12 +1,10 @@
-### ai-retry
+### ai-retry: Intelligent retry and fallback mechanisms for AI SDK models
 
-Intelligent retry and fallback mechanisms for AI SDK models. Automatically handle API failures, content filtering, timeouts, and schema mismatches by switching between different AI models.
-
-#### How?
+Automatically handle API failures, content filtering, timeouts, and schema mismatches by switching between different AI models.
 
 `ai-retry` wraps the provided base model with a set of retry conditions (retryables). When a request fails due to specific errors OR when a successful response has certain characteristics (like content filtering), it iterates through the given retryables to find a suitable fallback model. It automatically tracks which models have been tried and how many attempts have been made to prevent infinite loops.
 
-The system supports two types of retries:
+It supports two types of retries:
 - **Error-based retries**: Triggered when the model throws an error (timeouts, API errors, etc.)
 - **Result-based retries**: Triggered when the model returns a successful response that needs retrying (e.g., content filtering, schema mismatches)
 
@@ -56,54 +54,8 @@ const result = await generateText({
 });
 ```
 
-#### Retry Errors and Results
 
-`ai-retry` handles two distinct retry scenarios:
-
-##### Error-based Retries
-
-Triggered when the model throws an error during `generateText` or `generateObject` calls:
-
-```typescript
-import { requestTimeout, requestNotRetryable } from 'ai-retry/retryables';
-
-const retryableModel = createRetryable({
-  model: azure('gpt-4'),
-  retries: [
-    requestTimeout(azure('gpt-4-mini')), // Timeout error
-    requestNotRetryable(openai('gpt-4')), // Non-retryable API error
-  ],
-});
-```
-
-##### Result-based Retries  
-
-Triggered when the model returns a successful response that needs retrying:
-
-```typescript
-import { contentFilterTriggered } from 'ai-retry/retryables';
-
-const retryableModel = createRetryable({
-  model: azure('gpt-4-mini'),
-  retries: [
-    contentFilterTriggered(openai('gpt-4-mini')), // finishReason: 'content-filter'
-  ],
-});
-```
-
-#### Retryables
-
-A retryable is a function that receives the current attempt and determines whether to retry with a different model based on the error/result and any previous attempts. 
-There are several built-in retryables:
-
-- `contentFilterTriggered`: Content filter was triggered based on the prompt or completion.
-<!-- - `responseSchemaMismatch`: Structured output validation failed. -->
-- `requestTimeout`: Request timeout occurred.
-- `requestNotRetryable`: Request failed with a non-retryable error.
-
-By default, each retryable will only attempt to retry once per model to avoid infinite loops. You can customize this behavior by returning a `maxAttempts` value from your retryable function.
-
-##### Content Filter Triggered
+#### Content Filter
 
 Automatically switch to a different model when content filtering blocks your request.
 
@@ -147,7 +99,7 @@ const result = await generateObject({
 ```
 -->
 
-##### Request Timeout
+#### Request Timeout
 
 Handle timeouts by switching to potentially faster models.
 
@@ -171,7 +123,7 @@ const result = await generateText({
 });
 ```
 
-##### Request Not Retryable
+#### Request Not Retryable
 
 Handle cases where the base model fails with a non-retryable error.
 
@@ -190,34 +142,7 @@ const retryable = createRetryable({
 });
 ```
 
-##### Custom Retryables
-
-Create your own retryables for specific use cases:
-
-```typescript
-import type { Retryable } from 'ai-retry';
-
-const customRetry: Retryable = (context) => {
-  const { current, attempts, totalAttempts } = context;
-  
-  // Your custom logic here
-  if (shouldRetryWithDifferentModel(current.error)) {
-    return {
-      model: myFallbackModel,
-      maxAttempts: 3,
-    };
-  }
-  
-  return undefined; // Don't retry
-};
-
-const retryable = createRetryable({
-  model: azure('gpt-4-mini'),
-  retries: [customRetry],
-});
-```
-
-#### Default Fallback
+#### Fallbacks
 
 If you always want to fallback to a different model on any error, you can simply provide a list of models.
 
@@ -227,6 +152,37 @@ const retryableModel = createRetryable({
   retries: [
     openai('gpt-4'), 
     anthropic('claude-3-haiku-20240307')
+  ],
+});
+```
+
+#### Custom
+
+Create your own retryables for specific use cases:
+
+```typescript
+import { anthropic } from '@ai-sdk/anthropic';
+import { openai } from '@ai-sdk/openai';
+import { APICallError } from 'ai';
+import { createRetryable, isErrorAttempt } from 'ai-retry';
+import type { Retryable } from 'ai-retry';
+
+const rateLimitRetry: Retryable = (context) => {
+  if (isErrorAttempt(context.current)) {
+    const { error } = context.current;
+
+    if (APICallError.isInstance(error) && error.statusCode === 429) {
+      return { model: anthropic('claude-3-haiku-20240307') };
+    }
+  }
+
+  return undefined;
+};
+
+const retryableModel = createRetryable({
+  model: openai('gpt-4'),
+  retries: [
+    rateLimitRetry
   ],
 });
 ```
@@ -280,6 +236,18 @@ const retryableModel = createRetryable({
   },
 });
 ```
+
+### Retryables
+
+A retryable is a function that receives the current attempt and determines whether to retry with a different model based on the error/result and any previous attempts. 
+There are several built-in retryables:
+
+- [`contentFilterTriggered`](./src/retryables/content-filter-triggered.ts): Content filter was triggered based on the prompt or completion.
+<!-- - `responseSchemaMismatch`: Structured output validation failed. -->
+- [`requestTimeout`](./src/retryables/request-timeout.ts): Request timeout occurred.
+- [`requestNotRetryable`](./src/retryables/request-not-retryable.ts): Request failed with a non-retryable error.
+
+By default, each retryable will only attempt to retry once per model to avoid infinite loops. You can customize this behavior by returning a `maxAttempts` value from your retryable function.
 
 ### API Reference
 
