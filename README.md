@@ -1,3 +1,5 @@
+<a href="https://www.npmjs.com/package/ai-retry" alt="ai-retry"><img src="https://img.shields.io/npm/dt/ai-retry?label=ai-retry"></a> <a href="https://github.com/zirkelc/ai-retry/actions/workflows/ci.yml" alt="CI"><img src="https://img.shields.io/github/actions/workflow/status/zirkelc/ai-retry/ci.yml?branch=main"></a>
+
 # ai-retry: Retry and fallback mechanisms for AI SDK
 
 Automatically handle API failures, content filtering and timeouts by switching between different AI models.
