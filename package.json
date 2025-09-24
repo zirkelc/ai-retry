@@ -42,6 +42,7 @@
     "ai": "5.x"
   },
   "devDependencies": {
+    "@ai-sdk/anthropic": "^2.0.18",
     "@ai-sdk/azure": "^2.0.30",
     "@ai-sdk/openai": "^2.0.30",
     "@arethetypeswrong/cli": "^0.18.2",

@@ -120,6 +120,24 @@ const result = await generateText({
 });
 ```
 
+#### Service Overloaded
+
+Handle service overload errors (HTTP code 529) by switching to a provider.
+
+> [!NOTE] 
+> For Anthropic specifically, use `anthropicServiceOverloaded` instead as Anthropic sometimes returns HTTP 200 OK with an error payload rather than the standard HTTP 529.
+
+```typescript
+import { serviceOverloaded } from 'ai-retry/retryables';
+
+const retryableModel = createRetryable({
+  model: azure('gpt-4'),
+  retries: [
+    serviceOverloaded(openai('gpt-4')), // Switch to OpenAI if Azure is overloaded
+  ],
+});
+```
+
 #### Request Not Retryable
 
 Handle cases where the base model fails with a non-retryable error.
@@ -242,6 +260,8 @@ There are several built-in retryables:
 - [`contentFilterTriggered`](./src/retryables/content-filter-triggered.ts): Content filter was triggered based on the prompt or completion.
 - [`requestTimeout`](./src/retryables/request-timeout.ts): Request timeout occurred.
 - [`requestNotRetryable`](./src/retryables/request-not-retryable.ts): Request failed with a non-retryable error.
+- [`serviceOverloaded`](./src/retryables/service-overloaded.ts): Response with status code 529 (service overloaded).
+  - [`anthropicServiceOverloaded`](./src/retryables/anthropic-service-overloaded.ts): Anthropic-specific overloaded error handling for both HTTP 529 and 200 OK responses with overloaded error payloads.
 
 By default, each retryable will only attempt to retry once per model to avoid infinite loops. You can customize this behavior by returning a `maxAttempts` value from your retryable function.
 

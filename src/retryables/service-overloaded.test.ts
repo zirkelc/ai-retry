@@ -1,9 +1,9 @@
-import { APICallError, generateText, NoObjectGeneratedError } from 'ai';
+import { APICallError, generateText } from 'ai';
 import { describe, expect, it } from 'vitest';
 import { createRetryable } from '../create-retryable-model.js';
 import { createMockModel } from '../test-utils.js';
 import type { LanguageModelV2Generate } from '../types.js';
-import { contentFilterTriggered } from './content-filter-triggered.js';
+import { serviceOverloaded } from './service-overloaded.js';
 
 const mockResultText = 'Hello, world!';
 
@@ -14,35 +14,19 @@ const mockResult: LanguageModelV2Generate = {
   warnings: [],
 };
 
-const contentFilterResult: LanguageModelV2Generate = {
-  finishReason: 'content-filter',
-  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-  content: [],
-  warnings: [],
-};
-
-const apiCallError = new APICallError({
+const overloadedError = new APICallError({
   message:
-    "The response was filtered due to the prompt triggering Azure OpenAI's content management policy. Please modify your prompt and retry. To learn more about our content filtering policies please read our documentation: https://go.microsoft.com/fwlink/?linkid=2198766",
+    'Overloaded: The server is currently overloaded. Please try again later.',
   url: '',
   requestBodyValues: {},
-  statusCode: 400,
+  statusCode: 529,
   responseHeaders: {},
-  responseBody:
-    '{"error":{"message":"The response was filtered due to the prompt triggering Azure OpenAI\'s content management policy. Please modify your prompt and retry. To learn more about our content filtering policies please read our documentation: https://go.microsoft.com/fwlink/?linkid=2198766","type":null,"param":"prompt","code":"content_filter","status":400,"innererror":{"code":"ResponsibleAIPolicyViolation","content_filter_result":{"hate":{"filtered":false,"severity":"safe"},"self_harm":{"filtered":false,"severity":"safe"},"sexual":{"filtered":true,"severity":"high"},"violence":{"filtered":false,"severity":"safe"}}}}}',
+  responseBody: '',
   isRetryable: false,
-  data: {
-    error: {
-      message:
-        "The response was filtered due to the prompt triggering Azure OpenAI's content management policy. Please modify your prompt and retry. To learn more about our content filtering policies please read our documentation: https://go.microsoft.com/fwlink/?linkid=2198766",
-      type: null,
-      param: 'prompt',
-      code: 'content_filter',
-    },
-  },
+  data: {},
 });
 
-describe('contentFilterTriggered', () => {
+describe('serviceOverloaded', () => {
   it('should succeed without errors', async () => {
     // Arrange
     const baseModel = createMockModel(mockResult);
@@ -52,7 +36,7 @@ describe('contentFilterTriggered', () => {
     const result = await generateText({
       model: createRetryable({
         model: baseModel,
-        retries: [contentFilterTriggered(retryModel)],
+        retries: [serviceOverloaded(retryModel)],
       }),
       prompt: 'Hello!',
     });
@@ -62,19 +46,18 @@ describe('contentFilterTriggered', () => {
     expect(result.text).toBe(mockResultText);
   });
 
-  it('should retry in case of content filter result', async () => {
+  it('should retry for status 529', async () => {
     // Arrange
-    const baseModel = createMockModel(contentFilterResult);
+    const baseModel = createMockModel(overloadedError);
     const retryModel = createMockModel(mockResult);
 
     // Act
     const result = await generateText({
       model: createRetryable({
         model: baseModel,
-        retries: [contentFilterTriggered(retryModel)],
+        retries: [serviceOverloaded(retryModel)],
       }),
       prompt: 'Hello!',
-      maxRetries: 0,
     });
 
     // Assert
@@ -83,24 +66,23 @@ describe('contentFilterTriggered', () => {
     expect(result.text).toBe(mockResultText);
   });
 
-  it('should retry in case of content filter error', async () => {
+  it('should not retry for status 200', async () => {
     // Arrange
-    const baseModel = createMockModel(apiCallError);
+    const baseModel = createMockModel(mockResult);
     const retryModel = createMockModel(mockResult);
 
     // Act
     const result = await generateText({
       model: createRetryable({
         model: baseModel,
-        retries: [contentFilterTriggered(retryModel)],
+        retries: [serviceOverloaded(retryModel)],
       }),
       prompt: 'Hello!',
-      maxRetries: 0,
     });
 
     // Assert
     expect(baseModel.doGenerateCalls.length).toBe(1);
-    expect(retryModel.doGenerateCalls.length).toBe(1);
+    expect(retryModel.doGenerateCalls.length).toBe(0);
     expect(result.text).toBe(mockResultText);
   });
 
@@ -132,7 +114,7 @@ describe('contentFilterTriggered', () => {
     const result = generateText({
       model: createRetryable({
         model: baseModel,
-        retries: [contentFilterTriggered(retryModel)],
+        retries: [serviceOverloaded(retryModel)],
       }),
       prompt: 'Hello!',
       maxRetries: 0,
