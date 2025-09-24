@@ -13,10 +13,10 @@ It supports two types of retries:
 This library only supports AI SDK v5.
 
 > [!WARNING]  
-> `ai-retry` is in alpha stage and the API may change in future releases.
+> `ai-retry` is in an early stage and the API may change in future releases.
 
 ```bash
-npm install ai-retry@alpha
+npm install ai-retry
 ```
 
 ### Usage
