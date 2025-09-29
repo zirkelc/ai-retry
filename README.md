@@ -25,14 +25,14 @@ npm install ai-retry
 
 Create a retryable model by providing a base model and a list of retryables or fallback models.
 
-> [!INFO]  
+> [!NOTE]  
 > `ai-retry` currently supports `generateText`, `generateObject`, `streamText`, and `streamObject` calls.
 > Note that streaming retry has limitations: retries are only possible before content starts flowing or very early in the stream.
 
 ```typescript
 import { azure } from '@ai-sdk/azure';
 import { openai } from '@ai-sdk/openai';
-import { generateText } from 'ai';
+import { generateText, streamText } from 'ai';
 import { createRetryable } from 'ai-retry';
 import { contentFilterTriggered, requestTimeout } from 'ai-retry/retryables';
 
@@ -64,6 +64,9 @@ for await (const chunk of result.textStream) {
 #### Content Filter
 
 Automatically switch to a different model when content filtering blocks your request.
+
+> [!WARNING]  
+> This retryable currently does not work with streaming requests, because the content filter is only indicated in the final response.
 
 ```typescript
 import { contentFilterTriggered } from 'ai-retry/retryables';
