@@ -9,6 +9,7 @@ import type {
   LanguageModelV2Generate,
   LanguageModelV2Stream,
 } from './types.js';
+import { isGenerateResult, isStreamResult } from './utils.js';
 
 /**
  * The context provided to Retryables with the current attempt and all previous attempts.
@@ -156,23 +157,33 @@ class RetryableModel implements LanguageModelV2 {
     return undefined;
   }
 
-  async doGenerate(
-    options: LanguageModelV2CallOptions,
-  ): Promise<LanguageModelV2Generate> {
+  /**
+   * Execute a function with retry logic for handling errors
+   */
+  private async executeWithRetry<
+    RESULT extends LanguageModelV2Stream | LanguageModelV2Generate,
+  >(
+    fn: () => Promise<RESULT>,
+    retryState?: {
+      currentModel: LanguageModelV2;
+      totalAttempts: number;
+      attempts: Array<RetryAttempt>;
+    },
+  ): Promise<RESULT> {
     /**
      * Always start with the original model
      */
-    this.currentModel = this.baseModel;
+    this.currentModel = retryState?.currentModel ?? this.baseModel;
 
     /**
      * Track number of attempts
      */
-    let totalAttempts = 0;
+    let totalAttempts = retryState?.totalAttempts ?? 0;
 
     /**
      * Track all attempts.
      */
-    const attempts: Array<RetryAttempt> = [];
+    const attempts: Array<RetryAttempt> = retryState?.attempts ?? [];
 
     /**
      * The previous attempt that triggered a retry, or undefined if this is the first attempt
@@ -211,51 +222,57 @@ class RetryableModel implements LanguageModelV2 {
       totalAttempts++;
 
       try {
-        const result = await this.currentModel.doGenerate(options);
+        const result = await fn();
 
         /**
-         * Check if the result should trigger a retry
+         * Check if the result should trigger a retry (only for generate results, not streams)
          */
-        const resultAttempt: RetryResultAttempt = {
-          type: 'result',
-          result,
-          model: this.currentModel,
-        };
-
-        /**
-         * Add the current attempt to the list before checking for retries
-         */
-        attempts.push(resultAttempt);
-
-        const resultContext: RetryContext = {
-          current: resultAttempt,
-          attempts: attempts,
-          totalAttempts,
-        };
-
-        const nextModel = await this.findNextModel(resultContext);
-
-        if (nextModel) {
+        if (isGenerateResult(result)) {
           /**
-           * Set the model for the next attempt
+           * Check if the result should trigger a retry
            */
-          this.currentModel = nextModel;
+          const resultAttempt: RetryResultAttempt = {
+            type: 'result',
+            result: result,
+            model: this.currentModel,
+          };
 
           /**
-           * Set the previous attempt that triggered this retry
+           * Add the current attempt to the list before checking for retries
            */
-          previousAttempt = resultAttempt;
+          attempts.push(resultAttempt);
+
+          const resultContext: RetryContext = {
+            current: resultAttempt,
+            attempts: attempts,
+            totalAttempts,
+          };
+
+          const nextModel = await this.findNextModel(resultContext);
+
+          if (nextModel) {
+            /**
+             * Set the model for the next attempt
+             */
+            this.currentModel = nextModel;
+
+            /**
+             * Set the previous attempt that triggered this retry
+             */
+            previousAttempt = resultAttempt;
+
+            /**
+             * Continue to the next iteration to retry
+             */
+            continue;
+          }
 
           /**
-           * Continue to the next iteration to retry
+           * No retry needed, remove the attempt since it was successful
            */
-          continue;
+          attempts.pop();
         }
 
-        /**
-         * No retry needed, remove the attempt since it was successful and return the result
-         */
-        attempts.pop();
         return result;
       } catch (error) {
         /**
@@ -294,18 +311,7 @@ class RetryableModel implements LanguageModelV2 {
          */
         if (!nextModel) {
           if (totalAttempts > 1) {
-            const errorMessage = getErrorMessage(error);
-            const errors = attempts.flatMap((a) =>
-              isErrorAttempt(a)
-                ? a.error
-                : `Result with finishReason: ${a.result.finishReason}`,
-            );
-
-            throw new RetryError({
-              message: `Failed after ${totalAttempts} attempts. Last error: ${errorMessage}`,
-              reason: 'maxRetriesExceeded',
-              errors,
-            });
+            throw this.prepareRetryError(error, attempts);
           }
 
           throw error;
@@ -324,10 +330,38 @@ class RetryableModel implements LanguageModelV2 {
     }
   }
 
+  async doGenerate(
+    options: LanguageModelV2CallOptions,
+  ): Promise<LanguageModelV2Generate> {
+    return this.executeWithRetry(
+      async () => await this.currentModel.doGenerate(options),
+    );
+  }
+
   async doStream(
     options: LanguageModelV2CallOptions,
   ): Promise<LanguageModelV2Stream> {
-    throw new Error('Streaming not implemented');
+    // TODO: read first chunks to catch streaming errors like timeouts or overloaded
+    return this.executeWithRetry(
+      async () => await this.currentModel.doStream(options),
+    );
+  }
+
+  private prepareRetryError(error: unknown, attempts: Array<RetryAttempt>) {
+    const errorMessage = getErrorMessage(error);
+    const errors = attempts.flatMap((a) =>
+      isErrorAttempt(a)
+        ? a.error
+        : `Result with finishReason: ${a.result.finishReason}`,
+    );
+
+    return new RetryError(
+      new RetryError({
+        message: `Failed after ${attempts.length} attempts. Last error: ${errorMessage}`,
+        reason: 'maxRetriesExceeded',
+        errors,
+      }),
+    );
   }
 }
 
