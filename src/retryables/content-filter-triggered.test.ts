@@ -35,6 +35,26 @@ const contentFilterResult: LanguageModelV2Generate = {
   warnings: [],
 };
 
+const contentFilterChunks: LanguageModelV2StreamPart[] = [
+  {
+    type: 'stream-start',
+    warnings: [],
+  },
+  {
+    type: 'text-start',
+    id: '0',
+  },
+  {
+    type: 'text-end',
+    id: '0',
+  },
+  {
+    type: 'finish',
+    finishReason: 'content-filter',
+    usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+  },
+];
+
 const apiCallError = new APICallError({
   message:
     "The response was filtered due to the prompt triggering Azure OpenAI's content management policy. Please modify your prompt and retry. To learn more about our content filtering policies please read our documentation: https://go.microsoft.com/fwlink/?linkid=2198766",
