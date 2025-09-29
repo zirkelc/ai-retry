@@ -7,7 +7,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Build**: `pnpm build` - Uses tsdown to build the TypeScript project
 - **Test**: `pnpm test` - Runs tests with Vitest (120s timeout configured)
 - **Lint**: `pnpm lint` - Uses Biome for linting and formatting with auto-fix
-- **Type Check**: `pnpm types` - Validates package types using @arethetypeswrong/cli
+- **Type Check**: Use TypeScript compiler directly (`npx tsc --noEmit`) for type checking
+- **Single Test**: `pnpm test <test-pattern>` - Run specific test files or patterns
 
 ## Architecture Overview
 
@@ -34,6 +35,8 @@ Located in `src/retryables/`:
 - **request-timeout**: Handles timeout errors
 - **request-not-retryable**: Handles non-retryable request errors  
 - **response-schema-mismatch**: Switches models for schema validation failures
+- **service-overloaded**: Handles HTTP 529 service overloaded errors
+- **anthropic-service-overloaded**: Anthropic-specific overload handling for both HTTP 529 and 200 OK responses
 
 ### Usage Pattern
 
@@ -50,7 +53,16 @@ const retryableModel = createRetryable({
 
 ## Dependencies
 
-- Built for AI SDK v2 (`@ai-sdk/provider`, `@ai-sdk/provider-utils`)
+- Built for AI SDK v5 (`@ai-sdk/provider`, `@ai-sdk/provider-utils`)
 - Uses Biome for code formatting (single quotes, semicolons, trailing commas)
-- TypeScript with strict configuration
+- TypeScript with strict configuration using @total-typescript/tsconfig
 - Vitest for testing with MSW for HTTP mocking
+- Supports `generateText`, `generateObject`, `streamText`, and `streamObject`
+- Streaming retry support with limitations: retries only possible before content starts flowing
+
+## Key Implementation Details
+
+- **Retry Loop Prevention**: Uses model keys (`provider/modelId`) to track attempts per model
+- **Two Retry Types**: Error-based (API failures) and result-based (content filtering, schema mismatches)
+- **State Management**: `RetryableModel` class maintains current model and tracks all attempts
+- **Error Handling**: Throws `RetryError` when all retries fail, original error when no retries attempted

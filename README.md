@@ -25,9 +25,9 @@ npm install ai-retry
 
 Create a retryable model by providing a base model and a list of retryables or fallback models.
 
-> [!WARNING]  
-> `ai-retry` currently only supports `generateText` and `generateObject` calls.
-> Streaming via `streamText` and `streamObject` is not supported yet.
+> [!INFO]  
+> `ai-retry` currently supports `generateText`, `generateObject`, `streamText`, and `streamObject` calls.
+> Note that streaming retry has limitations: retries are only possible before content starts flowing or very early in the stream.
 
 ```typescript
 import { azure } from '@ai-sdk/azure';
@@ -49,8 +49,17 @@ const result = await generateText({
   model: retryableModel,
   prompt: 'Hello world!',
 });
-```
 
+// Or with streaming
+const result = streamText({
+  model: retryableModel,
+  prompt: 'Write a story about a robot...',
+});
+
+for await (const chunk of result.textStream) {
+  console.log(chunk.text);
+}
+```
 
 #### Content Filter
 
@@ -123,9 +132,6 @@ const result = await generateText({
 #### Service Overloaded
 
 Handle service overload errors (HTTP code 529) by switching to a provider.
-
-> [!NOTE] 
-> For Anthropic specifically, use `anthropicServiceOverloaded` instead as Anthropic sometimes returns HTTP 200 OK with an error payload rather than the standard HTTP 529.
 
 ```typescript
 import { serviceOverloaded } from 'ai-retry/retryables';
@@ -261,7 +267,6 @@ There are several built-in retryables:
 - [`requestTimeout`](./src/retryables/request-timeout.ts): Request timeout occurred.
 - [`requestNotRetryable`](./src/retryables/request-not-retryable.ts): Request failed with a non-retryable error.
 - [`serviceOverloaded`](./src/retryables/service-overloaded.ts): Response with status code 529 (service overloaded).
-  - [`anthropicServiceOverloaded`](./src/retryables/anthropic-service-overloaded.ts): Anthropic-specific overloaded error handling for both HTTP 529 and 200 OK responses with overloaded error payloads.
 
 By default, each retryable will only attempt to retry once per model to avoid infinite loops. You can customize this behavior by returning a `maxAttempts` value from your retryable function.
 
