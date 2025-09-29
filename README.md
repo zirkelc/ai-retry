@@ -32,7 +32,7 @@ Create a retryable model by providing a base model and a list of retryables or f
 ```typescript
 import { azure } from '@ai-sdk/azure';
 import { openai } from '@ai-sdk/openai';
-import { generateText } from 'ai';
+import { generateText, streamText } from 'ai';
 import { createRetryable } from 'ai-retry';
 import { contentFilterTriggered, requestTimeout } from 'ai-retry/retryables';
 
