@@ -263,6 +263,15 @@ const retryableModel = createRetryable({
 });
 ```
 
+### Streaming
+
+Errors during streaming requests can occur in two ways:
+
+1. When the stream is initially created (e.g. network error, API error, etc.) by calling `streamText`.
+2. While the stream is being processed (e.g. timeout, API error, etc.) by reading from the returned `result.textStream` async iterable.
+
+In the second case, errors during stream processing will not always be retried, because the stream might have already emitted some actual content and the consumer might have processed it. Retrying will be stopped as soon as the first content chunk (e.g. types of `text-delta`, `tool-call`, etc.) is emitted. The type of chunks considered as content are the same as the ones that are passed to [onChunk()](https://github.com/vercel/ai/blob/1fe4bd4144bff927f5319d9d206e782a73979ccb/packages/ai/src/generate-text/stream-text.ts#L684-L697).
+
 ### Retryables
 
 A retryable is a function that receives the current attempt and determines whether to retry with a different model based on the error/result and any previous attempts. 
