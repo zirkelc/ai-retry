@@ -24,10 +24,7 @@ npm install ai-retry
 ### Usage
 
 Create a retryable model by providing a base model and a list of retryables or fallback models.
-
-> [!NOTE]  
-> `ai-retry` currently supports `generateText`, `generateObject`, `streamText`, and `streamObject` calls.
-> Note that streaming retry has limitations: retries are only possible before content starts flowing or very early in the stream.
+When an error occurs, it will evaluate each retryable in order and use the first one that indicates a retry should be attempted with a different model.
 
 ```typescript
 import { azure } from '@ai-sdk/azure';
@@ -134,7 +131,10 @@ const result = await generateText({
 
 #### Service Overloaded
 
-Handle service overload errors (HTTP code 529) by switching to a provider.
+Handle service overload errors (status code 529) by switching to a provider.
+
+> [!NOTE] 
+> You can use this retryable to handle Anthropic's overloaded errors.
 
 ```typescript
 import { serviceOverloaded } from 'ai-retry/retryables';
@@ -253,10 +253,12 @@ const retryableModel = createRetryable({
   model: openai('gpt-4-mini'),
   retries: [/* your retryables */],
   onError: (context) => {
-    console.log(`Attempt ${context.totalAttempts} with ${context.current.model.provider}/${context.current.model.modelId} failed:`, context.current.error);
+    console.error(`Attempt ${context.attempts.length} with ${context.current.model.provider}/${context.current.model.modelId} failed:`, 
+      context.current.error
+    );
   },
   onRetry: (context) => {
-    console.log(`Retrying with model ${context.current.model.provider}/${context.current.model.modelId}...`);
+    console.log(`Retrying attempt ${context.attempts.length + 1} with model ${context.current.model.provider}/${context.current.model.modelId}...`);
   },
 });
 ```
@@ -270,6 +272,7 @@ There are several built-in retryables:
 - [`requestTimeout`](./src/retryables/request-timeout.ts): Request timeout occurred.
 - [`requestNotRetryable`](./src/retryables/request-not-retryable.ts): Request failed with a non-retryable error.
 - [`serviceOverloaded`](./src/retryables/service-overloaded.ts): Response with status code 529 (service overloaded).
+  - Use this retryable to handle Anthropic's overloaded errors.
 
 By default, each retryable will only attempt to retry once per model to avoid infinite loops. You can customize this behavior by returning a `maxAttempts` value from your retryable function.
 
@@ -317,7 +320,6 @@ The `RetryContext` object contains information about the current attempt and all
 interface RetryContext {
   current: RetryAttempt;
   attempts: Array<RetryAttempt>;
-  totalAttempts: number;
 }
 ```
 

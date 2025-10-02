@@ -17,6 +17,7 @@ import {
   createMockModel,
   createMockStreamingModel,
   errorFromChunks,
+  mockStreamOptions,
 } from './test-utils.js';
 import type { LanguageModelV2Generate } from './types.js';
 
@@ -307,6 +308,7 @@ describe('generateText', () => {
       const firstErrorCall = onErrorSpy.mock.calls[0]![0];
       expect(firstErrorCall.current.error).toBe(retryableError);
       expect(firstErrorCall.current.model).toBe(baseModel);
+      expect(firstErrorCall.attempts.length).toBe(1);
       expect(firstErrorCall.totalAttempts).toBe(1);
     });
 
@@ -336,14 +338,16 @@ describe('generateText', () => {
 
       expect(firstErrorCall.current.error).toBe(retryableError);
       expect(firstErrorCall.current.model).toBe(baseModel);
+      expect(firstErrorCall.attempts.length).toBe(1);
       expect(firstErrorCall.totalAttempts).toBe(1);
 
       expect(secondErrorCall.current.error).toBe(nonRetryableError);
       expect(secondErrorCall.current.model).toBe(fallbackModel);
+      expect(secondErrorCall.attempts.length).toBe(2);
       expect(secondErrorCall.totalAttempts).toBe(2);
     });
 
-    it('should not call onError handler for result-based retries', async () => {
+    it('should NOT call onError handler for result-based retries', async () => {
       // Arrange
       const baseModel = createMockModel(contentFilterResult);
       const fallbackModel = createMockModel(mockResult);
@@ -376,7 +380,7 @@ describe('generateText', () => {
       expect(onRetrySpy).toHaveBeenCalledTimes(1);
     });
 
-    it('should call onError handler for error-based retries', async () => {
+    it('should call onError handler before onRetry handler', async () => {
       // Arrange
       const baseModel = createMockModel(retryableError);
       const fallbackModel = createMockModel(mockResult);
@@ -402,6 +406,14 @@ describe('generateText', () => {
       const errorCallTime = onErrorSpy.mock.invocationCallOrder[0] ?? 0;
       const retryCallTime = onRetrySpy.mock.invocationCallOrder[0] ?? 0;
       expect(errorCallTime).toBeLessThan(retryCallTime);
+
+      // Verify the context passed to each handler
+      const firstErrorCall = onErrorSpy.mock.calls[0]![0];
+      const firstRetryCall = onRetrySpy.mock.calls[0]![0];
+      expect(firstErrorCall.current.model).toBe(baseModel);
+      expect(firstErrorCall.attempts.length).toBe(1);
+      expect(firstRetryCall.current.model).toBe(fallbackModel);
+      expect(firstRetryCall.attempts.length).toBe(1);
     });
   });
 
@@ -431,6 +443,7 @@ describe('generateText', () => {
         expect(firstRetryCall.current.error).toBe(retryableError);
       }
       expect(firstRetryCall.current.model).toBe(fallbackModel);
+      expect(firstRetryCall.attempts.length).toBe(1);
       expect(firstRetryCall.totalAttempts).toBe(1);
     });
 
@@ -469,6 +482,7 @@ describe('generateText', () => {
         expect(retryCall.current.result.finishReason).toBe('content-filter');
       }
       expect(retryCall.current.model).toBe(fallbackModel);
+      expect(retryCall.attempts.length).toBe(1);
       expect(retryCall.totalAttempts).toBe(1);
     });
 
@@ -501,6 +515,7 @@ describe('generateText', () => {
         expect(firstRetryCall.current.error).toBe(retryableError);
       }
       expect(firstRetryCall.current.model).toBe(fallbackModel1);
+      expect(firstRetryCall.attempts.length).toBe(1);
       expect(firstRetryCall.totalAttempts).toBe(1);
 
       expect(isErrorAttempt(secondRetryCall.current)).toBe(true);
@@ -508,10 +523,11 @@ describe('generateText', () => {
         expect(secondRetryCall.current.error).toBe(nonRetryableError);
       }
       expect(secondRetryCall.current.model).toBe(fallbackModel2);
+      expect(secondRetryCall.attempts.length).toBe(2);
       expect(secondRetryCall.totalAttempts).toBe(2);
     });
 
-    it('should not call onRetry on first attempt', async () => {
+    it('should NOT call onRetry on first attempt', async () => {
       // Arrange
       const baseModel = createMockModel(mockResult);
       const onRetrySpy = vi.fn<OnRetry>();
@@ -735,7 +751,7 @@ describe('streamText', () => {
     expect(chunksToText(chunks)).toBe('Hello, world!');
   });
 
-  it('should retry when error occurs before stream starts', async () => {
+  it('should retry when error occurs at stream creation', async () => {
     const baseModel = createMockStreamingModel(retryableError);
 
     const fallbackModel = createMockStreamingModel({
@@ -756,11 +772,80 @@ describe('streamText', () => {
 
     expect(baseModel.doStreamCalls.length).toBe(1);
     expect(fallbackModel.doStreamCalls.length).toBe(1);
-    expect(chunksToText(chunks)).toBe('Hello, world!');
+    expect(chunks).toMatchInlineSnapshot(`
+      [
+        {
+          "type": "start",
+        },
+        {
+          "request": {},
+          "type": "start-step",
+          "warnings": [],
+        },
+        {
+          "id": "1",
+          "type": "text-start",
+        },
+        {
+          "id": "1",
+          "providerMetadata": undefined,
+          "text": "Hello",
+          "type": "text-delta",
+        },
+        {
+          "id": "1",
+          "providerMetadata": undefined,
+          "text": ", ",
+          "type": "text-delta",
+        },
+        {
+          "id": "1",
+          "providerMetadata": undefined,
+          "text": "world!",
+          "type": "text-delta",
+        },
+        {
+          "id": "1",
+          "type": "text-end",
+        },
+        {
+          "finishReason": "stop",
+          "providerMetadata": {
+            "testProvider": {
+              "testKey": "testValue",
+            },
+          },
+          "response": {
+            "headers": undefined,
+            "id": "id-0",
+            "modelId": "mock-model-id",
+            "timestamp": 1970-01-01T00:00:00.000Z,
+          },
+          "type": "finish-step",
+          "usage": {
+            "cachedInputTokens": undefined,
+            "inputTokens": 3,
+            "outputTokens": 10,
+            "reasoningTokens": undefined,
+            "totalTokens": 13,
+          },
+        },
+        {
+          "finishReason": "stop",
+          "totalUsage": {
+            "cachedInputTokens": undefined,
+            "inputTokens": 3,
+            "outputTokens": 10,
+            "reasoningTokens": undefined,
+            "totalTokens": 13,
+          },
+          "type": "finish",
+        },
+      ]
+    `);
   });
 
-  // TODO: implement retrying errors at the beginning of the stream
-  it.skip('should retry when error occurs at the stream start', async () => {
+  it('should retry when error occurs at the stream start', async () => {
     const baseModel = createMockStreamingModel({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -789,10 +874,184 @@ describe('streamText', () => {
 
     expect(baseModel.doStreamCalls.length).toBe(1);
     expect(fallbackModel.doStreamCalls.length).toBe(1);
-    expect(chunks).toMatchInlineSnapshot();
+    expect(chunks).toMatchInlineSnapshot(`
+      [
+        {
+          "type": "start",
+        },
+        {
+          "request": {},
+          "type": "start-step",
+          "warnings": [],
+        },
+        {
+          "id": "1",
+          "type": "text-start",
+        },
+        {
+          "id": "1",
+          "providerMetadata": undefined,
+          "text": "Hello",
+          "type": "text-delta",
+        },
+        {
+          "id": "1",
+          "providerMetadata": undefined,
+          "text": ", ",
+          "type": "text-delta",
+        },
+        {
+          "id": "1",
+          "providerMetadata": undefined,
+          "text": "world!",
+          "type": "text-delta",
+        },
+        {
+          "id": "1",
+          "type": "text-end",
+        },
+        {
+          "finishReason": "stop",
+          "providerMetadata": {
+            "testProvider": {
+              "testKey": "testValue",
+            },
+          },
+          "response": {
+            "headers": undefined,
+            "id": "id-0",
+            "modelId": "mock-model-id",
+            "timestamp": 1970-01-01T00:00:00.000Z,
+          },
+          "type": "finish-step",
+          "usage": {
+            "cachedInputTokens": undefined,
+            "inputTokens": 3,
+            "outputTokens": 10,
+            "reasoningTokens": undefined,
+            "totalTokens": 13,
+          },
+        },
+        {
+          "finishReason": "stop",
+          "totalUsage": {
+            "cachedInputTokens": undefined,
+            "inputTokens": 3,
+            "outputTokens": 10,
+            "reasoningTokens": undefined,
+            "totalTokens": 13,
+          },
+          "type": "finish",
+        },
+      ]
+    `);
   });
 
-  it.skip('should not retry when error occurs during mid-stream', async () => {
+  it('should retry when consective errors occur', async () => {
+    const baseModel = createMockStreamingModel({
+      stream: convertArrayToReadableStream([
+        { type: 'stream-start', warnings: [] },
+        {
+          type: 'error',
+          error: { type: 'overloaded_error', message: 'Overloaded' },
+        },
+      ]),
+    });
+
+    const fallbackModel1 = createMockStreamingModel(retryableError);
+    const fallbackModel2 = createMockStreamingModel({
+      stream: convertArrayToReadableStream(mockStreamChunks),
+    });
+
+    const retryableModel = createRetryable({
+      model: baseModel,
+      retries: [fallbackModel1, fallbackModel2],
+    });
+
+    const result = streamText({
+      model: retryableModel,
+      prompt,
+    });
+
+    const chunks = await convertAsyncIterableToArray(result.fullStream);
+
+    expect(baseModel.doStreamCalls.length).toBe(1);
+    expect(fallbackModel1.doStreamCalls.length).toBe(1);
+    expect(fallbackModel2.doStreamCalls.length).toBe(1);
+    expect(chunks).toMatchInlineSnapshot(`
+      [
+        {
+          "type": "start",
+        },
+        {
+          "request": {},
+          "type": "start-step",
+          "warnings": [],
+        },
+        {
+          "id": "1",
+          "type": "text-start",
+        },
+        {
+          "id": "1",
+          "providerMetadata": undefined,
+          "text": "Hello",
+          "type": "text-delta",
+        },
+        {
+          "id": "1",
+          "providerMetadata": undefined,
+          "text": ", ",
+          "type": "text-delta",
+        },
+        {
+          "id": "1",
+          "providerMetadata": undefined,
+          "text": "world!",
+          "type": "text-delta",
+        },
+        {
+          "id": "1",
+          "type": "text-end",
+        },
+        {
+          "finishReason": "stop",
+          "providerMetadata": {
+            "testProvider": {
+              "testKey": "testValue",
+            },
+          },
+          "response": {
+            "headers": undefined,
+            "id": "id-0",
+            "modelId": "mock-model-id",
+            "timestamp": 1970-01-01T00:00:00.000Z,
+          },
+          "type": "finish-step",
+          "usage": {
+            "cachedInputTokens": undefined,
+            "inputTokens": 3,
+            "outputTokens": 10,
+            "reasoningTokens": undefined,
+            "totalTokens": 13,
+          },
+        },
+        {
+          "finishReason": "stop",
+          "totalUsage": {
+            "cachedInputTokens": undefined,
+            "inputTokens": 3,
+            "outputTokens": 10,
+            "reasoningTokens": undefined,
+            "totalTokens": 13,
+          },
+          "type": "finish",
+        },
+      ]
+    `);
+  });
+
+  it('should NOT retry when error occurs during streaming', async () => {
     const baseModel = createMockStreamingModel({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
@@ -814,13 +1073,66 @@ describe('streamText', () => {
     const result = streamText({
       model: retryableModel,
       prompt,
+      ...mockStreamOptions,
     });
 
     const chunks = await convertAsyncIterableToArray(result.fullStream);
 
     expect(baseModel.doStreamCalls.length).toBe(1);
     expect(fallbackModel.doStreamCalls.length).toBe(0);
-    expect(chunks).toMatchInlineSnapshot();
+    expect(chunks).toMatchInlineSnapshot(`
+      [
+        {
+          "type": "start",
+        },
+        {
+          "request": {},
+          "type": "start-step",
+          "warnings": [],
+        },
+        {
+          "id": "1",
+          "type": "text-start",
+        },
+        {
+          "id": "1",
+          "providerMetadata": undefined,
+          "text": "Hello",
+          "type": "text-delta",
+        },
+        {
+          "error": [Error: Overloaded],
+          "type": "error",
+        },
+        {
+          "finishReason": "error",
+          "providerMetadata": undefined,
+          "response": {
+            "headers": undefined,
+            "id": "aitxt-mock-id",
+            "modelId": "mock-model-56",
+            "timestamp": 1970-01-01T00:00:00.000Z,
+          },
+          "type": "finish-step",
+          "usage": {
+            "inputTokens": undefined,
+            "outputTokens": undefined,
+            "totalTokens": undefined,
+          },
+        },
+        {
+          "finishReason": "error",
+          "totalUsage": {
+            "cachedInputTokens": undefined,
+            "inputTokens": undefined,
+            "outputTokens": undefined,
+            "reasoningTokens": undefined,
+            "totalTokens": undefined,
+          },
+          "type": "finish",
+        },
+      ]
+    `);
   });
 
   describe('onError', () => {
@@ -852,6 +1164,7 @@ describe('streamText', () => {
       const firstErrorCall = onErrorSpy.mock.calls[0]![0];
       expect(firstErrorCall.current.error).toBe(retryableError);
       expect(firstErrorCall.current.model).toBe(baseModel);
+      expect(firstErrorCall.attempts.length).toBe(1);
       expect(firstErrorCall.totalAttempts).toBe(1);
     });
 
@@ -887,14 +1200,16 @@ describe('streamText', () => {
 
       expect(firstErrorCall.current.error).toBe(retryableError);
       expect(firstErrorCall.current.model).toBe(baseModel);
+      expect(firstErrorCall.attempts.length).toBe(1);
       expect(firstErrorCall.totalAttempts).toBe(1);
 
       expect(secondErrorCall.current.error).toBe(nonRetryableError);
       expect(secondErrorCall.current.model).toBe(fallbackModel);
+      expect(secondErrorCall.attempts.length).toBe(2);
       expect(secondErrorCall.totalAttempts).toBe(2);
     });
 
-    it('should not call onError handler when streaming succeeds', async () => {
+    it('should NOT call onError handler when streaming succeeds', async () => {
       // Arrange
       const baseModel = createMockStreamingModel({
         stream: convertArrayToReadableStream(mockStreamChunks),
@@ -952,6 +1267,7 @@ describe('streamText', () => {
         expect(firstRetryCall.current.error).toBe(retryableError);
       }
       expect(firstRetryCall.current.model).toBe(fallbackModel);
+      expect(firstRetryCall.attempts.length).toBe(1);
       expect(firstRetryCall.totalAttempts).toBe(1);
     });
 
@@ -990,6 +1306,7 @@ describe('streamText', () => {
         expect(firstRetryCall.current.error).toBe(retryableError);
       }
       expect(firstRetryCall.current.model).toBe(fallbackModel1);
+      expect(firstRetryCall.attempts.length).toBe(1);
       expect(firstRetryCall.totalAttempts).toBe(1);
 
       expect(isErrorAttempt(secondRetryCall.current)).toBe(true);
@@ -997,10 +1314,11 @@ describe('streamText', () => {
         expect(secondRetryCall.current.error).toBe(nonRetryableError);
       }
       expect(secondRetryCall.current.model).toBe(fallbackModel2);
+      expect(secondRetryCall.attempts.length).toBe(2);
       expect(secondRetryCall.totalAttempts).toBe(2);
     });
 
-    it('should not call onRetry on first attempt', async () => {
+    it('should NOT call onRetry on first attempt', async () => {
       // Arrange
       const baseModel = createMockStreamingModel({
         stream: convertArrayToReadableStream(mockStreamChunks),

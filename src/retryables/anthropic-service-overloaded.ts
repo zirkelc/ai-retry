@@ -24,6 +24,8 @@ export type AnthropicErrorResponse = {
  * HTTP 200 OK
  * {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}
  * ```
+ *
+ * @deprecated Use `serviceOverloaded` instead
  */
 export function anthropicServiceOverloaded(
   model: LanguageModelV2,
@@ -41,23 +43,12 @@ export function anthropicServiceOverloaded(
       }
 
       // Anthropic returned a 200 status code with an overloaded error in the body
-      if (APICallError.isInstance(error) && error.statusCode === 200) {
-        try {
-          const responseBody = JSON.parse(
-            error.responseBody ?? '',
-          ) as AnthropicErrorResponse;
-
-          if (
-            responseBody.error &&
-            isObject(responseBody.error) &&
-            isString(responseBody.error.type) &&
-            responseBody.error.type === 'overloaded_error'
-          ) {
-            return { model, maxAttempts: 1, ...options };
-          }
-        } catch {
-          // ignore JSON parse errors
-        }
+      if (
+        isObject(error) &&
+        isString(error.type) &&
+        error.type === 'overloaded_error'
+      ) {
+        return { model, maxAttempts: 1, ...options };
       }
     }
 
