@@ -458,13 +458,11 @@ class RetryableModel implements LanguageModelV2 {
         : `Result with finishReason: ${a.result.finishReason}`,
     );
 
-    return new RetryError(
-      new RetryError({
-        message: `Failed after ${attempts.length} attempts. Last error: ${errorMessage}`,
-        reason: 'maxRetriesExceeded',
-        errors,
-      }),
-    );
+    return new RetryError({
+      message: `Failed after ${attempts.length} attempts. Last error: ${errorMessage}`,
+      reason: 'maxRetriesExceeded',
+      errors,
+    });
   }
 }
 
