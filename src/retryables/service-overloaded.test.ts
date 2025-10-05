@@ -5,13 +5,14 @@ import {
   convertAsyncIterableToArray,
   createTestServer,
 } from '@ai-sdk/provider-utils/test';
-import { APICallError, generateText, streamText } from 'ai';
+import { APICallError, embed, generateText, streamText } from 'ai';
 import { describe, expect, it, vi } from 'vitest';
 import { createRetryable } from '../create-retryable-model.js';
 import {
   chunksToText,
-  createMockModel,
-  createMockStreamingModel,
+  type EmbeddingModelV2Embed,
+  MockEmbeddingModel,
+  MockLanguageModel,
 } from '../test-utils.js';
 import type { LanguageModelV2Generate } from '../types.js';
 import { serviceOverloaded } from './service-overloaded.js';
@@ -59,12 +60,16 @@ const mockStreamChunks: LanguageModelV2StreamPart[] = [
   },
 ];
 
+const mockEmbeddings: EmbeddingModelV2Embed = {
+  embeddings: [[0.1, 0.2, 0.3]],
+};
+
 describe('serviceOverloaded', () => {
   describe('generateText', () => {
     it('should succeed without errors', async () => {
       // Arrange
-      const baseModel = createMockModel(mockResult);
-      const retryModel = createMockModel(mockResult);
+      const baseModel = new MockLanguageModel({ doGenerate: mockResult });
+      const retryModel = new MockLanguageModel({ doGenerate: mockResult });
 
       // Act
       const result = await generateText({
@@ -76,14 +81,14 @@ describe('serviceOverloaded', () => {
       });
 
       // Assert
-      expect(baseModel.doGenerateCalls.length).toBe(1);
+      expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
       expect(result.text).toBe(mockResultText);
     });
 
     it('should retry for status 529', async () => {
       // Arrange
-      const baseModel = createMockModel(overloadedError);
-      const retryModel = createMockModel(mockResult);
+      const baseModel = new MockLanguageModel({ doGenerate: overloadedError });
+      const retryModel = new MockLanguageModel({ doGenerate: mockResult });
 
       // Act
       const result = await generateText({
@@ -95,15 +100,15 @@ describe('serviceOverloaded', () => {
       });
 
       // Assert
-      expect(baseModel.doGenerateCalls.length).toBe(1);
-      expect(retryModel.doGenerateCalls.length).toBe(1);
+      expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
+      expect(retryModel.doGenerate).toHaveBeenCalledTimes(1);
       expect(result.text).toBe(mockResultText);
     });
 
     it('should not retry for status 200', async () => {
       // Arrange
-      const baseModel = createMockModel(mockResult);
-      const retryModel = createMockModel(mockResult);
+      const baseModel = new MockLanguageModel({ doGenerate: mockResult });
+      const retryModel = new MockLanguageModel({ doGenerate: mockResult });
 
       // Act
       const result = await generateText({
@@ -115,15 +120,15 @@ describe('serviceOverloaded', () => {
       });
 
       // Assert
-      expect(baseModel.doGenerateCalls.length).toBe(1);
-      expect(retryModel.doGenerateCalls.length).toBe(0);
+      expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
+      expect(retryModel.doGenerate).toHaveBeenCalledTimes(0);
       expect(result.text).toBe(mockResultText);
     });
 
     it('should not retry if no matches', async () => {
       // Arrange
-      const baseModel = createMockModel(
-        new APICallError({
+      const baseModel = new MockLanguageModel({
+        doGenerate: new APICallError({
           message: 'Some other error',
           url: '',
           requestBodyValues: {},
@@ -140,9 +145,9 @@ describe('serviceOverloaded', () => {
             },
           },
         }),
-      );
+      });
 
-      const retryModel = createMockModel(mockResult);
+      const retryModel = new MockLanguageModel({ doGenerate: mockResult });
 
       // Act
       const result = generateText({
@@ -156,19 +161,23 @@ describe('serviceOverloaded', () => {
 
       // Assert
       await expect(result).rejects.toThrowError(APICallError);
-      expect(baseModel.doGenerateCalls.length).toBe(1);
-      expect(retryModel.doGenerateCalls.length).toBe(0);
+      expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
+      expect(retryModel.doGenerate).toHaveBeenCalledTimes(0);
     });
   });
 
   describe('streamText', () => {
     it('should succeed without errors', async () => {
       // Arrange
-      const baseModel = createMockStreamingModel({
-        stream: convertArrayToReadableStream(mockStreamChunks),
+      const baseModel = new MockLanguageModel({
+        doStream: {
+          stream: convertArrayToReadableStream(mockStreamChunks),
+        },
       });
-      const retryModel = createMockStreamingModel({
-        stream: convertArrayToReadableStream(mockStreamChunks),
+      const retryModel = new MockLanguageModel({
+        doStream: {
+          stream: convertArrayToReadableStream(mockStreamChunks),
+        },
       });
       let error: unknown;
 
@@ -187,17 +196,19 @@ describe('serviceOverloaded', () => {
       const chunks = await convertAsyncIterableToArray(result.fullStream);
 
       // Assert
-      expect(baseModel.doStreamCalls.length).toBe(1);
-      expect(retryModel.doStreamCalls.length).toBe(0);
+      expect(baseModel.doStream).toHaveBeenCalledTimes(1);
+      expect(retryModel.doStream).toHaveBeenCalledTimes(0);
       expect(error).toBeUndefined();
       expect(chunksToText(chunks)).toBe(mockResultText);
     });
 
     it('should retry for status 529', async () => {
       // Arrange
-      const baseModel = createMockStreamingModel(overloadedError);
-      const retryModel = createMockStreamingModel({
-        stream: convertArrayToReadableStream(mockStreamChunks),
+      const baseModel = new MockLanguageModel({ doStream: overloadedError });
+      const retryModel = new MockLanguageModel({
+        doStream: {
+          stream: convertArrayToReadableStream(mockStreamChunks),
+        },
       });
       let error: unknown;
 
@@ -216,16 +227,16 @@ describe('serviceOverloaded', () => {
       const chunks = await convertAsyncIterableToArray(result.fullStream);
 
       // Assert
-      expect(baseModel.doStreamCalls.length).toBe(1);
-      expect(retryModel.doStreamCalls.length).toBe(1);
+      expect(baseModel.doStream).toHaveBeenCalledTimes(1);
+      expect(retryModel.doStream).toHaveBeenCalledTimes(1);
       expect(error).toBeUndefined();
       expect(chunksToText(chunks)).toBe(mockResultText);
     });
 
     it('should not retry if no matches', async () => {
       // Arrange
-      const baseModel = createMockStreamingModel(
-        new APICallError({
+      const baseModel = new MockLanguageModel({
+        doStream: new APICallError({
           message: 'Some other error',
           url: '',
           requestBodyValues: {},
@@ -242,10 +253,12 @@ describe('serviceOverloaded', () => {
             },
           },
         }),
-      );
+      });
 
-      const retryModel = createMockStreamingModel({
-        stream: convertArrayToReadableStream(mockStreamChunks),
+      const retryModel = new MockLanguageModel({
+        doStream: {
+          stream: convertArrayToReadableStream(mockStreamChunks),
+        },
       });
       let error: unknown;
 
@@ -265,8 +278,8 @@ describe('serviceOverloaded', () => {
       const chunks = await convertAsyncIterableToArray(result.fullStream);
 
       // Assert
-      expect(baseModel.doStreamCalls.length).toBe(1);
-      expect(retryModel.doStreamCalls.length).toBe(0);
+      expect(baseModel.doStream).toHaveBeenCalledTimes(1);
+      expect(retryModel.doStream).toHaveBeenCalledTimes(0);
       expect(error).toBeDefined();
       expect(chunks).toMatchInlineSnapshot(`
         [
@@ -297,8 +310,10 @@ describe('serviceOverloaded', () => {
         };
 
         const baseModel = anthropic('claude-sonnet-4-20250514');
-        const retryModel = createMockStreamingModel({
-          stream: convertArrayToReadableStream(mockStreamChunks),
+        const retryModel = new MockLanguageModel({
+          doStream: {
+            stream: convertArrayToReadableStream(mockStreamChunks),
+          },
         });
 
         const baseModelSpy = vi.spyOn(baseModel, 'doStream');
@@ -316,7 +331,7 @@ describe('serviceOverloaded', () => {
 
         // Assert
         expect(baseModelSpy).toHaveBeenCalledTimes(1);
-        expect(retryModel.doStreamCalls.length).toBe(1);
+        expect(retryModel.doStream).toHaveBeenCalledTimes(1);
         expect(chunks).toMatchInlineSnapshot(`
           [
             {
@@ -394,8 +409,10 @@ describe('serviceOverloaded', () => {
         };
 
         const baseModel = anthropic('claude-sonnet-4-20250514');
-        const retryModel = createMockStreamingModel({
-          stream: convertArrayToReadableStream(mockStreamChunks),
+        const retryModel = new MockLanguageModel({
+          doStream: {
+            stream: convertArrayToReadableStream(mockStreamChunks),
+          },
         });
 
         const baseModelSpy = vi.spyOn(baseModel, 'doStream');
@@ -413,7 +430,7 @@ describe('serviceOverloaded', () => {
 
         // Assert
         expect(baseModelSpy).toHaveBeenCalledTimes(1);
-        expect(retryModel.doStreamCalls.length).toBe(1);
+        expect(retryModel.doStream).toHaveBeenCalledTimes(1);
         expect(chunks).toMatchInlineSnapshot(`
           [
             "Hello",
@@ -436,8 +453,10 @@ describe('serviceOverloaded', () => {
         };
 
         const baseModel = anthropic('claude-sonnet-4-20250514');
-        const retryModel = createMockStreamingModel({
-          stream: convertArrayToReadableStream(mockStreamChunks),
+        const retryModel = new MockLanguageModel({
+          doStream: {
+            stream: convertArrayToReadableStream(mockStreamChunks),
+          },
         });
 
         const baseModelSpy = vi.spyOn(baseModel, 'doStream');
@@ -455,13 +474,114 @@ describe('serviceOverloaded', () => {
 
         // Assert
         expect(baseModelSpy).toHaveBeenCalledTimes(1);
-        expect(retryModel.doStreamCalls.length).toBe(0);
+        expect(retryModel.doStream).toHaveBeenCalledTimes(0);
         expect(chunks).toMatchInlineSnapshot(`
           [
             "Hello",
           ]
         `);
       });
+    });
+  });
+
+  describe('embed', () => {
+    it('should succeed without errors', async () => {
+      // Arrange
+      const baseModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
+      const retryModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
+
+      // Act
+      const result = await embed({
+        model: createRetryable({
+          model: baseModel,
+          retries: [serviceOverloaded(retryModel)],
+        }),
+        value: 'Hello!',
+      });
+
+      // Assert
+      expect(baseModel.doEmbed).toHaveBeenCalledTimes(1);
+      expect(result.embedding).toBe(mockEmbeddings.embeddings[0]);
+    });
+
+    it('should retry for status 529', async () => {
+      // Arrange
+      const baseModel = new MockEmbeddingModel({ doEmbed: overloadedError });
+      const retryModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
+
+      // Act
+      const result = await embed({
+        model: createRetryable({
+          model: baseModel,
+          retries: [serviceOverloaded(retryModel)],
+        }),
+        value: 'Hello!',
+      });
+
+      // Assert
+      expect(baseModel.doEmbed).toHaveBeenCalledTimes(1);
+      expect(retryModel.doEmbed).toHaveBeenCalledTimes(1);
+      expect(result.embedding).toBe(mockEmbeddings.embeddings[0]);
+    });
+
+    it('should not retry for status 200', async () => {
+      // Arrange
+      const baseModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
+      const retryModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
+
+      // Act
+      const result = await embed({
+        model: createRetryable({
+          model: baseModel,
+          retries: [serviceOverloaded(retryModel)],
+        }),
+        value: 'Hello!',
+      });
+
+      // Assert
+      expect(baseModel.doEmbed).toHaveBeenCalledTimes(1);
+      expect(retryModel.doEmbed).toHaveBeenCalledTimes(0);
+      expect(result.embedding).toBe(mockEmbeddings.embeddings[0]);
+    });
+
+    it('should not retry if no matches', async () => {
+      // Arrange
+      const baseModel = new MockEmbeddingModel({
+        doEmbed: new APICallError({
+          message: 'Some other error',
+          url: '',
+          requestBodyValues: {},
+          statusCode: 400,
+          responseHeaders: {},
+          responseBody: '{}',
+          isRetryable: false,
+          data: {
+            error: {
+              message: 'Some other error',
+              type: null,
+              param: 'prompt',
+              code: 'other_error',
+            },
+          },
+        }),
+      });
+
+      const retryModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
+
+      // Act
+      const result = embed({
+        model: createRetryable({
+          model: baseModel,
+          retries: [serviceOverloaded(retryModel)],
+        }),
+        value: 'Hello!',
+        maxRetries: 0,
+      });
+
+      // Assert
+      await expect(result).rejects.toThrowError(APICallError);
+      expect(baseModel.doEmbed).toHaveBeenCalledTimes(1);
+      expect(retryModel.doEmbed).toHaveBeenCalledTimes(0);
     });
   });
 });

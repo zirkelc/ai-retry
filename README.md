@@ -2,13 +2,15 @@
 
 # ai-retry: Retry and fallback mechanisms for AI SDK
 
-Automatically handle API failures, content filtering and timeouts by switching between different AI models.
+Automatically handle API failures, content filtering, timeouts and other errors by switching between different AI models and providers.
 
 `ai-retry` wraps the provided base model with a set of retry conditions (retryables). When a request fails with an error or the response is not satisfying, it iterates through the given retryables to find a suitable fallback model. It automatically tracks which models have been tried and how many attempts have been made to prevent infinite loops.
 
 It supports two types of retries:
 - Error-based retries: when the model throws an error (e.g. timeouts, API errors, etc.)
 - Result-based retries: when the model returns a successful response that needs retrying (e.g. content filtering, etc.)
+
+
 
 ### Installation
 
@@ -75,35 +77,6 @@ const retryableModel = createRetryable({
   ],
 });
 ```
-
-<!--
-##### Response Schema Mismatch
-
-Retry with different models when structured output validation fails:
-
-```typescript
-import { responseSchemaMismatch } from 'ai-retry/retryables';
-
-const retryableModel = createRetryable({
-  model: azure('gpt-4-mini'),
-  retries: [
-    responseSchemaMismatch(azure('gpt-4')), // Try full model for better structured output
-  ],
-});
-
-const result = await generateObject({
-  model: retryableModel,
-  schema: z.object({
-    recipe: z.object({
-      name: z.string(),
-      ingredients: z.array(z.object({ name: z.string(), amount: z.string() })),
-      steps: z.array(z.string()),
-    }),
-  }),
-  prompt: 'Generate a lasagna recipe.',
-});
-```
--->
 
 #### Request Timeout
 

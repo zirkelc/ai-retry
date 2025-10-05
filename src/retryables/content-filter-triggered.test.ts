@@ -11,11 +11,7 @@ import {
 } from 'ai';
 import { describe, expect, it } from 'vitest';
 import { createRetryable } from '../create-retryable-model.js';
-import {
-  chunksToText,
-  createMockModel,
-  createMockStreamingModel,
-} from '../test-utils.js';
+import { chunksToText, MockLanguageModel } from '../test-utils.js';
 import type { LanguageModelV2Generate } from '../types.js';
 import { contentFilterTriggered } from './content-filter-triggered.js';
 
@@ -103,8 +99,8 @@ describe('contentFilterTriggered', () => {
   describe('generateText', () => {
     it('should succeed without errors', async () => {
       // Arrange
-      const baseModel = createMockModel(mockResult);
-      const retryModel = createMockModel(mockResult);
+      const baseModel = new MockLanguageModel({ doGenerate: mockResult });
+      const retryModel = new MockLanguageModel({ doGenerate: mockResult });
 
       // Act
       const result = await generateText({
@@ -116,14 +112,16 @@ describe('contentFilterTriggered', () => {
       });
 
       // Assert
-      expect(baseModel.doGenerateCalls.length).toBe(1);
+      expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
       expect(result.text).toBe(mockResultText);
     });
 
     it('should retry in case of content filter result', async () => {
       // Arrange
-      const baseModel = createMockModel(contentFilterResult);
-      const retryModel = createMockModel(mockResult);
+      const baseModel = new MockLanguageModel({
+        doGenerate: contentFilterResult,
+      });
+      const retryModel = new MockLanguageModel({ doGenerate: mockResult });
 
       // Act
       const result = await generateText({
@@ -136,15 +134,17 @@ describe('contentFilterTriggered', () => {
       });
 
       // Assert
-      expect(baseModel.doGenerateCalls.length).toBe(1);
-      expect(retryModel.doGenerateCalls.length).toBe(1);
+      expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
+      expect(retryModel.doGenerate).toHaveBeenCalledTimes(1);
       expect(result.text).toBe(mockResultText);
     });
 
     it('should retry in case of content filter error', async () => {
       // Arrange
-      const baseModel = createMockModel(apiCallError);
-      const retryModel = createMockModel(mockResult);
+      const baseModel = new MockLanguageModel({
+        doGenerate: apiCallError,
+      });
+      const retryModel = new MockLanguageModel({ doGenerate: mockResult });
 
       // Act
       const result = await generateText({
@@ -157,15 +157,15 @@ describe('contentFilterTriggered', () => {
       });
 
       // Assert
-      expect(baseModel.doGenerateCalls.length).toBe(1);
-      expect(retryModel.doGenerateCalls.length).toBe(1);
+      expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
+      expect(retryModel.doGenerate).toHaveBeenCalledTimes(1);
       expect(result.text).toBe(mockResultText);
     });
 
     it('should not retry if no matches', async () => {
       // Arrange
-      const baseModel = createMockModel(
-        new APICallError({
+      const baseModel = new MockLanguageModel({
+        doGenerate: new APICallError({
           message: 'Some other error',
           url: '',
           requestBodyValues: {},
@@ -182,9 +182,9 @@ describe('contentFilterTriggered', () => {
             },
           },
         }),
-      );
+      });
 
-      const retryModel = createMockModel(mockResult);
+      const retryModel = new MockLanguageModel({ doGenerate: mockResult });
 
       // Act
       const result = generateText({
@@ -198,19 +198,23 @@ describe('contentFilterTriggered', () => {
 
       // Assert
       await expect(result).rejects.toThrowError(APICallError);
-      expect(baseModel.doGenerateCalls.length).toBe(1);
-      expect(retryModel.doGenerateCalls.length).toBe(0);
+      expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
+      expect(retryModel.doGenerate).toHaveBeenCalledTimes(0);
     });
   });
 
   describe('streamText', () => {
     it('should succeed without errors', async () => {
       // Arrange
-      const baseModel = createMockStreamingModel({
-        stream: convertArrayToReadableStream(mockStreamChunks),
+      const baseModel = new MockLanguageModel({
+        doStream: {
+          stream: convertArrayToReadableStream(mockStreamChunks),
+        },
       });
-      const retryModel = createMockStreamingModel({
-        stream: convertArrayToReadableStream(mockStreamChunks),
+      const retryModel = new MockLanguageModel({
+        doStream: {
+          stream: convertArrayToReadableStream(mockStreamChunks),
+        },
       });
       let error: unknown;
 
@@ -229,17 +233,19 @@ describe('contentFilterTriggered', () => {
       const chunks = await convertAsyncIterableToArray(result.fullStream);
 
       // Assert
-      expect(baseModel.doStreamCalls.length).toBe(1);
-      expect(retryModel.doStreamCalls.length).toBe(0);
+      expect(baseModel.doStream).toHaveBeenCalledTimes(1);
+      expect(retryModel.doStream).toHaveBeenCalledTimes(0);
       expect(error).toBeUndefined();
       expect(chunksToText(chunks)).toBe(mockResultText);
     });
 
     it('should retry in case of content filter error', async () => {
       // Arrange
-      const baseModel = createMockStreamingModel(apiCallError);
-      const retryModel = createMockStreamingModel({
-        stream: convertArrayToReadableStream(mockStreamChunks),
+      const baseModel = new MockLanguageModel({ doStream: apiCallError });
+      const retryModel = new MockLanguageModel({
+        doStream: {
+          stream: convertArrayToReadableStream(mockStreamChunks),
+        },
       });
       let error: unknown;
 
@@ -259,16 +265,16 @@ describe('contentFilterTriggered', () => {
       const chunks = await convertAsyncIterableToArray(result.fullStream);
 
       // Assert
-      expect(baseModel.doStreamCalls.length).toBe(1);
-      expect(retryModel.doStreamCalls.length).toBe(1);
+      expect(baseModel.doStream).toHaveBeenCalledTimes(1);
+      expect(retryModel.doStream).toHaveBeenCalledTimes(1);
       expect(error).toBeUndefined();
       expect(chunksToText(chunks)).toBe(mockResultText);
     });
 
     it('should not retry if no matches', async () => {
       // Arrange
-      const baseModel = createMockStreamingModel(
-        new APICallError({
+      const baseModel = new MockLanguageModel({
+        doStream: new APICallError({
           message: 'Some other error',
           url: '',
           requestBodyValues: {},
@@ -285,10 +291,12 @@ describe('contentFilterTriggered', () => {
             },
           },
         }),
-      );
+      });
 
-      const retryModel = createMockStreamingModel({
-        stream: convertArrayToReadableStream(mockStreamChunks),
+      const retryModel = new MockLanguageModel({
+        doStream: {
+          stream: convertArrayToReadableStream(mockStreamChunks),
+        },
       });
       let error: unknown;
 
@@ -308,8 +316,8 @@ describe('contentFilterTriggered', () => {
       const chunks = await convertAsyncIterableToArray(result.fullStream);
 
       // Assert
-      expect(baseModel.doStreamCalls.length).toBe(1);
-      expect(retryModel.doStreamCalls.length).toBe(0);
+      expect(baseModel.doStream).toHaveBeenCalledTimes(1);
+      expect(retryModel.doStream).toHaveBeenCalledTimes(0);
       expect(error).toBeInstanceOf(APICallError);
       expect(chunks).toMatchInlineSnapshot(`
         [

@@ -1,19 +1,20 @@
-import type { LanguageModelV2 } from '@ai-sdk/provider';
 import { isAbortError } from '@ai-sdk/provider-utils';
-import {
-  isErrorAttempt,
-  type Retryable,
-  type RetryModel,
-} from '../create-retryable-model.js';
+import type {
+  EmbeddingModelV2,
+  LanguageModelV2,
+  Retryable,
+  RetryModel,
+} from '../types.js';
+import { isErrorAttempt } from '../utils.js';
 
 /**
  * Fallback to a different model after a timeout/abort error.
- * Use in combination with the `abortSignal` option in `generateText`.
+ * Use in combination with the `abortSignal` option.
+ * Works with both `LanguageModelV2` and `EmbeddingModelV2`.
  */
-export function requestTimeout(
-  model: LanguageModelV2,
-  options?: Omit<RetryModel, 'model'>,
-): Retryable {
+export function requestTimeout<
+  MODEL extends LanguageModelV2 | EmbeddingModelV2,
+>(model: MODEL, options?: Omit<RetryModel<MODEL>, 'model'>): Retryable<MODEL> {
   return (context) => {
     const { current } = context;
 

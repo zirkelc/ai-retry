@@ -1,6 +1,7 @@
 import type { LanguageModelV2 } from '@ai-sdk/provider';
 import type { generateText, streamText, TextStreamPart } from 'ai';
-import { MockLanguageModelV2 } from 'ai/test';
+import { vi } from 'vitest';
+import type { EmbeddingModelV2 } from './types.js';
 
 type StreamText = Parameters<typeof streamText>[0];
 type GenerateText = Parameters<typeof generateText>[0];
@@ -8,12 +9,16 @@ type GenerateText = Parameters<typeof generateText>[0];
 export type LanguageModelV2GenerateFn = LanguageModelV2['doGenerate'];
 export type LanguageModelV2StreamFn = LanguageModelV2['doStream'];
 
-export type LanguageModelV2GenerateResult = Awaited<
+export type LanguageModelV2Generate = Awaited<
   ReturnType<LanguageModelV2GenerateFn>
 >;
-
-export type LanguageModelV2StreamResult = Awaited<
+export type LanguageModelV2Stream = Awaited<
   ReturnType<LanguageModelV2StreamFn>
+>;
+
+export type EmbeddingModelV2EmbedFn = EmbeddingModelV2<number>['doEmbed'];
+export type EmbeddingModelV2Embed = Awaited<
+  ReturnType<EmbeddingModelV2EmbedFn>
 >;
 
 const mockGenerateId = () => 'aitxt-mock-id';
@@ -36,73 +41,74 @@ export const mockStreamOptions: Pick<StreamText, '_internal'> = {
 let mockModelCounter = 0;
 const generateMockModelId = () => {
   mockModelCounter += 1;
-  return currentMockModelId();
+  return `mock-model-${mockModelCounter}`;
 };
 
-const provider = 'mock-provider';
-export const currentMockModelId = () => `mock-model-${mockModelCounter}`;
+export class MockLanguageModel implements LanguageModelV2 {
+  readonly specificationVersion = 'v2';
 
-export const createMockModel = (
-  resultOrFunction:
-    | LanguageModelV2GenerateResult
-    | LanguageModelV2GenerateFn
-    | Error,
-) => {
-  const modelId = generateMockModelId();
+  readonly supportedUrls: LanguageModelV2['supportedUrls'];
+  readonly provider: LanguageModelV2['provider'];
+  readonly modelId: LanguageModelV2['modelId'];
 
-  if (resultOrFunction instanceof Error)
-    return new MockLanguageModelV2({
-      provider,
-      modelId,
-      doGenerate: async () => {
-        throw resultOrFunction;
-      },
+  doGenerate: LanguageModelV2['doGenerate'];
+  doStream: LanguageModelV2['doStream'];
+
+  constructor({
+    doGenerate = (): never => {
+      throw new Error('Not implemented');
+    },
+    doStream = (): never => {
+      throw new Error('Not implemented');
+    },
+  }: {
+    doGenerate?: LanguageModelV2Generate | LanguageModelV2GenerateFn | Error;
+    doStream?: LanguageModelV2Stream | LanguageModelV2StreamFn | Error;
+  } = {}) {
+    this.provider = 'mock-provider';
+    this.modelId = generateMockModelId();
+    this.supportedUrls = {};
+    this.doGenerate = vi.fn(async (opts) => {
+      if (doGenerate instanceof Error) throw doGenerate;
+      if (typeof doGenerate === 'function') return doGenerate(opts);
+      return doGenerate;
     });
-
-  if (typeof resultOrFunction === 'function')
-    return new MockLanguageModelV2({
-      provider,
-      modelId,
-      doGenerate: resultOrFunction,
+    this.doStream = vi.fn(async (opts) => {
+      if (doStream instanceof Error) throw doStream;
+      if (typeof doStream === 'function') return doStream(opts);
+      return doStream;
     });
+  }
+}
 
-  return new MockLanguageModelV2({
-    provider,
-    modelId,
-    doGenerate: async () => resultOrFunction,
-  });
-};
+export class MockEmbeddingModel implements EmbeddingModelV2<number> {
+  readonly specificationVersion = 'v2';
 
-export const createMockStreamingModel = (
-  resultOrFunction:
-    | LanguageModelV2StreamResult
-    | LanguageModelV2StreamFn
-    | Error,
-) => {
-  const modelId = generateMockModelId();
+  readonly supportedUrls: LanguageModelV2['supportedUrls'];
+  readonly provider: LanguageModelV2['provider'];
+  readonly modelId: LanguageModelV2['modelId'];
+  readonly maxEmbeddingsPerCall = 1;
+  readonly supportsParallelCalls = true;
 
-  if (resultOrFunction instanceof Error)
-    return new MockLanguageModelV2({
-      provider,
-      modelId,
-      doStream: async () => {
-        throw resultOrFunction;
-      },
+  doEmbed: EmbeddingModelV2['doEmbed'];
+
+  constructor({
+    doEmbed = (): never => {
+      throw new Error('Not implemented');
+    },
+  }: {
+    doEmbed?: EmbeddingModelV2Embed | EmbeddingModelV2EmbedFn | Error;
+  } = {}) {
+    this.provider = 'mock-provider';
+    this.modelId = generateMockModelId();
+    this.supportedUrls = {};
+    this.doEmbed = vi.fn(async (opts) => {
+      if (doEmbed instanceof Error) throw doEmbed;
+      if (typeof doEmbed === 'function') return doEmbed(opts);
+      return doEmbed;
     });
-
-  if (typeof resultOrFunction === 'function')
-    return new MockLanguageModelV2({
-      provider,
-      modelId,
-      doStream: resultOrFunction,
-    });
-
-  return new MockLanguageModelV2({
-    provider,
-    modelId,
-    doStream: async () => resultOrFunction,
-  });
-};
+  }
+}
 
 export const chunksToText = (chunks: TextStreamPart<any>[]): string => {
   return chunks
