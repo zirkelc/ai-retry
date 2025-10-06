@@ -6,17 +6,21 @@ import {
   convertArrayToReadableStream,
   convertAsyncIterableToArray,
 } from '@ai-sdk/provider-utils/test';
-import { APICallError, generateText, streamText } from 'ai';
+import { APICallError, embed, generateText, streamText } from 'ai';
 import { describe, expect, it } from 'vitest';
 import { createRetryable } from '../create-retryable-model.js';
 import {
   chunksToText,
-  createMockModel,
-  createMockStreamingModel,
+  type EmbeddingModelV2Embed,
   type LanguageModelV2GenerateFn,
   type LanguageModelV2StreamFn,
+  MockEmbeddingModel,
+  MockLanguageModel,
 } from '../test-utils.js';
-import type { LanguageModelV2Generate } from '../types.js';
+import type {
+  EmbeddingModelV2CallOptions,
+  LanguageModelV2Generate,
+} from '../types.js';
 import { requestTimeout } from './request-timeout.js';
 
 const mockResultText = 'Hello, world!';
@@ -26,6 +30,32 @@ const mockResult: LanguageModelV2Generate = {
   usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
   content: [{ type: 'text', text: mockResultText }],
   warnings: [],
+};
+
+const mockEmbeddings: EmbeddingModelV2Embed = {
+  embeddings: [[0.1, 0.2, 0.3]],
+  usage: { tokens: 5 },
+};
+
+const embeddingTimeoutError = async (
+  opts: EmbeddingModelV2CallOptions<unknown>,
+) => {
+  // Check if abortSignal is aborted and throw appropriate error
+  if (opts.abortSignal?.aborted) {
+    throw new DOMException('The operation was aborted', 'AbortError');
+  }
+
+  // Listen for abort event during the async operation
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      resolve(mockEmbeddings);
+    }, 1_000);
+
+    opts.abortSignal?.addEventListener('abort', () => {
+      clearTimeout(timeout);
+      reject(new DOMException('The operation was aborted', 'AbortError'));
+    });
+  });
 };
 
 const timeoutError = async (opts: LanguageModelV2CallOptions) => {
@@ -89,8 +119,8 @@ describe('requestTimeout', () => {
   describe('generateText', () => {
     it('should succeed without errors', async () => {
       // Arrange
-      const baseModel = createMockModel(mockResult);
-      const retryModel = createMockModel(mockResult);
+      const baseModel = new MockLanguageModel({ doGenerate: mockResult });
+      const retryModel = new MockLanguageModel({ doGenerate: mockResult });
 
       // Act
       const result = await generateText({
@@ -102,16 +132,16 @@ describe('requestTimeout', () => {
       });
 
       // Assert
-      expect(baseModel.doGenerateCalls.length).toBe(1);
+      expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
       expect(result.text).toBe(mockResultText);
     });
 
     it('should fallback in case of timeout error', async () => {
       // Arrange
-      const baseModel = createMockModel(
-        timeoutError as LanguageModelV2GenerateFn,
-      );
-      const retryModel = createMockModel(mockResult);
+      const baseModel = new MockLanguageModel({
+        doGenerate: timeoutError as LanguageModelV2GenerateFn,
+      });
+      const retryModel = new MockLanguageModel({ doGenerate: mockResult });
 
       // Act
       const result = await generateText({
@@ -125,15 +155,17 @@ describe('requestTimeout', () => {
       });
 
       // Assert
-      expect(baseModel.doGenerateCalls.length).toBe(1);
-      expect(retryModel.doGenerateCalls.length).toBe(1);
+      expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
+      expect(retryModel.doGenerate).toHaveBeenCalledTimes(1);
       expect(result.text).toBe(mockResultText);
     });
 
     it('should not fallback for non-timeout errors', async () => {
       // Arrange
-      const baseModel = createMockModel(genericError);
-      const retryModel = createMockModel(mockResult);
+      const baseModel = new MockLanguageModel({
+        doGenerate: genericError,
+      });
+      const retryModel = new MockLanguageModel({ doGenerate: mockResult });
 
       // Act
       const result = generateText({
@@ -147,19 +179,23 @@ describe('requestTimeout', () => {
 
       // Assert
       await expect(result).rejects.toThrowError(APICallError);
-      expect(baseModel.doGenerateCalls.length).toBe(1);
-      expect(retryModel.doGenerateCalls.length).toBe(0);
+      expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
+      expect(retryModel.doGenerate).toHaveBeenCalledTimes(0);
     });
   });
 
   describe('streamText', () => {
     it('should succeed without errors', async () => {
       // Arrange
-      const baseModel = createMockStreamingModel({
-        stream: convertArrayToReadableStream(mockStreamChunks),
+      const baseModel = new MockLanguageModel({
+        doStream: {
+          stream: convertArrayToReadableStream(mockStreamChunks),
+        },
       });
-      const retryModel = createMockStreamingModel({
-        stream: convertArrayToReadableStream(mockStreamChunks),
+      const retryModel = new MockLanguageModel({
+        doStream: {
+          stream: convertArrayToReadableStream(mockStreamChunks),
+        },
       });
       let error: unknown;
 
@@ -178,8 +214,8 @@ describe('requestTimeout', () => {
       const chunks = await convertAsyncIterableToArray(result.fullStream);
 
       // Assert
-      expect(baseModel.doStreamCalls.length).toBe(1);
-      expect(retryModel.doStreamCalls.length).toBe(0);
+      expect(baseModel.doStream).toHaveBeenCalledTimes(1);
+      expect(retryModel.doStream).toHaveBeenCalledTimes(0);
       expect(error).toBeUndefined();
       expect(chunksToText(chunks)).toBe(mockResultText);
     });
@@ -187,11 +223,13 @@ describe('requestTimeout', () => {
     // TODO needs to read the first chunk to get the abort error
     it.todo('should fallback in case of timeout error', async () => {
       // Arrange
-      const baseModel = createMockStreamingModel(
-        timeoutError as LanguageModelV2StreamFn,
-      );
-      const retryModel = createMockStreamingModel({
-        stream: convertArrayToReadableStream(mockStreamChunks),
+      const baseModel = new MockLanguageModel({
+        doStream: timeoutError as LanguageModelV2StreamFn,
+      });
+      const retryModel = new MockLanguageModel({
+        doStream: {
+          stream: convertArrayToReadableStream(mockStreamChunks),
+        },
       });
       let error: unknown;
 
@@ -212,8 +250,8 @@ describe('requestTimeout', () => {
       const chunks = await convertAsyncIterableToArray(result.fullStream);
 
       // Assert
-      expect(baseModel.doStreamCalls.length).toBe(1);
-      expect(retryModel.doStreamCalls.length).toBe(1);
+      expect(baseModel.doStream).toHaveBeenCalledTimes(1);
+      expect(retryModel.doStream).toHaveBeenCalledTimes(1);
       expect(error).toBeUndefined();
       expect(chunks).toMatchInlineSnapshot(`
         [
@@ -230,9 +268,11 @@ describe('requestTimeout', () => {
 
     it('should not fallback for non-timeout errors', async () => {
       // Arrange
-      const baseModel = createMockStreamingModel(genericError);
-      const retryModel = createMockStreamingModel({
-        stream: convertArrayToReadableStream(mockStreamChunks),
+      const baseModel = new MockLanguageModel({ doStream: genericError });
+      const retryModel = new MockLanguageModel({
+        doStream: {
+          stream: convertArrayToReadableStream(mockStreamChunks),
+        },
       });
       let error: unknown;
 
@@ -252,8 +292,8 @@ describe('requestTimeout', () => {
       const chunks = await convertAsyncIterableToArray(result.fullStream);
 
       // Assert
-      expect(baseModel.doStreamCalls.length).toBe(1);
-      expect(retryModel.doStreamCalls.length).toBe(0);
+      expect(baseModel.doStream).toHaveBeenCalledTimes(1);
+      expect(retryModel.doStream).toHaveBeenCalledTimes(0);
       expect(error).toBeDefined();
       expect(chunks).toMatchInlineSnapshot(`
         [
@@ -266,6 +306,74 @@ describe('requestTimeout', () => {
           },
         ]
       `);
+    });
+  });
+
+  describe('embed', () => {
+    it('should succeed without errors', async () => {
+      // Arrange
+      const baseModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
+      const retryModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
+
+      // Act
+      const result = await embed({
+        model: createRetryable({
+          model: baseModel,
+          retries: [requestTimeout(retryModel)],
+        }),
+        value: 'Hello!',
+      });
+
+      // Assert
+      expect(baseModel.doEmbed).toHaveBeenCalledTimes(1);
+      expect(result.embedding).toEqual(mockEmbeddings.embeddings[0]);
+    });
+
+    it('should fallback in case of timeout error', async () => {
+      // Arrange
+      const baseModel = new MockEmbeddingModel({
+        doEmbed: embeddingTimeoutError as any,
+      });
+      const retryModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
+
+      // Act
+      const result = await embed({
+        model: createRetryable({
+          model: baseModel,
+          retries: [requestTimeout(retryModel)],
+        }),
+        value: 'Hello!',
+        maxRetries: 0,
+        abortSignal: AbortSignal.timeout(100), // Very short timeout to trigger timeout
+      });
+
+      // Assert
+      expect(baseModel.doEmbed).toHaveBeenCalledTimes(1);
+      expect(retryModel.doEmbed).toHaveBeenCalledTimes(1);
+      expect(result.embedding).toEqual(mockEmbeddings.embeddings[0]);
+    });
+
+    it('should not fallback for non-timeout errors', async () => {
+      // Arrange
+      const baseModel = new MockEmbeddingModel({
+        doEmbed: genericError,
+      });
+      const retryModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
+
+      // Act
+      const result = embed({
+        model: createRetryable({
+          model: baseModel,
+          retries: [requestTimeout(retryModel)],
+        }),
+        value: 'Hello!',
+        maxRetries: 0,
+      });
+
+      // Assert
+      await expect(result).rejects.toThrowError(APICallError);
+      expect(baseModel.doEmbed).toHaveBeenCalledTimes(1);
+      expect(retryModel.doEmbed).toHaveBeenCalledTimes(0);
     });
   });
 });

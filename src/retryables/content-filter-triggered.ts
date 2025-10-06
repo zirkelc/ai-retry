@@ -1,16 +1,19 @@
-import type { LanguageModelV2 } from '@ai-sdk/provider';
 import { APICallError, NoObjectGeneratedError } from 'ai';
-import type { Retryable, RetryModel } from '../create-retryable-model.js';
-import { isErrorAttempt, isResultAttempt } from '../create-retryable-model.js';
-import { isObject, isString } from '../utils.js';
+import type { LanguageModelV2, Retryable, RetryModel } from '../types.js';
+import {
+  isErrorAttempt,
+  isObject,
+  isResultAttempt,
+  isString,
+} from '../utils.js';
 
 /**
  * Fallback to a different model if the content filter was triggered.
  */
-export function contentFilterTriggered(
-  model: LanguageModelV2,
-  options?: Omit<RetryModel, 'model'>,
-): Retryable {
+export function contentFilterTriggered<MODEL extends LanguageModelV2>(
+  model: MODEL,
+  options?: Omit<RetryModel<MODEL>, 'model'>,
+): Retryable<MODEL> {
   return (context) => {
     const { current } = context;
 
@@ -27,13 +30,6 @@ export function contentFilterTriggered(
       ) {
         return { model, maxAttempts: 1, ...options };
       }
-
-      // if (
-      //   NoObjectGeneratedError.isInstance(error) &&
-      //   error.finishReason === 'content-filter'
-      // ) {
-      //   return { model, maxAttempts: 1 };
-      // }
     }
 
     // Check for content filter in result attempts

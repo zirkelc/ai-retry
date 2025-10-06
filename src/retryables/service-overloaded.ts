@@ -1,8 +1,11 @@
-import type { LanguageModelV2 } from '@ai-sdk/provider';
 import { APICallError } from 'ai';
-import type { Retryable, RetryModel } from '../create-retryable-model.js';
-import { isErrorAttempt } from '../create-retryable-model.js';
-import { isObject, isString } from '../utils.js';
+import type {
+  EmbeddingModelV2,
+  LanguageModelV2,
+  Retryable,
+  RetryModel,
+} from '../types.js';
+import { isErrorAttempt, isObject, isString } from '../utils.js';
 
 /**
  * Fallback to a different model if the provider returns an overloaded error.
@@ -11,10 +14,9 @@ import { isObject, isString } from '../utils.js';
  * - Response with `type: "overloaded_error"`
  * - Response with a `message` containing "overloaded"
  */
-export function serviceOverloaded(
-  model: LanguageModelV2,
-  options?: Omit<RetryModel, 'model'>,
-): Retryable {
+export function serviceOverloaded<
+  MODEL extends LanguageModelV2 | EmbeddingModelV2,
+>(model: MODEL, options?: Omit<RetryModel<MODEL>, 'model'>): Retryable<MODEL> {
   return (context) => {
     const { current } = context;
 

@@ -1,8 +1,15 @@
-<a href="https://www.npmjs.com/package/ai-retry" alt="ai-retry"><img src="https://img.shields.io/npm/dt/ai-retry?label=ai-retry"></a> <a href="https://github.com/zirkelc/ai-retry/actions/workflows/ci.yml" alt="CI"><img src="https://img.shields.io/github/actions/workflow/status/zirkelc/ai-retry/ci.yml?branch=main"></a>
+<div align='center'>
 
-# ai-retry: Retry and fallback mechanisms for AI SDK
+# ai-retry
 
-Automatically handle API failures, content filtering and timeouts by switching between different AI models.
+<p align="center">Retry and fallback mechanisms for AI SDK</p>
+<p align="center">
+  <a href="https://www.npmjs.com/package/ai-retry" alt="ai-retry"><img src="https://img.shields.io/npm/dt/ai-retry?label=ai-retry"></a> <a href="https://github.com/zirkelc/ai-retry/actions/workflows/ci.yml" alt="CI"><img src="https://img.shields.io/github/actions/workflow/status/zirkelc/ai-retry/ci.yml?branch=main"></a>
+</p>
+
+</div>
+
+Automatically handle API failures, content filtering, timeouts and other errors by switching between different AI models and providers.
 
 `ai-retry` wraps the provided base model with a set of retry conditions (retryables). When a request fails with an error or the response is not satisfying, it iterates through the given retryables to find a suitable fallback model. It automatically tracks which models have been tried and how many attempts have been made to prevent infinite loops.
 
@@ -26,16 +33,17 @@ npm install ai-retry
 Create a retryable model by providing a base model and a list of retryables or fallback models.
 When an error occurs, it will evaluate each retryable in order and use the first one that indicates a retry should be attempted with a different model.
 
+> [!NOTE]
+> `ai-retry` supports both language models and embedding models.
+
 ```typescript
-import { azure } from '@ai-sdk/azure';
 import { openai } from '@ai-sdk/openai';
 import { generateText, streamText } from 'ai';
 import { createRetryable } from 'ai-retry';
-import { contentFilterTriggered, requestTimeout } from 'ai-retry/retryables';
 
 // Create a retryable model
 const retryableModel = createRetryable({
-  model: azure('gpt-4-mini'), // Base model
+  model: openai('gpt-4-mini'), // Base model
   retries: [
     // Retry strategies and fallbacks...
   ],
@@ -47,6 +55,8 @@ const result = await generateText({
   prompt: 'Hello world!',
 });
 
+console.log(result.text);
+
 // Or with streaming
 const result = streamText({
   model: retryableModel,
@@ -56,6 +66,30 @@ const result = streamText({
 for await (const chunk of result.textStream) {
   console.log(chunk.text);
 }
+```
+
+This also works with embedding models:
+
+```typescript
+import { openai } from '@ai-sdk/openai';
+import { generateText, streamText } from 'ai';
+import { createRetryable } from 'ai-retry';
+
+// Create a retryable model
+const retryableModel = createRetryable({
+  model: openai.textEmbedding('text-embedding-3-large'), // Base model
+  retries: [
+    // Retry strategies and fallbacks...
+  ],
+});
+
+// Use like any other AI SDK model
+const result = await embed({
+  model: retryableModel,
+  value: 'Hello world!',
+});
+
+console.log(result.embedding);
 ```
 
 #### Content Filter
@@ -75,35 +109,6 @@ const retryableModel = createRetryable({
   ],
 });
 ```
-
-<!--
-##### Response Schema Mismatch
-
-Retry with different models when structured output validation fails:
-
-```typescript
-import { responseSchemaMismatch } from 'ai-retry/retryables';
-
-const retryableModel = createRetryable({
-  model: azure('gpt-4-mini'),
-  retries: [
-    responseSchemaMismatch(azure('gpt-4')), // Try full model for better structured output
-  ],
-});
-
-const result = await generateObject({
-  model: retryableModel,
-  schema: z.object({
-    recipe: z.object({
-      name: z.string(),
-      ingredients: z.array(z.object({ name: z.string(), amount: z.string() })),
-      steps: z.array(z.string()),
-    }),
-  }),
-  prompt: 'Generate a lasagna recipe.',
-});
-```
--->
 
 #### Request Timeout
 
@@ -287,16 +292,16 @@ By default, each retryable will only attempt to retry once per model to avoid in
 
 ### API Reference
 
-#### `createRetryable(options: CreateRetryableOptions): LanguageModelV2`
+#### `createRetryable(options: RetryableModelOptions): LanguageModelV2 | EmbeddingModelV2`
 
-Creates a retryable language model.
+Creates a retryable model that works with both language models and embedding models.
 
 ```ts
-interface CreateRetryableOptions {
-  model: LanguageModelV2;
-  retries: Array<Retryable | LanguageModelV2>;
-  onError?: (context: RetryContext) => void;
-  onRetry?: (context: RetryContext) => void; 
+interface RetryableModelOptions<MODEL extends LanguageModelV2 | EmbeddingModelV2> {
+  model: MODEL;
+  retries: Array<Retryable<MODEL> | MODEL>;
+  onError?: (context: RetryContext<MODEL>) => void;
+  onRetry?: (context: RetryContext<MODEL>) => void;
 }
 ```
 
@@ -306,7 +311,9 @@ A `Retryable` is a function that receives a `RetryContext` with the current erro
 It should evaluate the error/result and decide whether to retry by returning a `RetryModel` or to skip by returning `undefined`.
 
 ```ts
-type Retryable = (context: RetryContext) => RetryModel | Promise<RetryModel> | undefined;
+type Retryable = (
+  context: RetryContext
+) => RetryModel | Promise<RetryModel> | undefined;
 ```
 
 #### `RetryModel`
@@ -316,7 +323,7 @@ By default, each retryable will only attempt to retry once per model. This can b
 
 ```typescript
 interface RetryModel {
-  model: LanguageModelV2;
+  model: LanguageModelV2 | EmbeddingModelV2;
   maxAttempts?: number;
 }
 ```
@@ -337,9 +344,12 @@ interface RetryContext {
 A `RetryAttempt` represents a single attempt with a specific model, which can be either an error or a successful result that triggered a retry.
 
 ```typescript
-type RetryAttempt = 
-  | { type: 'error'; error: unknown; model: LanguageModelV2 }
+// For both language and embedding models
+type RetryAttempt =
+  | { type: 'error'; error: unknown; model: LanguageModelV2 | EmbeddingModelV2 }
   | { type: 'result'; result: LanguageModelV2Generate; model: LanguageModelV2 };
+
+// Note: Result-based retries only apply to language models, not embedding models
 
 // Type guards for discriminating attempts
 function isErrorAttempt(attempt: RetryAttempt): attempt is RetryErrorAttempt;
