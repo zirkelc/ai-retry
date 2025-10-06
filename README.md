@@ -72,7 +72,7 @@ This also works with embedding models:
 
 ```typescript
 import { openai } from '@ai-sdk/openai';
-import { generateText, streamText } from 'ai';
+import { embed } from 'ai';
 import { createRetryable } from 'ai-retry';
 
 // Create a retryable model
