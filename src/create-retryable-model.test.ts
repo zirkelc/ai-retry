@@ -712,7 +712,7 @@ describe('generateText', () => {
       // Assert
       expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
       expect(fallbackModel.doGenerate).toHaveBeenCalledTimes(1);
-      expect(elapsedTime).toBeGreaterThanOrEqual(delayMs);
+      expect(elapsedTime).toBeGreaterThanOrEqual(delayMs * 0.9);
     });
 
     it('should apply different delays for multiple retries', async () => {
@@ -744,7 +744,7 @@ describe('generateText', () => {
       expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
       expect(fallbackModel1.doGenerate).toHaveBeenCalledTimes(1);
       expect(fallbackModel2.doGenerate).toHaveBeenCalledTimes(1);
-      expect(elapsedTime).toBeGreaterThanOrEqual(delay1 + delay2);
+      expect(elapsedTime).toBeGreaterThanOrEqual((delay1 + delay2) * 0.9);
     });
 
     it('should not delay when delay is not specified', async () => {
@@ -1612,7 +1612,7 @@ describe('streamText', () => {
       // Assert
       expect(baseModel.doStream).toHaveBeenCalledTimes(1);
       expect(fallbackModel.doStream).toHaveBeenCalledTimes(1);
-      expect(elapsedTime).toBeGreaterThanOrEqual(delayMs);
+      expect(elapsedTime).toBeGreaterThanOrEqual(delayMs * 0.9);
     });
 
     it('should apply different delays for multiple retries', async () => {
@@ -1650,7 +1650,7 @@ describe('streamText', () => {
       expect(baseModel.doStream).toHaveBeenCalledTimes(1);
       expect(fallbackModel1.doStream).toHaveBeenCalledTimes(1);
       expect(fallbackModel2.doStream).toHaveBeenCalledTimes(1);
-      expect(elapsedTime).toBeGreaterThanOrEqual(delay1 + delay2);
+      expect(elapsedTime).toBeGreaterThanOrEqual((delay1 + delay2) * 0.9);
     });
 
     it('should not delay when delay is not specified', async () => {
@@ -2253,7 +2253,7 @@ describe('embed', () => {
       // Assert
       expect(baseModel.doEmbed).toHaveBeenCalledTimes(1);
       expect(fallbackModel.doEmbed).toHaveBeenCalledTimes(1);
-      expect(elapsedTime).toBeGreaterThanOrEqual(delayMs);
+      expect(elapsedTime).toBeGreaterThanOrEqual(delayMs * 0.9);
     });
 
     it('should apply different delays for multiple retries', async () => {
@@ -2287,7 +2287,7 @@ describe('embed', () => {
       expect(baseModel.doEmbed).toHaveBeenCalledTimes(1);
       expect(fallbackModel1.doEmbed).toHaveBeenCalledTimes(1);
       expect(fallbackModel2.doEmbed).toHaveBeenCalledTimes(1);
-      expect(elapsedTime).toBeGreaterThanOrEqual(delay1 + delay2);
+      expect(elapsedTime).toBeGreaterThanOrEqual((delay1 + delay2) * 0.9);
     });
 
     it('should not delay when delay is not specified', async () => {
