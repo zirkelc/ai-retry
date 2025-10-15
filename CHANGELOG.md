@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.3.0](https://github.com/zirkelc/ai-retry/compare/v0.2.0...v0.3.0) (2025-10-15)
+
+
+### Features
+
+* support retry delays ([d10ee7a](https://github.com/zirkelc/ai-retry/commit/d10ee7a733cd90dc5a67a5068d4ac973ae99765a))
+
+
+### Bug Fixes
+
+* export types ([5a9f664](https://github.com/zirkelc/ai-retry/commit/5a9f664e64416a72a9e1f527e54fb64f6f61395e))
+* timing test ([74e3b2e](https://github.com/zirkelc/ai-retry/commit/74e3b2e0db787a6bd9ecc0846817ae2aed92b2d1))
+
 ## [0.2.0](https://github.com/zirkelc/ai-retry/compare/v0.1.1...v0.2.0) (2025-10-06)
 
 
