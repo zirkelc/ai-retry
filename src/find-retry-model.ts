@@ -4,6 +4,7 @@ import type {
   LanguageModelV2,
   Retries,
   RetryContext,
+  RetryModel,
 } from './types.js';
 import { isResultAttempt } from './utils.js';
 
@@ -15,7 +16,7 @@ export async function findRetryModel<
 >(
   retries: Retries<MODEL>,
   context: RetryContext<MODEL>,
-): Promise<MODEL | undefined> {
+): Promise<RetryModel<MODEL> | undefined> {
   /**
    * Filter retryables based on attempt type:
    * - Result-based attempts: Only consider function retryables (skip plain models)
@@ -53,7 +54,7 @@ export async function findRetryModel<
        * Check if the model can still be retried based on maxAttempts
        */
       if (retryAttempts.length < maxAttempts) {
-        return retryModel.model;
+        return retryModel;
       }
     }
   }

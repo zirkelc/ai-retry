@@ -3,28 +3,19 @@ import type {
   LanguageModelV2CallOptions,
   LanguageModelV2StreamPart,
 } from '@ai-sdk/provider';
-import { getErrorMessage } from '@ai-sdk/provider-utils';
-import { RetryError } from 'ai';
+import { delay } from '@ai-sdk/provider-utils';
 import { findRetryModel } from './find-retry-model.js';
-import { getModelKey } from './get-model-key.js';
 import { prepareRetryError } from './prepare-retry-error.js';
 import type {
   LanguageModelV2Generate,
   LanguageModelV2Stream,
-  Retries,
   RetryAttempt,
-  Retryable,
   RetryableModelOptions,
   RetryContext,
   RetryErrorAttempt,
   RetryResultAttempt,
 } from './types.js';
-import {
-  isErrorAttempt,
-  isGenerateResult,
-  isResultAttempt,
-  isStreamContentPart,
-} from './utils.js';
+import { isGenerateResult, isStreamContentPart } from './utils.js';
 
 export class RetryableLanguageModel implements LanguageModelV2 {
   readonly specificationVersion = 'v2';
@@ -58,6 +49,7 @@ export class RetryableLanguageModel implements LanguageModelV2 {
   >(input: {
     fn: () => Promise<RESULT>;
     attempts?: Array<RetryAttempt<LanguageModelV2>>;
+    abortSignal?: AbortSignal;
   }): Promise<{
     result: RESULT;
     attempts: Array<RetryAttempt<LanguageModelV2>>;
@@ -106,15 +98,19 @@ export class RetryableLanguageModel implements LanguageModelV2 {
          * Check if the result should trigger a retry (only for generate results, not streams)
          */
         if (isGenerateResult(result)) {
-          const { nextModel, attempt } = await this.handleResult(
+          const { retryModel, attempt } = await this.handleResult(
             result,
             attempts,
           );
 
           attempts.push(attempt);
 
-          if (nextModel) {
-            this.currentModel = nextModel;
+          if (retryModel) {
+            if (retryModel.delay) {
+              await delay(retryModel.delay, { abortSignal: input.abortSignal });
+            }
+
+            this.currentModel = retryModel.model;
 
             /**
              * Continue to the next iteration to retry
@@ -125,11 +121,15 @@ export class RetryableLanguageModel implements LanguageModelV2 {
 
         return { result, attempts };
       } catch (error) {
-        const { nextModel, attempt } = await this.handleError(error, attempts);
+        const { retryModel, attempt } = await this.handleError(error, attempts);
 
         attempts.push(attempt);
 
-        this.currentModel = nextModel;
+        if (retryModel.delay) {
+          await delay(retryModel.delay, { abortSignal: input.abortSignal });
+        }
+
+        this.currentModel = retryModel.model;
       }
     }
   }
@@ -157,9 +157,9 @@ export class RetryableLanguageModel implements LanguageModelV2 {
       attempts: updatedAttempts,
     };
 
-    const nextModel = await findRetryModel(this.options.retries, context);
+    const retryModel = await findRetryModel(this.options.retries, context);
 
-    return { nextModel, attempt: resultAttempt };
+    return { retryModel, attempt: resultAttempt };
   }
 
   /**
@@ -187,13 +187,13 @@ export class RetryableLanguageModel implements LanguageModelV2 {
 
     this.options.onError?.(context);
 
-    const nextModel = await findRetryModel(this.options.retries, context);
+    const retryModel = await findRetryModel(this.options.retries, context);
 
     /**
      * Handler didn't return any models to try next, rethrow the error.
      * If we retried the request, wrap the error into a `RetryError` for better visibility.
      */
-    if (!nextModel) {
+    if (!retryModel) {
       if (updatedAttempts.length > 1) {
         throw prepareRetryError(error, updatedAttempts);
       }
@@ -201,7 +201,7 @@ export class RetryableLanguageModel implements LanguageModelV2 {
       throw error;
     }
 
-    return { nextModel, attempt: errorAttempt };
+    return { retryModel, attempt: errorAttempt };
   }
 
   async doGenerate(
@@ -214,6 +214,7 @@ export class RetryableLanguageModel implements LanguageModelV2 {
 
     const { result } = await this.withRetry({
       fn: async () => await this.currentModel.doGenerate(options),
+      abortSignal: options.abortSignal,
     });
 
     return result;
@@ -232,6 +233,7 @@ export class RetryableLanguageModel implements LanguageModelV2 {
      */
     let { result, attempts } = await this.withRetry({
       fn: async () => await this.currentModel.doStream(options),
+      abortSignal: options.abortSignal,
     });
 
     /**
@@ -283,17 +285,23 @@ export class RetryableLanguageModel implements LanguageModelV2 {
              * Check if the error from the stream can be retried.
              * Otherwise it will rethrow the error.
              */
-            const { nextModel, attempt } = await this.handleError(
+            const { retryModel, attempt } = await this.handleError(
               error,
               attempts,
             );
-
-            this.currentModel = nextModel;
 
             /**
              * Save the attempt
              */
             attempts.push(attempt);
+
+            if (retryModel.delay) {
+              await delay(retryModel.delay, {
+                abortSignal: options.abortSignal,
+              });
+            }
+
+            this.currentModel = retryModel.model;
 
             /**
              * Retry the request by calling doStream again.
@@ -302,6 +310,7 @@ export class RetryableLanguageModel implements LanguageModelV2 {
             const retriedResult = await this.withRetry({
               fn: async () => await this.currentModel.doStream(options),
               attempts,
+              abortSignal: options.abortSignal,
             });
 
             /**

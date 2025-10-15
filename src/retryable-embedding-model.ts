@@ -1,22 +1,14 @@
-import type { EmbeddingModelV2, LanguageModelV2 } from '@ai-sdk/provider';
-import { getErrorMessage } from '@ai-sdk/provider-utils';
-import { RetryError } from 'ai';
+import type { EmbeddingModelV2 } from '@ai-sdk/provider';
+import { delay } from '@ai-sdk/provider-utils';
 import { findRetryModel } from './find-retry-model.js';
-import { getModelKey } from './get-model-key.js';
 import { prepareRetryError } from './prepare-retry-error.js';
 import type {
   EmbeddingModelV2CallOptions,
   EmbeddingModelV2Embed,
-  LanguageModelV2Generate,
-  Retries,
-  RetryAttempt,
-  Retryable,
   RetryableModelOptions,
   RetryContext,
   RetryErrorAttempt,
-  RetryResultAttempt,
 } from './types.js';
-import { isErrorAttempt, isGenerateResult, isResultAttempt } from './utils.js';
 
 export class RetryableEmbeddingModel<VALUE> implements EmbeddingModelV2<VALUE> {
   readonly specificationVersion = 'v2';
@@ -52,6 +44,7 @@ export class RetryableEmbeddingModel<VALUE> implements EmbeddingModelV2<VALUE> {
   private async withRetry<RESULT extends EmbeddingModelV2Embed<VALUE>>(input: {
     fn: () => Promise<RESULT>;
     attempts?: Array<RetryErrorAttempt<EmbeddingModelV2<VALUE>>>;
+    abortSignal?: AbortSignal;
   }): Promise<{
     result: RESULT;
     attempts: Array<RetryErrorAttempt<EmbeddingModelV2<VALUE>>>;
@@ -99,11 +92,15 @@ export class RetryableEmbeddingModel<VALUE> implements EmbeddingModelV2<VALUE> {
 
         return { result, attempts };
       } catch (error) {
-        const { nextModel, attempt } = await this.handleError(error, attempts);
+        const { retryModel, attempt } = await this.handleError(error, attempts);
 
         attempts.push(attempt);
 
-        this.currentModel = nextModel;
+        if (retryModel.delay) {
+          await delay(retryModel.delay, { abortSignal: input.abortSignal });
+        }
+
+        this.currentModel = retryModel.model;
       }
     }
   }
@@ -133,13 +130,13 @@ export class RetryableEmbeddingModel<VALUE> implements EmbeddingModelV2<VALUE> {
 
     this.options.onError?.(context);
 
-    const nextModel = await findRetryModel(this.options.retries, context);
+    const retryModel = await findRetryModel(this.options.retries, context);
 
     /**
      * Handler didn't return any models to try next, rethrow the error.
      * If we retried the request, wrap the error into a `RetryError` for better visibility.
      */
-    if (!nextModel) {
+    if (!retryModel) {
       if (updatedAttempts.length > 1) {
         throw prepareRetryError(error, updatedAttempts);
       }
@@ -147,7 +144,7 @@ export class RetryableEmbeddingModel<VALUE> implements EmbeddingModelV2<VALUE> {
       throw error;
     }
 
-    return { nextModel, attempt: errorAttempt };
+    return { retryModel, attempt: errorAttempt };
   }
 
   async doEmbed(
@@ -160,6 +157,7 @@ export class RetryableEmbeddingModel<VALUE> implements EmbeddingModelV2<VALUE> {
 
     const { result } = await this.withRetry({
       fn: async () => await this.currentModel.doEmbed(options),
+      abortSignal: options.abortSignal,
     });
 
     return result;

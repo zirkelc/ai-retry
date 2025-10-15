@@ -247,6 +247,42 @@ try {
 }
 ```
 
+#### Retry Delays
+
+You can add delays before retrying to handle rate limiting or give services time to recover. The delay respects abort signals, so requests can still be cancelled during the delay period.
+
+```typescript
+const retryableModel = createRetryable({
+  model: openai('gpt-4'),
+  retries: [
+    // Wait 1 second before retrying
+    () => ({ 
+      model: openai('gpt-4'), 
+      delay: 1_000 
+    }),
+    // Wait 2 seconds before trying a different provider
+    () => ({ 
+      model: anthropic('claude-3-haiku-20240307'), 
+      delay: 2_000 
+    }),
+  ],
+});
+```
+
+You can also use delays with built-in retryables:
+
+```typescript
+import { serviceOverloaded } from 'ai-retry/retryables';
+
+const retryableModel = createRetryable({
+  model: openai('gpt-4'),
+  retries: [
+    // Wait 5 seconds before retrying on service overload
+    serviceOverloaded(openai('gpt-4'), { maxAttempts: 3, delay: 5_000 }),
+  ],
+});
+```
+
 #### Logging
 
 You can use the following callbacks to log retry attempts and errors:
@@ -318,15 +354,19 @@ type Retryable = (
 
 #### `RetryModel`
 
-A `RetryModel` specifies the model to retry and an optional `maxAttempts` to limit how many times this model can be retried.
-By default, each retryable will only attempt to retry once per model. This can be customized by setting the `maxAttempts` property.
+A `RetryModel` specifies the model to retry and optional settings like `maxAttempts` and `delay`.
 
 ```typescript
 interface RetryModel {
   model: LanguageModelV2 | EmbeddingModelV2;
-  maxAttempts?: number;
+  maxAttempts?: number; // Maximum retry attempts per model (default: 1)
+  delay?: number;       // Delay in milliseconds before retrying
 }
 ```
+
+**Options:**
+- `maxAttempts`: Maximum number of times this model can be retried. Default is 1.
+- `delay`: Delay in milliseconds to wait before retrying. Useful for rate limiting or giving services time to recover. The delay respects abort signals from the request.
 
 #### `RetryContext`
 
