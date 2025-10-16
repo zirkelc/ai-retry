@@ -7,6 +7,7 @@ name: Release
 on:
   release:
     types: [published]
+  workflow_dispatch:
 
 permissions:
   id-token: write # needed for npm publish with provenance
