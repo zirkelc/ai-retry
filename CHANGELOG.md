@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.4.0](https://github.com/zirkelc/ai-retry/compare/v0.3.0...v0.4.0) (2025-10-16)
+
+
+### Features
+
+* retry with exponential backoff and retry-after headers ([098e50f](https://github.com/zirkelc/ai-retry/commit/098e50fed478c8ee34d6ec6729056b9008be9c53))
+
+
+### Bug Fixes
+
+* calculate backoff factor ([c0b2d00](https://github.com/zirkelc/ai-retry/commit/c0b2d003d22932f050b7dd8e5238f509e3430bf5))
+* up pnpm &gt; v10 ([eabb07e](https://github.com/zirkelc/ai-retry/commit/eabb07edc6ef1fdbf18148c46f3a46f19f0e0ebf))
+
 ## [0.3.0](https://github.com/zirkelc/ai-retry/compare/v0.2.0...v0.3.0) (2025-10-15)
 
 
