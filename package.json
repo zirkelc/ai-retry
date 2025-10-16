@@ -2,7 +2,7 @@
   "name": "ai-retry",
   "version": "0.3.0",
   "description": "AI SDK Retry",
-  "packageManager": "pnpm@9.0.0",
+  "packageManager": "pnpm@10.0.0",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
