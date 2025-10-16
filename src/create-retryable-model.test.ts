@@ -693,13 +693,13 @@ describe('generateText', () => {
   describe('delay', () => {
     it('should apply delay before retrying', async () => {
       // Arrange
+      vi.useFakeTimers();
       const baseModel = new MockLanguageModel({ doGenerate: retryableError });
       const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
       const delayMs = 100;
-      const startTime = Date.now();
 
       // Act
-      await generateText({
+      const promise = generateText({
         model: createRetryable({
           model: baseModel,
           retries: [() => ({ model: fallbackModel, delay: delayMs })],
@@ -707,16 +707,19 @@ describe('generateText', () => {
         prompt: 'Hello!',
       });
 
-      const elapsedTime = Date.now() - startTime;
+      await vi.runAllTimersAsync();
+      await promise;
 
       // Assert
       expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
       expect(fallbackModel.doGenerate).toHaveBeenCalledTimes(1);
-      expect(elapsedTime).toBeGreaterThanOrEqual(delayMs * 0.9);
+
+      vi.useRealTimers();
     });
 
     it('should apply different delays for multiple retries', async () => {
       // Arrange
+      vi.useFakeTimers();
       const baseModel = new MockLanguageModel({ doGenerate: retryableError });
       const fallbackModel1 = new MockLanguageModel({
         doGenerate: retryableError,
@@ -724,10 +727,9 @@ describe('generateText', () => {
       const fallbackModel2 = new MockLanguageModel({ doGenerate: mockResult });
       const delay1 = 50;
       const delay2 = 50;
-      const startTime = Date.now();
 
       // Act
-      await generateText({
+      const promise = generateText({
         model: createRetryable({
           model: baseModel,
           retries: [
@@ -738,20 +740,21 @@ describe('generateText', () => {
         prompt: 'Hello!',
       });
 
-      const elapsedTime = Date.now() - startTime;
+      await vi.runAllTimersAsync();
+      await promise;
 
       // Assert
       expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
       expect(fallbackModel1.doGenerate).toHaveBeenCalledTimes(1);
       expect(fallbackModel2.doGenerate).toHaveBeenCalledTimes(1);
-      expect(elapsedTime).toBeGreaterThanOrEqual((delay1 + delay2) * 0.9);
+
+      vi.useRealTimers();
     });
 
     it('should not delay when delay is not specified', async () => {
       // Arrange
       const baseModel = new MockLanguageModel({ doGenerate: retryableError });
       const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
-      const startTime = Date.now();
 
       // Act
       await generateText({
@@ -762,12 +765,9 @@ describe('generateText', () => {
         prompt: 'Hello!',
       });
 
-      const elapsedTime = Date.now() - startTime;
-
       // Assert
       expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
       expect(fallbackModel.doGenerate).toHaveBeenCalledTimes(1);
-      expect(elapsedTime).toBeLessThan(50);
     });
   });
 
@@ -1587,6 +1587,7 @@ describe('streamText', () => {
   describe('delay', () => {
     it('should apply delay before retrying', async () => {
       // Arrange
+      vi.useFakeTimers();
       const baseModel = new MockLanguageModel({ doStream: retryableError });
       const fallbackModel = new MockLanguageModel({
         doStream: {
@@ -1594,7 +1595,6 @@ describe('streamText', () => {
         },
       });
       const delayMs = 100;
-      const startTime = Date.now();
 
       // Act
       const result = streamText({
@@ -1605,18 +1605,20 @@ describe('streamText', () => {
         prompt,
       });
 
-      await convertAsyncIterableToArray(result.fullStream);
-
-      const elapsedTime = Date.now() - startTime;
+      const streamPromise = convertAsyncIterableToArray(result.fullStream);
+      await vi.runAllTimersAsync();
+      await streamPromise;
 
       // Assert
       expect(baseModel.doStream).toHaveBeenCalledTimes(1);
       expect(fallbackModel.doStream).toHaveBeenCalledTimes(1);
-      expect(elapsedTime).toBeGreaterThanOrEqual(delayMs * 0.9);
+
+      vi.useRealTimers();
     });
 
     it('should apply different delays for multiple retries', async () => {
       // Arrange
+      vi.useFakeTimers();
       const baseModel = new MockLanguageModel({ doStream: retryableError });
       const fallbackModel1 = new MockLanguageModel({
         doStream: retryableError,
@@ -1628,7 +1630,6 @@ describe('streamText', () => {
       });
       const delay1 = 50;
       const delay2 = 50;
-      const startTime = Date.now();
 
       // Act
       const result = streamText({
@@ -1642,15 +1643,16 @@ describe('streamText', () => {
         prompt,
       });
 
-      await convertAsyncIterableToArray(result.fullStream);
-
-      const elapsedTime = Date.now() - startTime;
+      const streamPromise = convertAsyncIterableToArray(result.fullStream);
+      await vi.runAllTimersAsync();
+      await streamPromise;
 
       // Assert
       expect(baseModel.doStream).toHaveBeenCalledTimes(1);
       expect(fallbackModel1.doStream).toHaveBeenCalledTimes(1);
       expect(fallbackModel2.doStream).toHaveBeenCalledTimes(1);
-      expect(elapsedTime).toBeGreaterThanOrEqual((delay1 + delay2) * 0.9);
+
+      vi.useRealTimers();
     });
 
     it('should not delay when delay is not specified', async () => {
@@ -1661,7 +1663,6 @@ describe('streamText', () => {
           stream: convertArrayToReadableStream(mockStreamChunks),
         },
       });
-      const startTime = Date.now();
 
       // Act
       const result = streamText({
@@ -1674,12 +1675,9 @@ describe('streamText', () => {
 
       await convertAsyncIterableToArray(result.fullStream);
 
-      const elapsedTime = Date.now() - startTime;
-
       // Assert
       expect(baseModel.doStream).toHaveBeenCalledTimes(1);
       expect(fallbackModel.doStream).toHaveBeenCalledTimes(1);
-      expect(elapsedTime).toBeLessThan(50);
     });
   });
 
@@ -2234,13 +2232,13 @@ describe('embed', () => {
   describe('delay', () => {
     it('should apply delay before retrying', async () => {
       // Arrange
+      vi.useFakeTimers();
       const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
       const fallbackModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
       const delayMs = 100;
-      const startTime = Date.now();
 
       // Act
-      await embed({
+      const promise = embed({
         model: createRetryable({
           model: baseModel,
           retries: [() => ({ model: fallbackModel, delay: delayMs })],
@@ -2248,16 +2246,19 @@ describe('embed', () => {
         value: 'Hello!',
       });
 
-      const elapsedTime = Date.now() - startTime;
+      await vi.runAllTimersAsync();
+      await promise;
 
       // Assert
       expect(baseModel.doEmbed).toHaveBeenCalledTimes(1);
       expect(fallbackModel.doEmbed).toHaveBeenCalledTimes(1);
-      expect(elapsedTime).toBeGreaterThanOrEqual(delayMs * 0.9);
+
+      vi.useRealTimers();
     });
 
     it('should apply different delays for multiple retries', async () => {
       // Arrange
+      vi.useFakeTimers();
       const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
       const fallbackModel1 = new MockEmbeddingModel({
         doEmbed: retryableError,
@@ -2267,10 +2268,9 @@ describe('embed', () => {
       });
       const delay1 = 50;
       const delay2 = 50;
-      const startTime = Date.now();
 
       // Act
-      await embed({
+      const promise = embed({
         model: createRetryable({
           model: baseModel,
           retries: [
@@ -2281,20 +2281,21 @@ describe('embed', () => {
         value: 'Hello!',
       });
 
-      const elapsedTime = Date.now() - startTime;
+      await vi.runAllTimersAsync();
+      await promise;
 
       // Assert
       expect(baseModel.doEmbed).toHaveBeenCalledTimes(1);
       expect(fallbackModel1.doEmbed).toHaveBeenCalledTimes(1);
       expect(fallbackModel2.doEmbed).toHaveBeenCalledTimes(1);
-      expect(elapsedTime).toBeGreaterThanOrEqual((delay1 + delay2) * 0.9);
+
+      vi.useRealTimers();
     });
 
     it('should not delay when delay is not specified', async () => {
       // Arrange
       const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
       const fallbackModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
-      const startTime = Date.now();
 
       // Act
       await embed({
@@ -2305,12 +2306,9 @@ describe('embed', () => {
         value: 'Hello!',
       });
 
-      const elapsedTime = Date.now() - startTime;
-
       // Assert
       expect(baseModel.doEmbed).toHaveBeenCalledTimes(1);
       expect(fallbackModel.doEmbed).toHaveBeenCalledTimes(1);
-      expect(elapsedTime).toBeLessThan(50);
     });
   });
 

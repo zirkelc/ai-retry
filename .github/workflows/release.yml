@@ -1,3 +1,7 @@
+# IMPORTANT: DO NOT RENAME THIS FILE
+# It uses Trusted Publisher to deploy without token
+# https://www.npmjs.com/package/ai-retry/access
+
 name: Release
 
 on:
@@ -12,21 +16,17 @@ jobs:
     name: Release
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup and Install
-        id: install
-        uses: zirkelc/setup-and-install@v1
+      # http://github.com/actions/checkout
+      - uses: actions/checkout@v5
+      # https://github.com/pnpm/action-setup
+      - uses: pnpm/action-setup@v4
+      # https://github.com/actions/setup-node
+      - uses: actions/setup-node@v6
         with:
-          node-version: 20
-
-      - name: Build
-        run: pnpm build
-
-      - name: Publish to NPM
-        id: publish
-        uses: JS-DevTools/npm-publish@v3
-        with:
-          token: ${{ secrets.NPM_TOKEN }}
-          dry-run: false
-          provenance: true
+          node-version: 24
+          registry-url: https://registry.npmjs.org/
+          cache: 'pnpm'
+      - run: pnpm install
+      - run: pnpm build
+      - run: pnpm test
+      - run: pnpm publish --provenance

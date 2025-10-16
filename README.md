@@ -171,6 +171,39 @@ const retryable = createRetryable({
 });
 ```
 
+#### Retry After Delay
+
+Handle retryable errors with delays and respect `retry-after` headers from rate-limited responses. This is useful for handling 429 (Too Many Requests) and 503 (Service Unavailable) errors.
+
+> [!NOTE] 
+> If the response contains a [`retry-after`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Retry-After) header, it will be prioritized over the configured delay.
+
+
+```typescript
+import { retryAfterDelay } from 'ai-retry/retryables';
+
+const retryableModel = createRetryable({
+  model: openai('gpt-4'), // Base model
+  retries: [
+    // Retry base model 3 times with fixed 2s delay
+    retryAfterDelay({ delay: 2000, maxAttempts: 3 }),
+
+    // Or retry with exponential backoff (2s, 4s, 8s)
+    retryAfterDelay({ delay: 2000, backoffFactor: 2, maxAttempts: 3 }),
+    
+    // Or switch to a different model after delay
+    retryAfterDelay(openai('gpt-4-mini'), { delay: 1000 }),
+  ],
+});
+```
+
+**Options:**
+- `delay` (required): Delay in milliseconds before retrying
+- `backoffFactor` (optional): Multiplier for exponential backoff (delay × backoffFactor^attempt). If not provided, uses fixed delay.
+- `maxAttempts` (optional): Maximum number of retry attempts for this model
+
+By default, if a [`retry-after-ms`](https://learn.microsoft.com/en-us/azure/ai-foundry/openai/how-to/provisioned-get-started#what-should--i-do-when-i-receive-a-429-response) or `retry-after` header is present in the response, it will be prioritized over the configured delay. The delay from the header will be capped at 60 seconds for safety. If no headers are present, the configured delay or exponential backoff will be used.
+
 #### Fallbacks
 
 If you always want to fallback to a different model on any error, you can simply provide a list of models.
@@ -247,6 +280,8 @@ try {
 }
 ```
 
+### Options
+
 #### Retry Delays
 
 You can add delays before retrying to handle rate limiting or give services time to recover. The delay respects abort signals, so requests can still be cancelled during the delay period.
@@ -267,6 +302,13 @@ const retryableModel = createRetryable({
     }),
   ],
 });
+
+const result = await generateText({
+  model: retryableModel,
+  prompt: 'Write a vegetarian lasagna recipe for 4 people.',
+  // Will be respected during delays
+  abortSignal: AbortSignal.timeout(60_000), 
+});
 ```
 
 You can also use delays with built-in retryables:
@@ -282,6 +324,26 @@ const retryableModel = createRetryable({
   ],
 });
 ```
+
+#### Max Attempts
+
+By default, each retryable will only attempt to retry once per model to avoid infinite loops. You can customize this behavior by returning a `maxAttempts` value from your retryable function. Note that the initial request with the base model is counted as the first attempt.
+
+```typescript
+const retryableModel = createRetryable({
+  model: openai('gpt-4'),
+  retries: [
+    // Try this once
+    anthropic('claude-3-haiku-20240307'), 
+    // Try this one more time (initial + 1 retry)
+    () => ({ model: openai('gpt-4'), maxAttempts: 2 }), 
+    // Already tried, won't be retried again
+    anthropic('claude-3-haiku-20240307') 
+  ],
+});
+```
+
+The attempts are counted per unique model (provider + modelId). That means if multiple retryables return the same model, it won't be retried again once the `maxAttempts` is reached.
 
 #### Logging
 
@@ -321,10 +383,9 @@ There are several built-in retryables:
 - [`contentFilterTriggered`](./src/retryables/content-filter-triggered.ts): Content filter was triggered based on the prompt or completion.
 - [`requestTimeout`](./src/retryables/request-timeout.ts): Request timeout occurred.
 - [`requestNotRetryable`](./src/retryables/request-not-retryable.ts): Request failed with a non-retryable error.
+- [`retryAfterDelay`](./src/retryables/retry-after-delay.ts): Retry with exponential backoff and respect `retry-after` headers for rate limiting.
 - [`serviceOverloaded`](./src/retryables/service-overloaded.ts): Response with status code 529 (service overloaded).
   - Use this retryable to handle Anthropic's overloaded errors.
-
-By default, each retryable will only attempt to retry once per model to avoid infinite loops. You can customize this behavior by returning a `maxAttempts` value from your retryable function.
 
 ### API Reference
 
