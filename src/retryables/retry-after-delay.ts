@@ -1,4 +1,5 @@
 import { APICallError } from 'ai';
+import { calculateExponentialBackoff } from '../calculate-exponential-backoff.js';
 import { getModelKey } from '../get-model-key.js';
 import { parseRetryHeaders } from '../parse-retry-headers.js';
 import type {
@@ -46,7 +47,7 @@ export function retryAfterDelay<
   }
 
   const delay = opts.delay;
-  const backoffFactor = opts.backoffFactor;
+  const backoffFactor = Math.max(opts.backoffFactor ?? 1, 1); // Ensure backoffFactor is at least 1
 
   return (context) => {
     const { current, attempts } = context;
@@ -70,9 +71,11 @@ export function retryAfterDelay<
           };
         }
 
-        const calculatedDelay = backoffFactor
-          ? delay * backoffFactor ** modelAttempts.length
-          : delay;
+        const calculatedDelay = calculateExponentialBackoff(
+          delay,
+          backoffFactor,
+          modelAttempts.length,
+        );
 
         return {
           model: targetModel,
