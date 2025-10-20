@@ -44,6 +44,7 @@
   "devDependencies": {
     "@ai-sdk/anthropic": "^2.0.18",
     "@ai-sdk/azure": "^2.0.30",
+    "@ai-sdk/groq": "^2.0.24",
     "@ai-sdk/openai": "^2.0.30",
     "@arethetypeswrong/cli": "^0.18.2",
     "@biomejs/biome": "^2.2.4",
@@ -54,7 +55,7 @@
     "msw": "^2.11.2",
     "pkg-pr-new": "^0.0.60",
     "publint": "^0.3.13",
-    "tsdown": "^0.15.2",
+    "tsdown": "^0.15.9",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2",
     "unbuild": "^3.6.1",

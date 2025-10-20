@@ -21,4 +21,16 @@ describe('calculateExponentialBackoff', () => {
     expect(calculateExponentialBackoff(1000, 3, 2)).toBe(9000);
     expect(calculateExponentialBackoff(1000, 1.5, 2)).toBe(2250);
   });
+
+  it('defaults backoff factor to 1 when not provided', () => {
+    expect(calculateExponentialBackoff(1000, undefined, 1)).toBe(1000);
+    expect(calculateExponentialBackoff(1000, undefined, 2)).toBe(1000);
+    expect(calculateExponentialBackoff(1000, undefined, 3)).toBe(1000);
+  });
+
+  it('ensures backoff factor is at least 1', () => {
+    expect(calculateExponentialBackoff(1000, 0, 2)).toBe(1000);
+    expect(calculateExponentialBackoff(1000, -1, 2)).toBe(1000);
+    expect(calculateExponentialBackoff(1000, 0.5, 2)).toBe(1000);
+  });
 });

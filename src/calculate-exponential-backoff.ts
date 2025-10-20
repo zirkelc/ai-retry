@@ -3,8 +3,9 @@
  */
 export function calculateExponentialBackoff(
   baseDelay: number,
-  backoffFactor: number,
+  backoffFactor: number = 1,
   attempts: number,
 ): number {
-  return baseDelay * backoffFactor ** attempts;
+  const factor = Math.max(backoffFactor, 1);
+  return baseDelay * factor ** attempts;
 }

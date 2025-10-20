@@ -69,6 +69,7 @@ export type RetryModel<MODEL extends LanguageModelV2 | EmbeddingModelV2> = {
   model: MODEL;
   maxAttempts?: number;
   delay?: number;
+  backoffFactor?: number;
 };
 
 /**

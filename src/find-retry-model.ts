@@ -31,9 +31,7 @@ export async function findRetryModel<
    */
   for (const retry of applicableRetries) {
     const retryModel =
-      typeof retry === 'function'
-        ? await retry(context)
-        : { model: retry, maxAttempts: 1 };
+      typeof retry === 'function' ? await retry(context) : { model: retry };
 
     if (retryModel) {
       /**

@@ -21,9 +21,6 @@ It supports two types of retries:
 
 This library only supports AI SDK v5.
 
-> [!WARNING]  
-> `ai-retry` is in an early stage and the API may change in future releases.
-
 ```bash
 npm install ai-retry
 ```
@@ -197,11 +194,6 @@ const retryableModel = createRetryable({
 });
 ```
 
-**Options:**
-- `delay` (required): Delay in milliseconds before retrying
-- `backoffFactor` (optional): Multiplier for exponential backoff (delay × backoffFactor^attempt). If not provided, uses fixed delay.
-- `maxAttempts` (optional): Maximum number of retry attempts for this model
-
 By default, if a [`retry-after-ms`](https://learn.microsoft.com/en-us/azure/ai-foundry/openai/how-to/provisioned-get-started#what-should--i-do-when-i-receive-a-429-response) or `retry-after` header is present in the response, it will be prioritized over the configured delay. The delay from the header will be capped at 60 seconds for safety. If no headers are present, the configured delay or exponential backoff will be used.
 
 #### Fallbacks
@@ -284,22 +276,17 @@ try {
 
 #### Retry Delays
 
-You can add delays before retrying to handle rate limiting or give services time to recover. The delay respects abort signals, so requests can still be cancelled during the delay period.
+You can delay retries with an optional exponential backoff. The delay respects abort signals, so requests can still be cancelled during the delay period.
 
 ```typescript
 const retryableModel = createRetryable({
   model: openai('gpt-4'),
   retries: [
-    // Wait 1 second before retrying
-    () => ({ 
-      model: openai('gpt-4'), 
-      delay: 1_000 
-    }),
-    // Wait 2 seconds before trying a different provider
-    () => ({ 
-      model: anthropic('claude-3-haiku-20240307'), 
-      delay: 2_000 
-    }),
+    // Retry model 3 times with fixed 2s delay
+    () => ({ model: openai('gpt-4'), delay: 2000, maxAttempts: 3 }),
+
+    // Or retry with exponential backoff (2s, 4s, 8s)
+    () => ({ model: openai('gpt-4'), delay: 2000, backoffFactor: 2, maxAttempts: 3 }),
   ],
 });
 
@@ -420,14 +407,17 @@ A `RetryModel` specifies the model to retry and optional settings like `maxAttem
 ```typescript
 interface RetryModel {
   model: LanguageModelV2 | EmbeddingModelV2;
-  maxAttempts?: number; // Maximum retry attempts per model (default: 1)
-  delay?: number;       // Delay in milliseconds before retrying
+  maxAttempts?: number;   // Maximum retry attempts per model (default: 1)
+  delay?: number;         // Delay in milliseconds before retrying
+  backoffFactor?: number; // Multiplier for exponential backoff
 }
 ```
 
 **Options:**
+- `model`: The model to use for the retry attempt.
 - `maxAttempts`: Maximum number of times this model can be retried. Default is 1.
-- `delay`: Delay in milliseconds to wait before retrying. Useful for rate limiting or giving services time to recover. The delay respects abort signals from the request.
+- `delay`: Delay in milliseconds to wait before retrying. The delay respects abort signals from the request.
+- `backoffFactor`: Multiplier for exponential backoff (`delay × backoffFactor^attempt`). If not provided, uses fixed delay.
 
 #### `RetryContext`
 

@@ -4,6 +4,8 @@ import type {
   LanguageModelV2StreamPart,
 } from '@ai-sdk/provider';
 import { delay } from '@ai-sdk/provider-utils';
+import { calculateExponentialBackoff } from './calculate-exponential-backoff.js';
+import { countModelAttempts } from './count-model-attempts.js';
 import { findRetryModel } from './find-retry-model.js';
 import { prepareRetryError } from './prepare-retry-error.js';
 import type {
@@ -107,7 +109,24 @@ export class RetryableLanguageModel implements LanguageModelV2 {
 
           if (retryModel) {
             if (retryModel.delay) {
-              await delay(retryModel.delay, { abortSignal: input.abortSignal });
+              /**
+               * Calculate exponential backoff delay based on the number of attempts for this specific model.
+               * The delay grows exponentially: baseDelay * backoffFactor^attempts
+               * Example: With delay=1000ms and backoffFactor=2:
+               * - Attempt 1: 1000ms
+               * - Attempt 2: 2000ms
+               * - Attempt 3: 4000ms
+               */
+              const modelAttemptsCount = countModelAttempts(
+                retryModel.model,
+                attempts,
+              );
+              const calculatedDelay = calculateExponentialBackoff(
+                retryModel.delay,
+                retryModel.backoffFactor,
+                modelAttemptsCount,
+              );
+              await delay(calculatedDelay, { abortSignal: input.abortSignal });
             }
 
             this.currentModel = retryModel.model;
@@ -126,7 +145,20 @@ export class RetryableLanguageModel implements LanguageModelV2 {
         attempts.push(attempt);
 
         if (retryModel.delay) {
-          await delay(retryModel.delay, { abortSignal: input.abortSignal });
+          /**
+           * Calculate exponential backoff delay based on the number of attempts for this specific model.
+           * The delay grows exponentially: baseDelay * backoffFactor^attempts
+           */
+          const modelAttemptsCount = countModelAttempts(
+            retryModel.model,
+            attempts,
+          );
+          const calculatedDelay = calculateExponentialBackoff(
+            retryModel.delay,
+            retryModel.backoffFactor,
+            modelAttemptsCount,
+          );
+          await delay(calculatedDelay, { abortSignal: input.abortSignal });
         }
 
         this.currentModel = retryModel.model;
@@ -296,7 +328,20 @@ export class RetryableLanguageModel implements LanguageModelV2 {
             attempts.push(attempt);
 
             if (retryModel.delay) {
-              await delay(retryModel.delay, {
+              /**
+               * Calculate exponential backoff delay based on the number of attempts for this specific model.
+               * The delay grows exponentially: baseDelay * backoffFactor^attempts
+               */
+              const modelAttemptsCount = countModelAttempts(
+                retryModel.model,
+                attempts,
+              );
+              const calculatedDelay = calculateExponentialBackoff(
+                retryModel.delay,
+                retryModel.backoffFactor,
+                modelAttemptsCount,
+              );
+              await delay(calculatedDelay, {
                 abortSignal: options.abortSignal,
               });
             }

@@ -1,6 +1,4 @@
 import { APICallError } from 'ai';
-import { calculateExponentialBackoff } from '../calculate-exponential-backoff.js';
-import { getModelKey } from '../get-model-key.js';
 import { parseRetryHeaders } from '../parse-retry-headers.js';
 import type {
   EmbeddingModelV2,
@@ -15,13 +13,12 @@ const MAX_RETRY_AFTER_MS = 60_000;
 type RetryAfterDelayOptions<MODEL extends LanguageModelV2 | EmbeddingModelV2> =
   Omit<RetryModel<MODEL>, 'model' | 'delay'> & {
     delay: number;
-    backoffFactor?: number;
   };
 
 /**
  * Retry with the same or a different model if the error is retryable with a delay.
  * Uses the `Retry-After` or `Retry-After-Ms` headers if present.
- * Otherwise uses the specified `delay`, or exponential backoff if `backoffFactor` is provided.
+ * Otherwise uses the specified `delay`, with exponential backoff if `backoffFactor` is provided.
  */
 export function retryAfterDelay<
   MODEL extends LanguageModelV2 | EmbeddingModelV2,
@@ -46,21 +43,14 @@ export function retryAfterDelay<
     throw new Error('retryAfterDelay: delay is required');
   }
 
-  const delay = opts.delay;
-  const backoffFactor = Math.max(opts.backoffFactor ?? 1, 1); // Ensure backoffFactor is at least 1
-
   return (context) => {
-    const { current, attempts } = context;
+    const { current } = context;
 
     if (isErrorAttempt(current)) {
       const { error } = current;
 
       if (APICallError.isInstance(error) && error.isRetryable === true) {
         const targetModel = (model ?? current.model) as MODEL;
-        const modelKey = getModelKey(targetModel);
-        const modelAttempts = attempts.filter(
-          (a) => getModelKey(a.model) === modelKey,
-        );
 
         const headerDelay = parseRetryHeaders(error.responseHeaders);
         if (headerDelay !== null) {
@@ -68,19 +58,15 @@ export function retryAfterDelay<
             model: targetModel,
             delay: Math.min(headerDelay, MAX_RETRY_AFTER_MS),
             maxAttempts: opts.maxAttempts,
+            backoffFactor: opts.backoffFactor,
           };
         }
 
-        const calculatedDelay = calculateExponentialBackoff(
-          delay,
-          backoffFactor,
-          modelAttempts.length,
-        );
-
         return {
           model: targetModel,
-          delay: calculatedDelay,
+          delay: opts.delay,
           maxAttempts: opts.maxAttempts,
+          backoffFactor: opts.backoffFactor,
         };
       }
     }
