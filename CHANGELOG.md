@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/zirkelc/ai-retry/compare/v0.4.0...v0.4.1) (2025-10-18)
+
+
+### Bug Fixes
+
+* export utils ([c734bb7](https://github.com/zirkelc/ai-retry/commit/c734bb77eab5cec3d3e014bf008e097b3d00dc2a))
+
 ## [0.4.0](https://github.com/zirkelc/ai-retry/compare/v0.3.0...v0.4.0) (2025-10-16)
 
 
