@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.5.0](https://github.com/zirkelc/ai-retry/compare/v0.4.1...v0.5.0) (2025-10-21)
+
+
+### Features
+
+* support exponential backoff for every retryable ([74c9770](https://github.com/zirkelc/ai-retry/commit/74c9770cc89bbf23a353cfe5e2fae1dd1b7d5458))
+
+
+### Bug Fixes
+
+* rename RetryModel to Retry ([fa96bb3](https://github.com/zirkelc/ai-retry/commit/fa96bb3cd74185d29f68f6370be786bdf5b06083))
+
 ## [0.4.1](https://github.com/zirkelc/ai-retry/compare/v0.4.0...v0.4.1) (2025-10-18)
 
 
