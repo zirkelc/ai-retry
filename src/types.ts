@@ -65,7 +65,7 @@ export type RetryAttempt<MODEL extends LanguageModelV2 | EmbeddingModelV2> =
 /**
  * A model to retry with and the maximum number of attempts for that model.
  */
-export type RetryModel<MODEL extends LanguageModelV2 | EmbeddingModelV2> = {
+export type Retry<MODEL extends LanguageModelV2 | EmbeddingModelV2> = {
   model: MODEL;
   maxAttempts?: number;
   delay?: number;
@@ -77,11 +77,14 @@ export type RetryModel<MODEL extends LanguageModelV2 | EmbeddingModelV2> = {
  */
 export type Retryable<MODEL extends LanguageModelV2 | EmbeddingModelV2> = (
   context: RetryContext<MODEL>,
-) => RetryModel<MODEL> | Promise<RetryModel<MODEL>> | undefined;
+) => Retry<MODEL> | Promise<Retry<MODEL>> | undefined;
 
 export type Retries<MODEL extends LanguageModelV2 | EmbeddingModelV2> = Array<
   Retryable<MODEL> | MODEL
 >;
+
+export type RetryableOptions<MODEL extends LanguageModelV2 | EmbeddingModelV2> =
+  Partial<Omit<Retry<MODEL>, 'model'>>;
 
 export type LanguageModelV2Generate = Awaited<
   ReturnType<LanguageModelV2['doGenerate']>

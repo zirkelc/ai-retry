@@ -1,5 +1,5 @@
-import { APICallError, NoObjectGeneratedError } from 'ai';
-import type { LanguageModelV2, Retryable, RetryModel } from '../types.js';
+import { APICallError } from 'ai';
+import type { LanguageModelV2, Retryable, RetryableOptions } from '../types.js';
 import {
   isErrorAttempt,
   isObject,
@@ -12,7 +12,7 @@ import {
  */
 export function contentFilterTriggered<MODEL extends LanguageModelV2>(
   model: MODEL,
-  options?: Omit<RetryModel<MODEL>, 'model'>,
+  options?: RetryableOptions<MODEL>,
 ): Retryable<MODEL> {
   return (context) => {
     const { current } = context;

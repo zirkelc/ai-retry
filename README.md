@@ -392,20 +392,20 @@ interface RetryableModelOptions<MODEL extends LanguageModelV2 | EmbeddingModelV2
 #### `Retryable`
 
 A `Retryable` is a function that receives a `RetryContext` with the current error or result and model and all previous attempts.
-It should evaluate the error/result and decide whether to retry by returning a `RetryModel` or to skip by returning `undefined`.
+It should evaluate the error/result and decide whether to retry by returning a `Retry` or to skip by returning `undefined`.
 
 ```ts
 type Retryable = (
   context: RetryContext
-) => RetryModel | Promise<RetryModel> | undefined;
+) => Retry | Promise<Retry> | undefined;
 ```
 
-#### `RetryModel`
+#### `Retry`
 
-A `RetryModel` specifies the model to retry and optional settings like `maxAttempts` and `delay`.
+A `Retry` specifies the model to retry and optional settings like `maxAttempts`, `delay` and `backoffFactor`.
 
 ```typescript
-interface RetryModel {
+interface Retry {
   model: LanguageModelV2 | EmbeddingModelV2;
   maxAttempts?: number;   // Maximum retry attempts per model (default: 1)
   delay?: number;         // Delay in milliseconds before retrying

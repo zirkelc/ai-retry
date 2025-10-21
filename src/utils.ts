@@ -1,5 +1,9 @@
-import type { LanguageModelV2StreamPart } from '@ai-sdk/provider';
 import type {
+  LanguageModelV2,
+  LanguageModelV2StreamPart,
+} from '@ai-sdk/provider';
+import type {
+  EmbeddingModelV2,
   LanguageModelV2Generate,
   LanguageModelV2Stream,
   RetryAttempt,
@@ -12,6 +16,25 @@ export const isObject = (value: unknown): value is Record<string, unknown> =>
 
 export const isString = (value: unknown): value is string =>
   typeof value === 'string';
+
+export const isModelV2 = (
+  model: unknown,
+): model is LanguageModelV2 | EmbeddingModelV2 =>
+  isLanguageModelV2(model) || isEmbeddingModelV2(model);
+
+export const isLanguageModelV2 = (model: unknown): model is LanguageModelV2 =>
+  isObject(model) &&
+  'provider' in model &&
+  'modelId' in model &&
+  'specificationVersion' in model &&
+  model.specificationVersion === 'v2';
+
+export const isEmbeddingModelV2 = (model: unknown): model is EmbeddingModelV2 =>
+  isObject(model) &&
+  'provider' in model &&
+  'modelId' in model &&
+  'specificationVersion' in model &&
+  model.specificationVersion === 'v2';
 
 export const isStreamResult = (
   result: LanguageModelV2Generate | LanguageModelV2Stream,

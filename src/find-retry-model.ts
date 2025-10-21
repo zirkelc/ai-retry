@@ -3,8 +3,8 @@ import type {
   EmbeddingModelV2,
   LanguageModelV2,
   Retries,
+  Retry,
   RetryContext,
-  RetryModel,
 } from './types.js';
 import { isResultAttempt } from './utils.js';
 
@@ -16,7 +16,7 @@ export async function findRetryModel<
 >(
   retries: Retries<MODEL>,
   context: RetryContext<MODEL>,
-): Promise<RetryModel<MODEL> | undefined> {
+): Promise<Retry<MODEL> | undefined> {
   /**
    * Filter retryables based on attempt type:
    * - Result-based attempts: Only consider function retryables (skip plain models)

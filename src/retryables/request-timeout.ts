@@ -3,7 +3,7 @@ import type {
   EmbeddingModelV2,
   LanguageModelV2,
   Retryable,
-  RetryModel,
+  RetryableOptions,
 } from '../types.js';
 import { isErrorAttempt } from '../utils.js';
 
@@ -14,7 +14,7 @@ import { isErrorAttempt } from '../utils.js';
  */
 export function requestTimeout<
   MODEL extends LanguageModelV2 | EmbeddingModelV2,
->(model: MODEL, options?: Omit<RetryModel<MODEL>, 'model'>): Retryable<MODEL> {
+>(model: MODEL, options?: RetryableOptions<MODEL>): Retryable<MODEL> {
   return (context) => {
     const { current } = context;
 

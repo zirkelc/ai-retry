@@ -2,8 +2,9 @@ import { APICallError } from 'ai';
 import type {
   EmbeddingModelV2,
   LanguageModelV2,
+  Retry,
   Retryable,
-  RetryModel,
+  RetryableOptions,
 } from '../types.js';
 import { isErrorAttempt, isObject, isString } from '../utils.js';
 
@@ -16,7 +17,7 @@ import { isErrorAttempt, isObject, isString } from '../utils.js';
  */
 export function serviceOverloaded<
   MODEL extends LanguageModelV2 | EmbeddingModelV2,
->(model: MODEL, options?: Omit<RetryModel<MODEL>, 'model'>): Retryable<MODEL> {
+>(model: MODEL, options?: RetryableOptions<MODEL>): Retryable<MODEL> {
   return (context) => {
     const { current } = context;
 
