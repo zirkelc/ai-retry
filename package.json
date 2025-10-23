@@ -45,7 +45,7 @@
     "@ai-sdk/anthropic": "^2.0.18",
     "@ai-sdk/azure": "^2.0.30",
     "@ai-sdk/groq": "^2.0.24",
-    "@ai-sdk/openai": "^2.0.30",
+    "@ai-sdk/openai": "^2.0.53",
     "@arethetypeswrong/cli": "^0.18.2",
     "@biomejs/biome": "^2.2.4",
     "@total-typescript/tsconfig": "^1.0.4",
