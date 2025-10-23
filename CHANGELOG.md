@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/zirkelc/ai-retry/compare/v0.5.0...v0.5.1) (2025-10-23)
+
+
+### Bug Fixes
+
+* remove model param for `retryAfterDelay` ([53ecd26](https://github.com/zirkelc/ai-retry/commit/53ecd260f46cb6e3672964ce8098137912cdb1f2))
+
 ## [0.5.0](https://github.com/zirkelc/ai-retry/compare/v0.4.1...v0.5.0) (2025-10-21)
 
 
