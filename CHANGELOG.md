@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/zirkelc/ai-retry/compare/v0.5.1...v0.6.0) (2025-10-23)
+
+
+### Features
+
+* override `providerOptions` ([67db0e1](https://github.com/zirkelc/ai-retry/commit/67db0e1660174f989956f67b71affb4286154b6c))
+
 ## [0.5.1](https://github.com/zirkelc/ai-retry/compare/v0.5.0...v0.5.1) (2025-10-23)
 
 
