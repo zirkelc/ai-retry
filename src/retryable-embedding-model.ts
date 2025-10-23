@@ -7,6 +7,7 @@ import { prepareRetryError } from './prepare-retry-error.js';
 import type {
   EmbeddingModelV2CallOptions,
   EmbeddingModelV2Embed,
+  Retry,
   RetryableModelOptions,
   RetryContext,
   RetryErrorAttempt,
@@ -44,7 +45,7 @@ export class RetryableEmbeddingModel<VALUE> implements EmbeddingModelV2<VALUE> {
    * Execute a function with retry logic for handling errors
    */
   private async withRetry<RESULT extends EmbeddingModelV2Embed<VALUE>>(input: {
-    fn: () => Promise<RESULT>;
+    fn: (currentRetry?: Retry<EmbeddingModelV2<VALUE>>) => Promise<RESULT>;
     attempts?: Array<RetryErrorAttempt<EmbeddingModelV2<VALUE>>>;
     abortSignal?: AbortSignal;
   }): Promise<{
@@ -56,6 +57,11 @@ export class RetryableEmbeddingModel<VALUE> implements EmbeddingModelV2<VALUE> {
      */
     const attempts: Array<RetryErrorAttempt<EmbeddingModelV2<VALUE>>> =
       input.attempts ?? [];
+
+    /**
+     * Track current retry configuration.
+     */
+    let currentRetry: Retry<EmbeddingModelV2<VALUE>> | undefined;
 
     while (true) {
       /**
@@ -90,7 +96,7 @@ export class RetryableEmbeddingModel<VALUE> implements EmbeddingModelV2<VALUE> {
         /**
          * Call the function that may need to be retried
          */
-        const result = await input.fn();
+        const result = await input.fn(currentRetry);
 
         return { result, attempts };
       } catch (error) {
@@ -120,6 +126,7 @@ export class RetryableEmbeddingModel<VALUE> implements EmbeddingModelV2<VALUE> {
         }
 
         this.currentModel = retryModel.model;
+        currentRetry = retryModel;
       }
     }
   }
@@ -175,7 +182,15 @@ export class RetryableEmbeddingModel<VALUE> implements EmbeddingModelV2<VALUE> {
     this.currentModel = this.baseModel;
 
     const { result } = await this.withRetry({
-      fn: async () => await this.currentModel.doEmbed(options),
+      fn: async (currentRetry) => {
+        // Apply retry configuration if available
+        const callOptions = {
+          ...options,
+          providerOptions:
+            currentRetry?.providerOptions ?? options.providerOptions,
+        };
+        return this.currentModel.doEmbed(callOptions);
+      },
       abortSignal: options.abortSignal,
     });
 

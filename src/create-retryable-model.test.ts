@@ -1,3 +1,4 @@
+import type { OpenAIProviderSettings } from '@ai-sdk/openai';
 import type {
   LanguageModelV2,
   LanguageModelV2StreamPart,
@@ -854,6 +855,45 @@ describe('generateText', () => {
       }
     });
   });
+
+  describe('providerOptions', () => {
+    it('should override base model providerOptions with retry model providerOptions', async () => {
+      // Arrange
+      const baseModel = new MockLanguageModel({ doGenerate: retryableError });
+      const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
+      const originalProviderOptions = { openai: { user: 'original-user' } };
+      const retryProviderOptions = { openai: { user: 'retry-user' } };
+
+      // Act
+      await generateText({
+        model: createRetryable({
+          model: baseModel,
+          retries: [
+            () => ({
+              model: fallbackModel,
+              providerOptions: retryProviderOptions,
+            }),
+          ],
+        }),
+        prompt: 'Hello!',
+        providerOptions: originalProviderOptions,
+      });
+
+      // Assert
+      expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
+      expect(fallbackModel.doGenerate).toHaveBeenCalledTimes(1);
+      expect(baseModel.doGenerate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          providerOptions: originalProviderOptions,
+        }),
+      );
+      expect(fallbackModel.doGenerate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          providerOptions: retryProviderOptions,
+        }),
+      );
+    });
+  });
 });
 
 describe('streamText', () => {
@@ -1253,7 +1293,7 @@ describe('streamText', () => {
           "response": {
             "headers": undefined,
             "id": "aitxt-mock-id",
-            "modelId": "mock-model-63",
+            "modelId": "mock-model-65",
             "timestamp": 1970-01-01T00:00:00.000Z,
           },
           "type": "finish-step",
@@ -1678,6 +1718,53 @@ describe('streamText', () => {
       // Assert
       expect(baseModel.doStream).toHaveBeenCalledTimes(1);
       expect(fallbackModel.doStream).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('providerOptions', () => {
+    it('should override base model providerOptions with retry model providerOptions', async () => {
+      // Arrange
+      const baseModel = new MockLanguageModel({ doStream: retryableError });
+      const fallbackModel = new MockLanguageModel({
+        doStream: {
+          stream: convertArrayToReadableStream(mockStreamChunks),
+        },
+      });
+      const originalProviderOptions = {
+        openai: { user: 'original-user' },
+      };
+      const retryProviderOptions = { openai: { user: 'retry-user' } };
+
+      // Act
+      const result = streamText({
+        model: createRetryable({
+          model: baseModel,
+          retries: [
+            () => ({
+              model: fallbackModel,
+              providerOptions: retryProviderOptions,
+            }),
+          ],
+        }),
+        prompt,
+        providerOptions: originalProviderOptions,
+      });
+
+      await convertAsyncIterableToArray(result.fullStream);
+
+      // Assert
+      expect(baseModel.doStream).toHaveBeenCalledTimes(1);
+      expect(fallbackModel.doStream).toHaveBeenCalledTimes(1);
+      expect(baseModel.doStream).toHaveBeenCalledWith(
+        expect.objectContaining({
+          providerOptions: originalProviderOptions,
+        }),
+      );
+      expect(fallbackModel.doStream).toHaveBeenCalledWith(
+        expect.objectContaining({
+          providerOptions: retryProviderOptions,
+        }),
+      );
     });
   });
 
@@ -2309,6 +2396,45 @@ describe('embed', () => {
       // Assert
       expect(baseModel.doEmbed).toHaveBeenCalledTimes(1);
       expect(fallbackModel.doEmbed).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('providerOptions', () => {
+    it('should override base model providerOptions with retry model providerOptions', async () => {
+      // Arrange
+      const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
+      const fallbackModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
+      const originalProviderOptions = { openai: { user: 'original-user' } };
+      const retryProviderOptions = { openai: { user: 'retry-user' } };
+
+      // Act
+      await embed({
+        model: createRetryable({
+          model: baseModel,
+          retries: [
+            () => ({
+              model: fallbackModel,
+              providerOptions: retryProviderOptions,
+            }),
+          ],
+        }),
+        value: 'Hello!',
+        providerOptions: originalProviderOptions,
+      });
+
+      // Assert
+      expect(baseModel.doEmbed).toHaveBeenCalledTimes(1);
+      expect(fallbackModel.doEmbed).toHaveBeenCalledTimes(1);
+      expect(baseModel.doEmbed).toHaveBeenCalledWith(
+        expect.objectContaining({
+          providerOptions: originalProviderOptions,
+        }),
+      );
+      expect(fallbackModel.doEmbed).toHaveBeenCalledWith(
+        expect.objectContaining({
+          providerOptions: retryProviderOptions,
+        }),
+      );
     });
   });
 

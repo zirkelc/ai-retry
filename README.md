@@ -331,6 +331,41 @@ const retryableModel = createRetryable({
 
 The attempts are counted per unique model (provider + modelId). That means if multiple retryables return the same model, it won't be retried again once the `maxAttempts` is reached.
 
+#### Provider Options
+
+You can override provider-specific options for each retry attempt. This is useful when you want to use different configurations for fallback models.
+
+```typescript
+const retryableModel = createRetryable({
+  model: openai('gpt-5'),
+  retries: [
+    // Use different provider options for the retry
+    () => ({
+      model: openai('gpt-4o-2024-08-06'),
+      providerOptions: {
+        openai: {
+          user: 'fallback-user',
+          structuredOutputs: false,
+        },
+      },
+    }),
+  ],
+});
+
+// Original provider options are used for the first attempt
+const result = await generateText({
+  model: retryableModel,
+  prompt: 'Write a story',
+  providerOptions: {
+    openai: {
+      user: 'primary-user',
+    },
+  },
+});
+```
+
+The retry's `providerOptions` will completely replace the original ones during retry attempts. This works for all model types (language and embedding) and all operations (generate, stream, embed).
+
 #### Logging
 
 You can use the following callbacks to log retry attempts and errors:
@@ -401,14 +436,15 @@ type Retryable = (
 
 #### `Retry`
 
-A `Retry` specifies the model to retry and optional settings like `maxAttempts`, `delay` and `backoffFactor`.
+A `Retry` specifies the model to retry and optional settings like `maxAttempts`, `delay`, `backoffFactor`, and `providerOptions`.
 
 ```typescript
 interface Retry {
   model: LanguageModelV2 | EmbeddingModelV2;
-  maxAttempts?: number;   // Maximum retry attempts per model (default: 1)
-  delay?: number;         // Delay in milliseconds before retrying
-  backoffFactor?: number; // Multiplier for exponential backoff
+  maxAttempts?: number;      // Maximum retry attempts per model (default: 1)
+  delay?: number;            // Delay in milliseconds before retrying
+  backoffFactor?: number;    // Multiplier for exponential backoff
+  providerOptions?: ProviderOptions; // Provider-specific options for the retry
 }
 ```
 
@@ -417,6 +453,7 @@ interface Retry {
 - `maxAttempts`: Maximum number of times this model can be retried. Default is 1.
 - `delay`: Delay in milliseconds to wait before retrying. The delay respects abort signals from the request.
 - `backoffFactor`: Multiplier for exponential backoff (`delay × backoffFactor^attempt`). If not provided, uses fixed delay.
+- `providerOptions`: Provider-specific options that override the original request's provider options during retry attempts.
 
 #### `RetryContext`
 

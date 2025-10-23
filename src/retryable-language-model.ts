@@ -11,6 +11,7 @@ import { prepareRetryError } from './prepare-retry-error.js';
 import type {
   LanguageModelV2Generate,
   LanguageModelV2Stream,
+  Retry,
   RetryAttempt,
   RetryableModelOptions,
   RetryContext,
@@ -49,7 +50,7 @@ export class RetryableLanguageModel implements LanguageModelV2 {
   private async withRetry<
     RESULT extends LanguageModelV2Stream | LanguageModelV2Generate,
   >(input: {
-    fn: () => Promise<RESULT>;
+    fn: (currentRetry?: Retry<LanguageModelV2>) => Promise<RESULT>;
     attempts?: Array<RetryAttempt<LanguageModelV2>>;
     abortSignal?: AbortSignal;
   }): Promise<{
@@ -60,6 +61,11 @@ export class RetryableLanguageModel implements LanguageModelV2 {
      * Track all attempts.
      */
     const attempts: Array<RetryAttempt<LanguageModelV2>> = input.attempts ?? [];
+
+    /**
+     * Track current retry configuration.
+     */
+    let currentRetry: Retry<LanguageModelV2> | undefined;
 
     while (true) {
       /**
@@ -94,7 +100,7 @@ export class RetryableLanguageModel implements LanguageModelV2 {
         /**
          * Call the function that may need to be retried
          */
-        const result = await input.fn();
+        const result = await input.fn(currentRetry);
 
         /**
          * Check if the result should trigger a retry (only for generate results, not streams)
@@ -130,6 +136,7 @@ export class RetryableLanguageModel implements LanguageModelV2 {
             }
 
             this.currentModel = retryModel.model;
+            currentRetry = retryModel;
 
             /**
              * Continue to the next iteration to retry
@@ -162,6 +169,7 @@ export class RetryableLanguageModel implements LanguageModelV2 {
         }
 
         this.currentModel = retryModel.model;
+        currentRetry = retryModel;
       }
     }
   }
@@ -245,7 +253,15 @@ export class RetryableLanguageModel implements LanguageModelV2 {
     this.currentModel = this.baseModel;
 
     const { result } = await this.withRetry({
-      fn: async () => await this.currentModel.doGenerate(options),
+      fn: async (currentRetry) => {
+        // Apply retry configuration if available
+        const callOptions = {
+          ...options,
+          providerOptions:
+            currentRetry?.providerOptions ?? options.providerOptions,
+        };
+        return this.currentModel.doGenerate(callOptions);
+      },
       abortSignal: options.abortSignal,
     });
 
@@ -264,7 +280,15 @@ export class RetryableLanguageModel implements LanguageModelV2 {
      * Perform the initial call to doStream with retry logic to handle errors before any data is streamed.
      */
     let { result, attempts } = await this.withRetry({
-      fn: async () => await this.currentModel.doStream(options),
+      fn: async (currentRetry) => {
+        // Apply retry configuration if available
+        const callOptions = {
+          ...options,
+          providerOptions:
+            currentRetry?.providerOptions ?? options.providerOptions,
+        };
+        return this.currentModel.doStream(callOptions);
+      },
       abortSignal: options.abortSignal,
     });
 
@@ -353,7 +377,14 @@ export class RetryableLanguageModel implements LanguageModelV2 {
              * This will create a new stream.
              */
             const retriedResult = await this.withRetry({
-              fn: async () => await this.currentModel.doStream(options),
+              fn: async () => {
+                const callOptions = {
+                  ...options,
+                  providerOptions:
+                    retryModel.providerOptions ?? options.providerOptions,
+                };
+                return this.currentModel.doStream(callOptions);
+              },
               attempts,
               abortSignal: options.abortSignal,
             });

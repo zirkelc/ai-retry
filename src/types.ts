@@ -2,6 +2,7 @@ import type {
   EmbeddingModelV2 as AIEmbeddingModelV2,
   LanguageModelV2,
 } from '@ai-sdk/provider';
+import type { ProviderOptions } from '@ai-sdk/provider-utils';
 
 export type EmbeddingModelV2<VALUE = any> = AIEmbeddingModelV2<VALUE>;
 
@@ -70,6 +71,7 @@ export type Retry<MODEL extends LanguageModelV2 | EmbeddingModelV2> = {
   maxAttempts?: number;
   delay?: number;
   backoffFactor?: number;
+  providerOptions?: ProviderOptions;
 };
 
 /**
