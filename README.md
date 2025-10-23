@@ -170,11 +170,10 @@ const retryable = createRetryable({
 
 #### Retry After Delay
 
-Handle retryable errors with delays and respect `retry-after` headers from rate-limited responses. This is useful for handling 429 (Too Many Requests) and 503 (Service Unavailable) errors.
+If an error is retryable, such as 429 (Too Many Requests) or 503 (Service Unavailable) errors, it will be retried after a delay. 
+The delay and exponential backoff can be configured. If the response contains a [`retry-after`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Retry-After) header, it will be prioritized over the configured delay.
 
-> [!NOTE] 
-> If the response contains a [`retry-after`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Retry-After) header, it will be prioritized over the configured delay.
-
+Note that this retryable does not accept a model parameter, it will always retry the model from the latest failed attempt.
 
 ```typescript
 import { retryAfterDelay } from 'ai-retry/retryables';
@@ -187,14 +186,14 @@ const retryableModel = createRetryable({
 
     // Or retry with exponential backoff (2s, 4s, 8s)
     retryAfterDelay({ delay: 2000, backoffFactor: 2, maxAttempts: 3 }),
-    
-    // Or switch to a different model after delay
-    retryAfterDelay(openai('gpt-4-mini'), { delay: 1000 }),
+
+    // Or retry only if the response contains a retry-after header
+    retryAfterDelay({ maxAttempts: 3 }),
   ],
 });
 ```
 
-By default, if a [`retry-after-ms`](https://learn.microsoft.com/en-us/azure/ai-foundry/openai/how-to/provisioned-get-started#what-should--i-do-when-i-receive-a-429-response) or `retry-after` header is present in the response, it will be prioritized over the configured delay. The delay from the header will be capped at 60 seconds for safety. If no headers are present, the configured delay or exponential backoff will be used.
+By default, if a [`retry-after-ms`](https://learn.microsoft.com/en-us/azure/ai-foundry/openai/how-to/provisioned-get-started#what-should--i-do-when-i-receive-a-429-response) or [`retry-after`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Retry-After) header is present in the response, it will be prioritized over the configured delay. The delay from the header will be capped at 60 seconds for safety.
 
 #### Fallbacks
 
@@ -370,7 +369,7 @@ There are several built-in retryables:
 - [`contentFilterTriggered`](./src/retryables/content-filter-triggered.ts): Content filter was triggered based on the prompt or completion.
 - [`requestTimeout`](./src/retryables/request-timeout.ts): Request timeout occurred.
 - [`requestNotRetryable`](./src/retryables/request-not-retryable.ts): Request failed with a non-retryable error.
-- [`retryAfterDelay`](./src/retryables/retry-after-delay.ts): Retry with exponential backoff and respect `retry-after` headers for rate limiting.
+- [`retryAfterDelay`](./src/retryables/retry-after-delay.ts): Retry with delay and exponential backoff and respect `retry-after` headers.
 - [`serviceOverloaded`](./src/retryables/service-overloaded.ts): Response with status code 529 (service overloaded).
   - Use this retryable to handle Anthropic's overloaded errors.
 
