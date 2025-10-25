@@ -6,6 +6,7 @@ import type {
   EmbeddingModelV2,
   LanguageModelV2Generate,
   LanguageModelV2Stream,
+  Retry,
   RetryAttempt,
   RetryErrorAttempt,
   RetryResultAttempt,
@@ -79,3 +80,11 @@ export const isStreamContentPart = (part: LanguageModelV2StreamPart) => {
     part.type === 'raw'
   );
 };
+
+/**
+ * Type guard to check if a value is a Retry object (has a model property with a MODEL)
+ */
+export const isRetry = <MODEL extends LanguageModelV2 | EmbeddingModelV2>(
+  value: unknown,
+): value is Retry<MODEL> =>
+  isObject(value) && 'model' in value && isModelV2(value.model);

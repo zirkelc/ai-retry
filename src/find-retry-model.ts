@@ -6,7 +6,7 @@ import type {
   Retry,
   RetryContext,
 } from './types.js';
-import { isResultAttempt } from './utils.js';
+import { isResultAttempt, isRetry } from './utils.js';
 
 /**
  * Find the next model to retry with based on the retry context
@@ -19,8 +19,8 @@ export async function findRetryModel<
 ): Promise<Retry<MODEL> | undefined> {
   /**
    * Filter retryables based on attempt type:
-   * - Result-based attempts: Only consider function retryables (skip plain models)
-   * - Error-based attempts: Consider all retryables (functions + plain models)
+   * - Result-based attempts: Only consider function retryables (skip plain models and static Retry objects)
+   * - Error-based attempts: Consider all retryables (functions + plain models + static Retry objects)
    */
   const applicableRetries = isResultAttempt(context.current)
     ? retries.filter((retry) => typeof retry === 'function')
@@ -30,8 +30,18 @@ export async function findRetryModel<
    * Iterate through the applicable retryables to find a model to retry with
    */
   for (const retry of applicableRetries) {
-    const retryModel =
-      typeof retry === 'function' ? await retry(context) : { model: retry };
+    let retryModel: Retry<MODEL> | undefined;
+
+    if (typeof retry === 'function') {
+      // Function retryable
+      retryModel = await retry(context);
+    } else if (isRetry(retry)) {
+      // Static Retry object
+      retryModel = retry;
+    } else {
+      // Plain model
+      retryModel = { model: retry };
+    }
 
     if (retryModel) {
       /**

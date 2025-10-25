@@ -82,7 +82,7 @@ export type Retryable<MODEL extends LanguageModelV2 | EmbeddingModelV2> = (
 ) => Retry<MODEL> | Promise<Retry<MODEL>> | undefined;
 
 export type Retries<MODEL extends LanguageModelV2 | EmbeddingModelV2> = Array<
-  Retryable<MODEL> | MODEL
+  Retryable<MODEL> | Retry<MODEL> | MODEL
 >;
 
 export type RetryableOptions<MODEL extends LanguageModelV2 | EmbeddingModelV2> =

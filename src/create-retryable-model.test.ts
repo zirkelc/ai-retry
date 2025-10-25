@@ -154,157 +154,253 @@ describe('generateText', () => {
     expect(result.text).toBe('Hello, world!');
   });
 
-  describe('error-based retries', () => {
-    it('should retry with errors', async () => {
-      // Arrange
-      const baseModel = new MockLanguageModel({ doGenerate: retryableError });
-      const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
+  describe('retries', () => {
+    describe('error-based retries', () => {
+      it('should retry with errors', async () => {
+        // Arrange
+        const baseModel = new MockLanguageModel({ doGenerate: retryableError });
+        const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
 
-      const fallbackRetryable: Retryable<LanguageModelV2> = (context) => {
-        if (
-          isErrorAttempt(context.current) &&
-          APICallError.isInstance(context.current.error)
-        ) {
-          return { model: fallbackModel, maxAttempts: 1 };
-        }
-        return undefined;
-      };
+        const fallbackRetryable: Retryable<LanguageModelV2> = (context) => {
+          if (
+            isErrorAttempt(context.current) &&
+            APICallError.isInstance(context.current.error)
+          ) {
+            return { model: fallbackModel, maxAttempts: 1 };
+          }
+          return undefined;
+        };
 
-      // Act
-      const result = await generateText({
-        model: createRetryable({
-          model: baseModel,
-          retries: [fallbackRetryable],
-        }),
-        prompt: 'Hello!',
-        //
+        // Act
+        const result = await generateText({
+          model: createRetryable({
+            model: baseModel,
+            retries: [fallbackRetryable],
+          }),
+          prompt: 'Hello!',
+          //
+        });
+
+        // Assert
+        expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
+        expect(fallbackModel.doGenerate).toHaveBeenCalledTimes(1);
+        expect(result.text).toBe(mockResultText);
       });
 
-      // Assert
-      expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
-      expect(fallbackModel.doGenerate).toHaveBeenCalledTimes(1);
-      expect(result.text).toBe(mockResultText);
+      it('should not retry without errors', async () => {
+        // Arrange
+        const baseModel = new MockLanguageModel({ doGenerate: mockResult });
+        const fallbackModel1 = new MockLanguageModel({
+          doGenerate: mockResult,
+        });
+        const fallbackModel2 = new MockLanguageModel({
+          doGenerate: mockResult,
+        });
+
+        // Act
+        const result = await generateText({
+          model: createRetryable({
+            model: baseModel,
+            retries: [fallbackModel1, fallbackModel2],
+          }),
+          prompt: 'Hello!',
+        });
+
+        // Assert
+        expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
+        expect(fallbackModel1.doGenerate).toHaveBeenCalledTimes(0);
+        expect(fallbackModel2.doGenerate).toHaveBeenCalledTimes(0);
+        expect(result.text).toBe(mockResultText);
+      });
+
+      it('should use plain language models for error-based attempts', async () => {
+        // Arrange
+        const baseModel = new MockLanguageModel({ doGenerate: retryableError });
+        const fallbackModel1 = new MockLanguageModel({
+          doGenerate: mockResult,
+        });
+        const fallbackModel2 = new MockLanguageModel({
+          doGenerate: mockResult,
+        });
+
+        const fallbackRetryable: Retryable<LanguageModelV2> = (context) => {
+          if (
+            isErrorAttempt(context.current) &&
+            APICallError.isInstance(context.current.error)
+          ) {
+            return { model: fallbackModel2, maxAttempts: 1 };
+          }
+          return undefined;
+        };
+
+        // Act
+        const result = await generateText({
+          model: createRetryable({
+            model: baseModel,
+            retries: [fallbackModel1, fallbackRetryable],
+          }),
+          prompt: 'Hello!',
+        });
+
+        // Assert
+        expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
+        expect(fallbackModel1.doGenerate).toHaveBeenCalledTimes(1); // Should be called
+        expect(fallbackModel2.doGenerate).toHaveBeenCalledTimes(0);
+        expect(result.text).toBe(mockResultText);
+      });
+
+      it('should use static retry for error-based attempts', async () => {
+        // Arrange
+        const baseModel = new MockLanguageModel({
+          doGenerate: retryableError,
+        });
+        const fallbackModel1 = new MockLanguageModel({
+          doGenerate: mockResult,
+        });
+        const fallbackModel2 = new MockLanguageModel({
+          doGenerate: mockResult,
+        });
+
+        const fallbackRetryable: Retryable<LanguageModelV2> = (context) => {
+          if (
+            isErrorAttempt(context.current) &&
+            APICallError.isInstance(context.current.error)
+          ) {
+            return { model: fallbackModel2, maxAttempts: 1 };
+          }
+          return undefined;
+        };
+
+        // Act
+        const result = await generateText({
+          model: createRetryable({
+            model: baseModel,
+            retries: [{ model: fallbackModel1 }, fallbackRetryable],
+          }),
+          prompt: 'Hello!',
+        });
+
+        // Assert
+        expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
+        expect(fallbackModel1.doGenerate).toHaveBeenCalledTimes(1); // Should be called
+        expect(fallbackModel2.doGenerate).toHaveBeenCalledTimes(0);
+        expect(result.text).toBe(mockResultText);
+      });
     });
 
-    it('should not retry without errors', async () => {
-      // Arrange
-      const baseModel = new MockLanguageModel({ doGenerate: mockResult });
-      const fallbackModel1 = new MockLanguageModel({ doGenerate: mockResult });
-      const fallbackModel2 = new MockLanguageModel({ doGenerate: mockResult });
+    describe('result-based retries', () => {
+      it('should retry with results', async () => {
+        // Arrange
+        const baseModel = new MockLanguageModel({
+          doGenerate: contentFilterResult,
+        });
+        const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
+        const fallbackRetryable: Retryable<LanguageModelV2> = (context) => {
+          if (
+            isResultAttempt(context.current) &&
+            context.current.result.finishReason === 'content-filter'
+          ) {
+            return { model: fallbackModel, maxAttempts: 1 };
+          }
+          return undefined;
+        };
 
-      // Act
-      const result = await generateText({
-        model: createRetryable({
-          model: baseModel,
-          retries: [fallbackModel1, fallbackModel2],
-        }),
-        prompt: 'Hello!',
+        // Act
+        const result = await generateText({
+          model: createRetryable({
+            model: baseModel,
+            retries: [fallbackRetryable],
+          }),
+          prompt: 'Hello!',
+        });
+
+        // Assert
+        expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
+        expect(fallbackModel.doGenerate).toHaveBeenCalledTimes(1);
+        expect(result.text).toBe(mockResultText);
       });
 
-      // Assert
-      expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
-      expect(fallbackModel1.doGenerate).toHaveBeenCalledTimes(0);
-      expect(fallbackModel2.doGenerate).toHaveBeenCalledTimes(0);
-      expect(result.text).toBe(mockResultText);
-    });
+      it('should ignore plain language models for result-based attempts', async () => {
+        // Arrange
+        const baseModel = new MockLanguageModel({
+          doGenerate: contentFilterResult,
+        });
+        const fallbackModel1 = new MockLanguageModel({
+          doGenerate: mockResult,
+        });
+        const fallbackModel2 = new MockLanguageModel({
+          doGenerate: mockResult,
+        });
 
-    it('should use plain language models for error-based attempts', async () => {
-      // Arrange
-      const baseModel = new MockLanguageModel({ doGenerate: retryableError });
-      const fallbackModel1 = new MockLanguageModel({ doGenerate: mockResult });
-      const fallbackModel2 = new MockLanguageModel({ doGenerate: mockResult });
+        const fallbackRetryable: Retryable<LanguageModelV2> = (context) => {
+          if (
+            isResultAttempt(context.current) &&
+            context.current.result.finishReason === 'content-filter'
+          ) {
+            return { model: fallbackModel2, maxAttempts: 1 };
+          }
+          return undefined;
+        };
 
-      const fallbackRetryable: Retryable<LanguageModelV2> = (context) => {
-        if (
-          isErrorAttempt(context.current) &&
-          APICallError.isInstance(context.current.error)
-        ) {
-          return { model: fallbackModel2, maxAttempts: 1 };
-        }
-        return undefined;
-      };
+        // Act
+        const result = await generateText({
+          model: createRetryable({
+            model: baseModel,
+            retries: [
+              fallbackModel1, // Language model should be skipped
+              fallbackRetryable,
+            ],
+          }),
+          prompt: 'Hello!',
+        });
 
-      // Act
-      const result = await generateText({
-        model: createRetryable({
-          model: baseModel,
-          retries: [fallbackModel1, fallbackRetryable],
-        }),
-        prompt: 'Hello!',
+        // Assert
+        expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
+        expect(fallbackModel1.doGenerate).toHaveBeenCalledTimes(0); // Should not be called
+        expect(fallbackModel2.doGenerate).toHaveBeenCalledTimes(1);
+        expect(result.text).toBe(mockResultText);
       });
 
-      // Assert
-      expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
-      expect(fallbackModel1.doGenerate).toHaveBeenCalledTimes(1); // Should be called
-      expect(fallbackModel2.doGenerate).toHaveBeenCalledTimes(0);
-      expect(result.text).toBe(mockResultText);
-    });
-  });
+      it('should ignore static retries for result-based attempts', async () => {
+        // Arrange
+        const baseModel = new MockLanguageModel({
+          doGenerate: contentFilterResult,
+        });
+        const fallbackModel1 = new MockLanguageModel({
+          doGenerate: mockResult,
+        });
+        const fallbackModel2 = new MockLanguageModel({
+          doGenerate: mockResult,
+        });
 
-  describe('result-based retries', () => {
-    it('should retry with results', async () => {
-      // Arrange
-      const baseModel = new MockLanguageModel({
-        doGenerate: contentFilterResult,
+        const fallbackRetryable: Retryable<LanguageModelV2> = (context) => {
+          if (
+            isResultAttempt(context.current) &&
+            context.current.result.finishReason === 'content-filter'
+          ) {
+            return { model: fallbackModel2, maxAttempts: 1 };
+          }
+          return undefined;
+        };
+
+        // Act
+        const result = await generateText({
+          model: createRetryable({
+            model: baseModel,
+            retries: [
+              { model: fallbackModel1 }, // Static retry should be skipped
+              fallbackRetryable,
+            ],
+          }),
+          prompt: 'Hello!',
+        });
+
+        // Assert
+        expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
+        expect(fallbackModel1.doGenerate).toHaveBeenCalledTimes(0); // Should not be called
+        expect(fallbackModel2.doGenerate).toHaveBeenCalledTimes(1);
+        expect(result.text).toBe(mockResultText);
       });
-      const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
-      const fallbackRetryable: Retryable<LanguageModelV2> = (context) => {
-        if (
-          isResultAttempt(context.current) &&
-          context.current.result.finishReason === 'content-filter'
-        ) {
-          return { model: fallbackModel, maxAttempts: 1 };
-        }
-        return undefined;
-      };
-
-      // Act
-      const result = await generateText({
-        model: createRetryable({
-          model: baseModel,
-          retries: [fallbackRetryable],
-        }),
-        prompt: 'Hello!',
-      });
-
-      // Assert
-      expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
-      expect(fallbackModel.doGenerate).toHaveBeenCalledTimes(1);
-      expect(result.text).toBe(mockResultText);
-    });
-
-    it('should ignore plain language models for result-based attempts', async () => {
-      // Arrange
-      const baseModel = new MockLanguageModel({
-        doGenerate: contentFilterResult,
-      });
-      const fallbackModel1 = new MockLanguageModel({ doGenerate: mockResult });
-      const fallbackModel2 = new MockLanguageModel({ doGenerate: mockResult });
-
-      const fallbackRetryable: Retryable<LanguageModelV2> = (context) => {
-        if (
-          isResultAttempt(context.current) &&
-          context.current.result.finishReason === 'content-filter'
-        ) {
-          return { model: fallbackModel2, maxAttempts: 1 };
-        }
-        return undefined;
-      };
-
-      // Act
-      const result = await generateText({
-        model: createRetryable({
-          model: baseModel,
-          retries: [fallbackModel1, fallbackRetryable],
-        }),
-        prompt: 'Hello!',
-      });
-
-      // Assert
-      expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
-      expect(fallbackModel1.doGenerate).toHaveBeenCalledTimes(0); // Should not be called
-      expect(fallbackModel2.doGenerate).toHaveBeenCalledTimes(1);
-      expect(result.text).toBe(mockResultText);
     });
   });
 
@@ -578,197 +674,240 @@ describe('generateText', () => {
     });
   });
 
-  describe('maxAttempts', () => {
-    it('should try each model only once by default', async () => {
-      // Arrange
-      const baseModel = new MockLanguageModel({ doGenerate: retryableError });
-      const fallbackModel1 = new MockLanguageModel({
-        doGenerate: retryableError,
-      });
-      const fallbackModel2 = new MockLanguageModel({
-        doGenerate: retryableError,
-      });
-      const finalModel = new MockLanguageModel({ doGenerate: mockResult });
+  describe('RetryableOptions', () => {
+    describe('maxAttempts', () => {
+      it('should try each model only once by default', async () => {
+        // Arrange
+        const baseModel = new MockLanguageModel({ doGenerate: retryableError });
+        const fallbackModel1 = new MockLanguageModel({
+          doGenerate: retryableError,
+        });
+        const fallbackModel2 = new MockLanguageModel({
+          doGenerate: retryableError,
+        });
+        const finalModel = new MockLanguageModel({ doGenerate: mockResult });
 
-      // Act
-      await generateText({
-        model: createRetryable({
-          model: baseModel,
-          retries: [
-            fallbackModel1,
-            () => ({ model: fallbackModel2 }),
-            async () => ({ model: finalModel }),
-          ],
-        }),
-        prompt: 'Hello!',
-      });
-
-      // Assert
-      expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
-      expect(fallbackModel1.doGenerate).toHaveBeenCalledTimes(1);
-      expect(fallbackModel2.doGenerate).toHaveBeenCalledTimes(1);
-      expect(finalModel.doGenerate).toHaveBeenCalledTimes(1);
-    });
-
-    it('should try models multiple times if maxAttempts is set', async () => {
-      // Arrange
-      const baseModel = new MockLanguageModel({ doGenerate: retryableError });
-      const fallbackModel1 = new MockLanguageModel({
-        doGenerate: retryableError,
-      });
-      const fallbackModel2 = new MockLanguageModel({
-        doGenerate: retryableError,
-      });
-      const finalModel = new MockLanguageModel({ doGenerate: mockResult });
-
-      // Act
-      await generateText({
-        model: createRetryable({
-          model: baseModel,
-          retries: [
-            // Retryable<LanguageModelV2>  with different maxAttempts
-            () => ({ model: fallbackModel1, maxAttempts: 2 }),
-            async () => ({ model: fallbackModel2, maxAttempts: 3 }),
-            finalModel,
-          ],
-        }),
-        prompt: 'Hello!',
-      });
-
-      // Assert
-      expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
-      expect(fallbackModel1.doGenerate).toHaveBeenCalledTimes(2);
-      expect(fallbackModel2.doGenerate).toHaveBeenCalledTimes(3);
-      expect(finalModel.doGenerate).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  describe('maxRetries', () => {
-    it('should ignore maxRetries setting when retryable matches', async () => {
-      // Arrange
-      const baseModel = new MockLanguageModel({ doGenerate: retryableError });
-      const fallbackModel = new MockLanguageModel({
-        doGenerate: nonRetryableError,
-      });
-
-      // Act & Assert
-      try {
+        // Act
         await generateText({
           model: createRetryable({
             model: baseModel,
-            retries: [fallbackModel],
+            retries: [
+              fallbackModel1,
+              { model: fallbackModel2 },
+              async () => ({ model: finalModel }),
+            ],
           }),
           prompt: 'Hello!',
-          maxRetries: 1, // Should be ignored since RetryError is thrown
         });
-        expect.unreachable('Should throw RetryError');
-      } catch (error) {
-        expect(error).toBeInstanceOf(RetryError);
+
+        // Assert
+        expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
+        expect(fallbackModel1.doGenerate).toHaveBeenCalledTimes(1);
+        expect(fallbackModel2.doGenerate).toHaveBeenCalledTimes(1);
+        expect(finalModel.doGenerate).toHaveBeenCalledTimes(1);
+      });
+
+      it('should try models multiple times if maxAttempts is set', async () => {
+        // Arrange
+        const baseModel = new MockLanguageModel({ doGenerate: retryableError });
+        const fallbackModel1 = new MockLanguageModel({
+          doGenerate: retryableError,
+        });
+        const fallbackModel2 = new MockLanguageModel({
+          doGenerate: retryableError,
+        });
+        const finalModel = new MockLanguageModel({ doGenerate: mockResult });
+
+        // Act
+        await generateText({
+          model: createRetryable({
+            model: baseModel,
+            retries: [
+              // Retryable<LanguageModelV2>  with different maxAttempts
+              { model: fallbackModel1, maxAttempts: 2 },
+              async () => ({ model: fallbackModel2, maxAttempts: 3 }),
+              finalModel,
+            ],
+          }),
+          prompt: 'Hello!',
+        });
+
+        // Assert
+        expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
+        expect(fallbackModel1.doGenerate).toHaveBeenCalledTimes(2);
+        expect(fallbackModel2.doGenerate).toHaveBeenCalledTimes(3);
+        expect(finalModel.doGenerate).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    describe('maxRetries', () => {
+      it('should ignore maxRetries setting when retryable matches', async () => {
+        // Arrange
+        const baseModel = new MockLanguageModel({ doGenerate: retryableError });
+        const fallbackModel = new MockLanguageModel({
+          doGenerate: nonRetryableError,
+        });
+
+        // Act & Assert
+        try {
+          await generateText({
+            model: createRetryable({
+              model: baseModel,
+              retries: [fallbackModel],
+            }),
+            prompt: 'Hello!',
+            maxRetries: 1, // Should be ignored since RetryError is thrown
+          });
+          expect.unreachable('Should throw RetryError');
+        } catch (error) {
+          expect(error).toBeInstanceOf(RetryError);
+          expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
+          expect(fallbackModel.doGenerate).toHaveBeenCalledTimes(1);
+        }
+      });
+
+      it('should respect maxRetries setting when no retryable matches', async () => {
+        // Arrange
+        const baseModel = new MockLanguageModel({ doGenerate: retryableError });
+
+        // Act & Assert
+        try {
+          await generateText({
+            model: createRetryable({
+              model: baseModel,
+              retries: [],
+            }),
+            prompt: 'Hello!',
+            maxRetries: 1, // Should be ignored since RetryError is thrown
+          });
+          expect.unreachable('Should throw RetryError');
+        } catch (error) {
+          expect(error).toBeInstanceOf(RetryError);
+          expect(baseModel.doGenerate).toHaveBeenCalledTimes(2); // 1 initial + 1 retry
+        }
+      });
+    });
+
+    describe('delay', () => {
+      it('should apply delay before retrying', async () => {
+        // Arrange
+        vi.useFakeTimers();
+        const baseModel = new MockLanguageModel({ doGenerate: retryableError });
+        const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
+        const delayMs = 100;
+
+        // Act
+        const promise = generateText({
+          model: createRetryable({
+            model: baseModel,
+            retries: [{ model: fallbackModel, delay: delayMs }],
+          }),
+          prompt: 'Hello!',
+        });
+
+        await vi.runAllTimersAsync();
+        await promise;
+
+        // Assert
         expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
         expect(fallbackModel.doGenerate).toHaveBeenCalledTimes(1);
-      }
-    });
 
-    it('should respect maxRetries setting when no retryable matches', async () => {
-      // Arrange
-      const baseModel = new MockLanguageModel({ doGenerate: retryableError });
+        vi.useRealTimers();
+      });
 
-      // Act & Assert
-      try {
+      it('should apply different delays for multiple retries', async () => {
+        // Arrange
+        vi.useFakeTimers();
+        const baseModel = new MockLanguageModel({ doGenerate: retryableError });
+        const fallbackModel1 = new MockLanguageModel({
+          doGenerate: retryableError,
+        });
+        const fallbackModel2 = new MockLanguageModel({
+          doGenerate: mockResult,
+        });
+        const delay1 = 50;
+        const delay2 = 50;
+
+        // Act
+        const promise = generateText({
+          model: createRetryable({
+            model: baseModel,
+            retries: [
+              { model: fallbackModel1, delay: delay1 },
+              () => ({ model: fallbackModel2, delay: delay2 }),
+            ],
+          }),
+          prompt: 'Hello!',
+        });
+
+        await vi.runAllTimersAsync();
+        await promise;
+
+        // Assert
+        expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
+        expect(fallbackModel1.doGenerate).toHaveBeenCalledTimes(1);
+        expect(fallbackModel2.doGenerate).toHaveBeenCalledTimes(1);
+
+        vi.useRealTimers();
+      });
+
+      it('should not delay when delay is not specified', async () => {
+        // Arrange
+        const baseModel = new MockLanguageModel({ doGenerate: retryableError });
+        const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
+
+        // Act
         await generateText({
           model: createRetryable({
             model: baseModel,
-            retries: [],
+            retries: [{ model: fallbackModel }],
           }),
           prompt: 'Hello!',
-          maxRetries: 1, // Should be ignored since RetryError is thrown
         });
-        expect.unreachable('Should throw RetryError');
-      } catch (error) {
-        expect(error).toBeInstanceOf(RetryError);
-        expect(baseModel.doGenerate).toHaveBeenCalledTimes(2); // 1 initial + 1 retry
-      }
-    });
-  });
 
-  describe('delay', () => {
-    it('should apply delay before retrying', async () => {
-      // Arrange
-      vi.useFakeTimers();
-      const baseModel = new MockLanguageModel({ doGenerate: retryableError });
-      const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
-      const delayMs = 100;
-
-      // Act
-      const promise = generateText({
-        model: createRetryable({
-          model: baseModel,
-          retries: [() => ({ model: fallbackModel, delay: delayMs })],
-        }),
-        prompt: 'Hello!',
+        // Assert
+        expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
+        expect(fallbackModel.doGenerate).toHaveBeenCalledTimes(1);
       });
-
-      await vi.runAllTimersAsync();
-      await promise;
-
-      // Assert
-      expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
-      expect(fallbackModel.doGenerate).toHaveBeenCalledTimes(1);
-
-      vi.useRealTimers();
     });
 
-    it('should apply different delays for multiple retries', async () => {
-      // Arrange
-      vi.useFakeTimers();
-      const baseModel = new MockLanguageModel({ doGenerate: retryableError });
-      const fallbackModel1 = new MockLanguageModel({
-        doGenerate: retryableError,
+    describe('providerOptions', () => {
+      it('should override base model providerOptions with retry model providerOptions', async () => {
+        // Arrange
+        const baseModel = new MockLanguageModel({ doGenerate: retryableError });
+        const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
+        const originalProviderOptions = { openai: { user: 'original-user' } };
+        const retryProviderOptions = { openai: { user: 'retry-user' } };
+
+        // Act
+        await generateText({
+          model: createRetryable({
+            model: baseModel,
+            retries: [
+              {
+                model: fallbackModel,
+                providerOptions: retryProviderOptions,
+              },
+            ],
+          }),
+          prompt: 'Hello!',
+          providerOptions: originalProviderOptions,
+        });
+
+        // Assert
+        expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
+        expect(fallbackModel.doGenerate).toHaveBeenCalledTimes(1);
+        expect(baseModel.doGenerate).toHaveBeenCalledWith(
+          expect.objectContaining({
+            providerOptions: originalProviderOptions,
+          }),
+        );
+        expect(fallbackModel.doGenerate).toHaveBeenCalledWith(
+          expect.objectContaining({
+            providerOptions: retryProviderOptions,
+          }),
+        );
       });
-      const fallbackModel2 = new MockLanguageModel({ doGenerate: mockResult });
-      const delay1 = 50;
-      const delay2 = 50;
-
-      // Act
-      const promise = generateText({
-        model: createRetryable({
-          model: baseModel,
-          retries: [
-            () => ({ model: fallbackModel1, delay: delay1 }),
-            () => ({ model: fallbackModel2, delay: delay2 }),
-          ],
-        }),
-        prompt: 'Hello!',
-      });
-
-      await vi.runAllTimersAsync();
-      await promise;
-
-      // Assert
-      expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
-      expect(fallbackModel1.doGenerate).toHaveBeenCalledTimes(1);
-      expect(fallbackModel2.doGenerate).toHaveBeenCalledTimes(1);
-
-      vi.useRealTimers();
-    });
-
-    it('should not delay when delay is not specified', async () => {
-      // Arrange
-      const baseModel = new MockLanguageModel({ doGenerate: retryableError });
-      const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
-
-      // Act
-      await generateText({
-        model: createRetryable({
-          model: baseModel,
-          retries: [() => ({ model: fallbackModel })],
-        }),
-        prompt: 'Hello!',
-      });
-
-      // Assert
-      expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
-      expect(fallbackModel.doGenerate).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -856,8 +995,71 @@ describe('generateText', () => {
     });
   });
 
-  describe('providerOptions', () => {
-    it('should override base model providerOptions with retry model providerOptions', async () => {
+  describe('Static Retry<MODEL> objects', () => {
+    it('should accept static Retry objects with model and options', async () => {
+      // Arrange
+      const baseModel = new MockLanguageModel({ doGenerate: retryableError });
+      const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
+
+      // Act
+      const result = await generateText({
+        model: createRetryable({
+          model: baseModel,
+          retries: [
+            // Static Retry object with options
+            {
+              model: fallbackModel,
+              maxAttempts: 2,
+              delay: 100,
+              providerOptions: {
+                openai: {
+                  user: 'fallback-user',
+                },
+              },
+            },
+          ],
+        }),
+        prompt: 'Hello!',
+      });
+
+      // Assert
+      expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
+      expect(fallbackModel.doGenerate).toHaveBeenCalledTimes(1);
+      expect(result.text).toBe(mockResultText);
+    });
+
+    it('should respect maxAttempts from static Retry objects', async () => {
+      // Arrange
+      const baseModel = new MockLanguageModel({ doGenerate: retryableError });
+      const fallbackModel = new MockLanguageModel({
+        doGenerate: retryableError,
+      });
+      const finalModel = new MockLanguageModel({ doGenerate: mockResult });
+
+      // Act
+      const result = await generateText({
+        model: createRetryable({
+          model: baseModel,
+          retries: [
+            // Static Retry with maxAttempts
+            {
+              model: fallbackModel,
+              maxAttempts: 3,
+            },
+            finalModel,
+          ],
+        }),
+        prompt: 'Hello!',
+      });
+
+      // Assert
+      expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
+      expect(fallbackModel.doGenerate).toHaveBeenCalledTimes(3);
+      expect(finalModel.doGenerate).toHaveBeenCalledTimes(1);
+      expect(result.text).toBe(mockResultText);
+    });
+
+    it('should apply providerOptions from static Retry objects', async () => {
       // Arrange
       const baseModel = new MockLanguageModel({ doGenerate: retryableError });
       const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
@@ -869,10 +1071,11 @@ describe('generateText', () => {
         model: createRetryable({
           model: baseModel,
           retries: [
-            () => ({
+            // Static Retry with providerOptions
+            {
               model: fallbackModel,
               providerOptions: retryProviderOptions,
-            }),
+            },
           ],
         }),
         prompt: 'Hello!',
@@ -880,8 +1083,6 @@ describe('generateText', () => {
       });
 
       // Assert
-      expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
-      expect(fallbackModel.doGenerate).toHaveBeenCalledTimes(1);
       expect(baseModel.doGenerate).toHaveBeenCalledWith(
         expect.objectContaining({
           providerOptions: originalProviderOptions,
@@ -892,6 +1093,87 @@ describe('generateText', () => {
           providerOptions: retryProviderOptions,
         }),
       );
+    });
+
+    it('should mix static Retry objects with functions and plain models', async () => {
+      // Arrange
+      const baseModel = new MockLanguageModel({ doGenerate: retryableError });
+      const fallbackModel1 = new MockLanguageModel({
+        doGenerate: retryableError,
+      });
+      const fallbackModel2 = new MockLanguageModel({
+        doGenerate: retryableError,
+      });
+      const fallbackModel3 = new MockLanguageModel({ doGenerate: mockResult });
+
+      // Act
+      const result = await generateText({
+        model: createRetryable({
+          model: baseModel,
+          retries: [
+            // Plain model
+            fallbackModel1,
+            // Static Retry object
+            {
+              model: fallbackModel2,
+              maxAttempts: 2,
+              providerOptions: {
+                openai: { user: 'fallback2-user' },
+              },
+            },
+            // Function retryable
+            () => ({ model: fallbackModel3 }),
+          ],
+        }),
+        prompt: 'Hello!',
+      });
+
+      // Assert
+      expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
+      expect(fallbackModel1.doGenerate).toHaveBeenCalledTimes(1);
+      expect(fallbackModel2.doGenerate).toHaveBeenCalledTimes(2);
+      expect(fallbackModel3.doGenerate).toHaveBeenCalledTimes(1);
+      expect(result.text).toBe(mockResultText);
+    });
+
+    it('should skip static Retry objects for result-based retries', async () => {
+      // Arrange
+      const baseModel = new MockLanguageModel({
+        doGenerate: contentFilterResult,
+      });
+      const fallbackModel1 = new MockLanguageModel({ doGenerate: mockResult });
+      const fallbackModel2 = new MockLanguageModel({ doGenerate: mockResult });
+
+      // Act
+      const result = await generateText({
+        model: createRetryable({
+          model: baseModel,
+          retries: [
+            // Static Retry object - should be skipped for result-based retries
+            {
+              model: fallbackModel1,
+              maxAttempts: 1,
+            },
+            // Function that handles content-filter
+            (context) => {
+              if (
+                context.current.type === 'result' &&
+                context.current.result.finishReason === 'content-filter'
+              ) {
+                return { model: fallbackModel2 };
+              }
+              return undefined;
+            },
+          ],
+        }),
+        prompt: 'Hello!',
+      });
+
+      // Assert
+      expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
+      expect(fallbackModel1.doGenerate).toHaveBeenCalledTimes(0); // Should not be called
+      expect(fallbackModel2.doGenerate).toHaveBeenCalledTimes(1);
+      expect(result.text).toBe(mockResultText);
     });
   });
 });
@@ -920,30 +1202,31 @@ describe('streamText', () => {
     expect(chunksToText(chunks)).toBe('Hello, world!');
   });
 
-  it('should retry when error occurs at stream creation', async () => {
-    const baseModel = new MockLanguageModel({ doStream: retryableError });
+  describe('retries', () => {
+    it('should retry when error occurs at stream creation', async () => {
+      const baseModel = new MockLanguageModel({ doStream: retryableError });
 
-    const fallbackModel = new MockLanguageModel({
-      doStream: {
-        stream: convertArrayToReadableStream(mockStreamChunks),
-      },
-    });
+      const fallbackModel = new MockLanguageModel({
+        doStream: {
+          stream: convertArrayToReadableStream(mockStreamChunks),
+        },
+      });
 
-    const retryableModel = createRetryable({
-      model: baseModel,
-      retries: [fallbackModel],
-    });
+      const retryableModel = createRetryable({
+        model: baseModel,
+        retries: [fallbackModel],
+      });
 
-    const result = streamText({
-      model: retryableModel,
-      prompt,
-    });
+      const result = streamText({
+        model: retryableModel,
+        prompt,
+      });
 
-    const chunks = await convertAsyncIterableToArray(result.fullStream);
+      const chunks = await convertAsyncIterableToArray(result.fullStream);
 
-    expect(baseModel.doStream).toHaveBeenCalledTimes(1);
-    expect(fallbackModel.doStream).toHaveBeenCalledTimes(1);
-    expect(chunks).toMatchInlineSnapshot(`
+      expect(baseModel.doStream).toHaveBeenCalledTimes(1);
+      expect(fallbackModel.doStream).toHaveBeenCalledTimes(1);
+      expect(chunks).toMatchInlineSnapshot(`
       [
         {
           "type": "start",
@@ -1014,308 +1297,311 @@ describe('streamText', () => {
         },
       ]
     `);
-  });
+    });
 
-  it('should retry when error occurs at the stream start', async () => {
-    const baseModel = new MockLanguageModel({
-      doStream: {
-        stream: convertArrayToReadableStream([
-          { type: 'stream-start', warnings: [] },
+    it('should retry when error occurs at the stream start', async () => {
+      const baseModel = new MockLanguageModel({
+        doStream: {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            {
+              type: 'error',
+              error: { type: 'overloaded_error', message: 'Overloaded' },
+            },
+          ]),
+        },
+      });
+
+      const fallbackModel = new MockLanguageModel({
+        doStream: {
+          stream: convertArrayToReadableStream(mockStreamChunks),
+        },
+      });
+
+      const retryableModel = createRetryable({
+        model: baseModel,
+        retries: [fallbackModel],
+      });
+
+      const result = streamText({
+        model: retryableModel,
+        prompt,
+      });
+
+      const chunks = await convertAsyncIterableToArray(result.fullStream);
+
+      expect(baseModel.doStream).toHaveBeenCalledTimes(1);
+      expect(fallbackModel.doStream).toHaveBeenCalledTimes(1);
+      expect(chunks).toMatchInlineSnapshot(`
+      [
+        {
+          "type": "start",
+        },
+        {
+          "request": {},
+          "type": "start-step",
+          "warnings": [],
+        },
+        {
+          "id": "1",
+          "type": "text-start",
+        },
+        {
+          "id": "1",
+          "providerMetadata": undefined,
+          "text": "Hello",
+          "type": "text-delta",
+        },
+        {
+          "id": "1",
+          "providerMetadata": undefined,
+          "text": ", ",
+          "type": "text-delta",
+        },
+        {
+          "id": "1",
+          "providerMetadata": undefined,
+          "text": "world!",
+          "type": "text-delta",
+        },
+        {
+          "id": "1",
+          "type": "text-end",
+        },
+        {
+          "finishReason": "stop",
+          "providerMetadata": {
+            "testProvider": {
+              "testKey": "testValue",
+            },
+          },
+          "response": {
+            "headers": undefined,
+            "id": "id-0",
+            "modelId": "mock-model-id",
+            "timestamp": 1970-01-01T00:00:00.000Z,
+          },
+          "type": "finish-step",
+          "usage": {
+            "cachedInputTokens": undefined,
+            "inputTokens": 3,
+            "outputTokens": 10,
+            "reasoningTokens": undefined,
+            "totalTokens": 13,
+          },
+        },
+        {
+          "finishReason": "stop",
+          "totalUsage": {
+            "cachedInputTokens": undefined,
+            "inputTokens": 3,
+            "outputTokens": 10,
+            "reasoningTokens": undefined,
+            "totalTokens": 13,
+          },
+          "type": "finish",
+        },
+      ]
+    `);
+    });
+
+    it('should retry when consective errors occur', async () => {
+      const baseModel = new MockLanguageModel({
+        doStream: {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            {
+              type: 'error',
+              error: { type: 'overloaded_error', message: 'Overloaded' },
+            },
+          ]),
+        },
+      });
+
+      const fallbackModel1 = new MockLanguageModel({
+        doStream: retryableError,
+      });
+      const fallbackModel2 = new MockLanguageModel({
+        doStream: {
+          stream: convertArrayToReadableStream(mockStreamChunks),
+        },
+      });
+
+      const retryableModel = createRetryable({
+        model: baseModel,
+        retries: [fallbackModel1, fallbackModel2],
+      });
+
+      const result = streamText({
+        model: retryableModel,
+        prompt,
+      });
+
+      const chunks = await convertAsyncIterableToArray(result.fullStream);
+
+      expect(baseModel.doStream).toHaveBeenCalledTimes(1);
+      expect(fallbackModel1.doStream).toHaveBeenCalledTimes(1);
+      expect(fallbackModel2.doStream).toHaveBeenCalledTimes(1);
+      expect(chunks).toMatchInlineSnapshot(`
+      [
+        {
+          "type": "start",
+        },
+        {
+          "request": {},
+          "type": "start-step",
+          "warnings": [],
+        },
+        {
+          "id": "1",
+          "type": "text-start",
+        },
+        {
+          "id": "1",
+          "providerMetadata": undefined,
+          "text": "Hello",
+          "type": "text-delta",
+        },
+        {
+          "id": "1",
+          "providerMetadata": undefined,
+          "text": ", ",
+          "type": "text-delta",
+        },
+        {
+          "id": "1",
+          "providerMetadata": undefined,
+          "text": "world!",
+          "type": "text-delta",
+        },
+        {
+          "id": "1",
+          "type": "text-end",
+        },
+        {
+          "finishReason": "stop",
+          "providerMetadata": {
+            "testProvider": {
+              "testKey": "testValue",
+            },
+          },
+          "response": {
+            "headers": undefined,
+            "id": "id-0",
+            "modelId": "mock-model-id",
+            "timestamp": 1970-01-01T00:00:00.000Z,
+          },
+          "type": "finish-step",
+          "usage": {
+            "cachedInputTokens": undefined,
+            "inputTokens": 3,
+            "outputTokens": 10,
+            "reasoningTokens": undefined,
+            "totalTokens": 13,
+          },
+        },
+        {
+          "finishReason": "stop",
+          "totalUsage": {
+            "cachedInputTokens": undefined,
+            "inputTokens": 3,
+            "outputTokens": 10,
+            "reasoningTokens": undefined,
+            "totalTokens": 13,
+          },
+          "type": "finish",
+        },
+      ]
+    `);
+    });
+
+    it('should NOT retry when error occurs during streaming', async () => {
+      const baseModel = new MockLanguageModel({
+        doStream: {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'text-start', id: '1' },
+            { type: 'text-delta', id: '1', delta: 'Hello' },
+            { type: 'error', error: new Error('Overloaded') },
+          ]),
+        },
+      });
+
+      const fallbackModel = new MockLanguageModel({
+        doStream: {
+          stream: convertArrayToReadableStream(mockStreamChunks),
+        },
+      });
+
+      const retryableModel = createRetryable({
+        model: baseModel,
+        retries: [fallbackModel],
+      });
+
+      const result = streamText({
+        model: retryableModel,
+        prompt,
+        ...mockStreamOptions,
+      });
+
+      const chunks = await convertAsyncIterableToArray(result.fullStream);
+
+      expect(baseModel.doStream).toHaveBeenCalledTimes(1);
+      expect(fallbackModel.doStream).toHaveBeenCalledTimes(0);
+      expect(chunks).toMatchInlineSnapshot(`
+        [
           {
-            type: 'error',
-            error: { type: 'overloaded_error', message: 'Overloaded' },
+            "type": "start",
           },
-        ]),
-      },
-    });
-
-    const fallbackModel = new MockLanguageModel({
-      doStream: {
-        stream: convertArrayToReadableStream(mockStreamChunks),
-      },
-    });
-
-    const retryableModel = createRetryable({
-      model: baseModel,
-      retries: [fallbackModel],
-    });
-
-    const result = streamText({
-      model: retryableModel,
-      prompt,
-    });
-
-    const chunks = await convertAsyncIterableToArray(result.fullStream);
-
-    expect(baseModel.doStream).toHaveBeenCalledTimes(1);
-    expect(fallbackModel.doStream).toHaveBeenCalledTimes(1);
-    expect(chunks).toMatchInlineSnapshot(`
-      [
-        {
-          "type": "start",
-        },
-        {
-          "request": {},
-          "type": "start-step",
-          "warnings": [],
-        },
-        {
-          "id": "1",
-          "type": "text-start",
-        },
-        {
-          "id": "1",
-          "providerMetadata": undefined,
-          "text": "Hello",
-          "type": "text-delta",
-        },
-        {
-          "id": "1",
-          "providerMetadata": undefined,
-          "text": ", ",
-          "type": "text-delta",
-        },
-        {
-          "id": "1",
-          "providerMetadata": undefined,
-          "text": "world!",
-          "type": "text-delta",
-        },
-        {
-          "id": "1",
-          "type": "text-end",
-        },
-        {
-          "finishReason": "stop",
-          "providerMetadata": {
-            "testProvider": {
-              "testKey": "testValue",
-            },
-          },
-          "response": {
-            "headers": undefined,
-            "id": "id-0",
-            "modelId": "mock-model-id",
-            "timestamp": 1970-01-01T00:00:00.000Z,
-          },
-          "type": "finish-step",
-          "usage": {
-            "cachedInputTokens": undefined,
-            "inputTokens": 3,
-            "outputTokens": 10,
-            "reasoningTokens": undefined,
-            "totalTokens": 13,
-          },
-        },
-        {
-          "finishReason": "stop",
-          "totalUsage": {
-            "cachedInputTokens": undefined,
-            "inputTokens": 3,
-            "outputTokens": 10,
-            "reasoningTokens": undefined,
-            "totalTokens": 13,
-          },
-          "type": "finish",
-        },
-      ]
-    `);
-  });
-
-  it('should retry when consective errors occur', async () => {
-    const baseModel = new MockLanguageModel({
-      doStream: {
-        stream: convertArrayToReadableStream([
-          { type: 'stream-start', warnings: [] },
           {
-            type: 'error',
-            error: { type: 'overloaded_error', message: 'Overloaded' },
+            "request": {},
+            "type": "start-step",
+            "warnings": [],
           },
-        ]),
-      },
-    });
-
-    const fallbackModel1 = new MockLanguageModel({ doStream: retryableError });
-    const fallbackModel2 = new MockLanguageModel({
-      doStream: {
-        stream: convertArrayToReadableStream(mockStreamChunks),
-      },
-    });
-
-    const retryableModel = createRetryable({
-      model: baseModel,
-      retries: [fallbackModel1, fallbackModel2],
-    });
-
-    const result = streamText({
-      model: retryableModel,
-      prompt,
-    });
-
-    const chunks = await convertAsyncIterableToArray(result.fullStream);
-
-    expect(baseModel.doStream).toHaveBeenCalledTimes(1);
-    expect(fallbackModel1.doStream).toHaveBeenCalledTimes(1);
-    expect(fallbackModel2.doStream).toHaveBeenCalledTimes(1);
-    expect(chunks).toMatchInlineSnapshot(`
-      [
-        {
-          "type": "start",
-        },
-        {
-          "request": {},
-          "type": "start-step",
-          "warnings": [],
-        },
-        {
-          "id": "1",
-          "type": "text-start",
-        },
-        {
-          "id": "1",
-          "providerMetadata": undefined,
-          "text": "Hello",
-          "type": "text-delta",
-        },
-        {
-          "id": "1",
-          "providerMetadata": undefined,
-          "text": ", ",
-          "type": "text-delta",
-        },
-        {
-          "id": "1",
-          "providerMetadata": undefined,
-          "text": "world!",
-          "type": "text-delta",
-        },
-        {
-          "id": "1",
-          "type": "text-end",
-        },
-        {
-          "finishReason": "stop",
-          "providerMetadata": {
-            "testProvider": {
-              "testKey": "testValue",
+          {
+            "id": "1",
+            "type": "text-start",
+          },
+          {
+            "id": "1",
+            "providerMetadata": undefined,
+            "text": "Hello",
+            "type": "text-delta",
+          },
+          {
+            "error": [Error: Overloaded],
+            "type": "error",
+          },
+          {
+            "finishReason": "error",
+            "providerMetadata": undefined,
+            "response": {
+              "headers": undefined,
+              "id": "aitxt-mock-id",
+              "modelId": "mock-model-85",
+              "timestamp": 1970-01-01T00:00:00.000Z,
+            },
+            "type": "finish-step",
+            "usage": {
+              "inputTokens": undefined,
+              "outputTokens": undefined,
+              "totalTokens": undefined,
             },
           },
-          "response": {
-            "headers": undefined,
-            "id": "id-0",
-            "modelId": "mock-model-id",
-            "timestamp": 1970-01-01T00:00:00.000Z,
+          {
+            "finishReason": "error",
+            "totalUsage": {
+              "cachedInputTokens": undefined,
+              "inputTokens": undefined,
+              "outputTokens": undefined,
+              "reasoningTokens": undefined,
+              "totalTokens": undefined,
+            },
+            "type": "finish",
           },
-          "type": "finish-step",
-          "usage": {
-            "cachedInputTokens": undefined,
-            "inputTokens": 3,
-            "outputTokens": 10,
-            "reasoningTokens": undefined,
-            "totalTokens": 13,
-          },
-        },
-        {
-          "finishReason": "stop",
-          "totalUsage": {
-            "cachedInputTokens": undefined,
-            "inputTokens": 3,
-            "outputTokens": 10,
-            "reasoningTokens": undefined,
-            "totalTokens": 13,
-          },
-          "type": "finish",
-        },
-      ]
-    `);
-  });
-
-  it('should NOT retry when error occurs during streaming', async () => {
-    const baseModel = new MockLanguageModel({
-      doStream: {
-        stream: convertArrayToReadableStream([
-          { type: 'stream-start', warnings: [] },
-          { type: 'text-start', id: '1' },
-          { type: 'text-delta', id: '1', delta: 'Hello' },
-          { type: 'error', error: new Error('Overloaded') },
-        ]),
-      },
+        ]
+      `);
     });
-
-    const fallbackModel = new MockLanguageModel({
-      doStream: {
-        stream: convertArrayToReadableStream(mockStreamChunks),
-      },
-    });
-
-    const retryableModel = createRetryable({
-      model: baseModel,
-      retries: [fallbackModel],
-    });
-
-    const result = streamText({
-      model: retryableModel,
-      prompt,
-      ...mockStreamOptions,
-    });
-
-    const chunks = await convertAsyncIterableToArray(result.fullStream);
-
-    expect(baseModel.doStream).toHaveBeenCalledTimes(1);
-    expect(fallbackModel.doStream).toHaveBeenCalledTimes(0);
-    expect(chunks).toMatchInlineSnapshot(`
-      [
-        {
-          "type": "start",
-        },
-        {
-          "request": {},
-          "type": "start-step",
-          "warnings": [],
-        },
-        {
-          "id": "1",
-          "type": "text-start",
-        },
-        {
-          "id": "1",
-          "providerMetadata": undefined,
-          "text": "Hello",
-          "type": "text-delta",
-        },
-        {
-          "error": [Error: Overloaded],
-          "type": "error",
-        },
-        {
-          "finishReason": "error",
-          "providerMetadata": undefined,
-          "response": {
-            "headers": undefined,
-            "id": "aitxt-mock-id",
-            "modelId": "mock-model-65",
-            "timestamp": 1970-01-01T00:00:00.000Z,
-          },
-          "type": "finish-step",
-          "usage": {
-            "inputTokens": undefined,
-            "outputTokens": undefined,
-            "totalTokens": undefined,
-          },
-        },
-        {
-          "finishReason": "error",
-          "totalUsage": {
-            "cachedInputTokens": undefined,
-            "inputTokens": undefined,
-            "outputTokens": undefined,
-            "reasoningTokens": undefined,
-            "totalTokens": undefined,
-          },
-          "type": "finish",
-        },
-      ]
-    `);
   });
 
   describe('onError', () => {
@@ -1543,228 +1829,230 @@ describe('streamText', () => {
     });
   });
 
-  describe('maxAttempts', () => {
-    it('should try each model only once by default', async () => {
-      // Arrange
-      const baseModel = new MockLanguageModel({ doStream: retryableError });
-      const fallbackModel1 = new MockLanguageModel({
-        doStream: retryableError,
-      });
-      const fallbackModel2 = new MockLanguageModel({
-        doStream: retryableError,
-      });
-      const finalModel = new MockLanguageModel({
-        doStream: {
-          stream: convertArrayToReadableStream(mockStreamChunks),
-        },
-      });
+  describe('RetryableOptions', () => {
+    describe('maxAttempts', () => {
+      it('should try each model only once by default', async () => {
+        // Arrange
+        const baseModel = new MockLanguageModel({ doStream: retryableError });
+        const fallbackModel1 = new MockLanguageModel({
+          doStream: retryableError,
+        });
+        const fallbackModel2 = new MockLanguageModel({
+          doStream: retryableError,
+        });
+        const finalModel = new MockLanguageModel({
+          doStream: {
+            stream: convertArrayToReadableStream(mockStreamChunks),
+          },
+        });
 
-      // Act
-      const retryableModel = createRetryable({
-        model: baseModel,
-        retries: [
-          fallbackModel1,
-          () => ({ model: fallbackModel2 }),
-          async () => ({ model: finalModel }),
-        ],
-      });
-
-      const result = streamText({
-        model: retryableModel,
-        prompt,
-      });
-
-      await convertAsyncIterableToArray(result.fullStream);
-
-      // Assert
-      expect(baseModel.doStream).toHaveBeenCalledTimes(1);
-      expect(fallbackModel1.doStream).toHaveBeenCalledTimes(1);
-      expect(fallbackModel2.doStream).toHaveBeenCalledTimes(1);
-      expect(finalModel.doStream).toHaveBeenCalledTimes(1);
-    });
-
-    it('should try models multiple times if maxAttempts is set', async () => {
-      // Arrange
-      const baseModel = new MockLanguageModel({ doStream: retryableError });
-      const fallbackModel1 = new MockLanguageModel({
-        doStream: retryableError,
-      });
-      const fallbackModel2 = new MockLanguageModel({
-        doStream: retryableError,
-      });
-      const finalModel = new MockLanguageModel({
-        doStream: {
-          stream: convertArrayToReadableStream(mockStreamChunks),
-        },
-      });
-
-      // Act
-      const retryableModel = createRetryable({
-        model: baseModel,
-        retries: [
-          // Retryable<LanguageModelV2>  with different maxAttempts
-          () => ({ model: fallbackModel1, maxAttempts: 2 }),
-          async () => ({ model: fallbackModel2, maxAttempts: 3 }),
-          finalModel,
-        ],
-      });
-
-      const result = streamText({
-        model: retryableModel,
-        prompt,
-      });
-
-      await convertAsyncIterableToArray(result.fullStream);
-
-      // Assert
-      expect(baseModel.doStream).toHaveBeenCalledTimes(1);
-      expect(fallbackModel1.doStream).toHaveBeenCalledTimes(2);
-      expect(fallbackModel2.doStream).toHaveBeenCalledTimes(3);
-      expect(finalModel.doStream).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  describe('delay', () => {
-    it('should apply delay before retrying', async () => {
-      // Arrange
-      vi.useFakeTimers();
-      const baseModel = new MockLanguageModel({ doStream: retryableError });
-      const fallbackModel = new MockLanguageModel({
-        doStream: {
-          stream: convertArrayToReadableStream(mockStreamChunks),
-        },
-      });
-      const delayMs = 100;
-
-      // Act
-      const result = streamText({
-        model: createRetryable({
-          model: baseModel,
-          retries: [() => ({ model: fallbackModel, delay: delayMs })],
-        }),
-        prompt,
-      });
-
-      const streamPromise = convertAsyncIterableToArray(result.fullStream);
-      await vi.runAllTimersAsync();
-      await streamPromise;
-
-      // Assert
-      expect(baseModel.doStream).toHaveBeenCalledTimes(1);
-      expect(fallbackModel.doStream).toHaveBeenCalledTimes(1);
-
-      vi.useRealTimers();
-    });
-
-    it('should apply different delays for multiple retries', async () => {
-      // Arrange
-      vi.useFakeTimers();
-      const baseModel = new MockLanguageModel({ doStream: retryableError });
-      const fallbackModel1 = new MockLanguageModel({
-        doStream: retryableError,
-      });
-      const fallbackModel2 = new MockLanguageModel({
-        doStream: {
-          stream: convertArrayToReadableStream(mockStreamChunks),
-        },
-      });
-      const delay1 = 50;
-      const delay2 = 50;
-
-      // Act
-      const result = streamText({
-        model: createRetryable({
+        // Act
+        const retryableModel = createRetryable({
           model: baseModel,
           retries: [
-            () => ({ model: fallbackModel1, delay: delay1 }),
-            () => ({ model: fallbackModel2, delay: delay2 }),
+            fallbackModel1,
+            { model: fallbackModel2 },
+            async () => ({ model: finalModel }),
           ],
-        }),
-        prompt,
+        });
+
+        const result = streamText({
+          model: retryableModel,
+          prompt,
+        });
+
+        await convertAsyncIterableToArray(result.fullStream);
+
+        // Assert
+        expect(baseModel.doStream).toHaveBeenCalledTimes(1);
+        expect(fallbackModel1.doStream).toHaveBeenCalledTimes(1);
+        expect(fallbackModel2.doStream).toHaveBeenCalledTimes(1);
+        expect(finalModel.doStream).toHaveBeenCalledTimes(1);
       });
 
-      const streamPromise = convertAsyncIterableToArray(result.fullStream);
-      await vi.runAllTimersAsync();
-      await streamPromise;
+      it('should try models multiple times if maxAttempts is set', async () => {
+        // Arrange
+        const baseModel = new MockLanguageModel({ doStream: retryableError });
+        const fallbackModel1 = new MockLanguageModel({
+          doStream: retryableError,
+        });
+        const fallbackModel2 = new MockLanguageModel({
+          doStream: retryableError,
+        });
+        const finalModel = new MockLanguageModel({
+          doStream: {
+            stream: convertArrayToReadableStream(mockStreamChunks),
+          },
+        });
 
-      // Assert
-      expect(baseModel.doStream).toHaveBeenCalledTimes(1);
-      expect(fallbackModel1.doStream).toHaveBeenCalledTimes(1);
-      expect(fallbackModel2.doStream).toHaveBeenCalledTimes(1);
-
-      vi.useRealTimers();
-    });
-
-    it('should not delay when delay is not specified', async () => {
-      // Arrange
-      const baseModel = new MockLanguageModel({ doStream: retryableError });
-      const fallbackModel = new MockLanguageModel({
-        doStream: {
-          stream: convertArrayToReadableStream(mockStreamChunks),
-        },
-      });
-
-      // Act
-      const result = streamText({
-        model: createRetryable({
-          model: baseModel,
-          retries: [() => ({ model: fallbackModel })],
-        }),
-        prompt,
-      });
-
-      await convertAsyncIterableToArray(result.fullStream);
-
-      // Assert
-      expect(baseModel.doStream).toHaveBeenCalledTimes(1);
-      expect(fallbackModel.doStream).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  describe('providerOptions', () => {
-    it('should override base model providerOptions with retry model providerOptions', async () => {
-      // Arrange
-      const baseModel = new MockLanguageModel({ doStream: retryableError });
-      const fallbackModel = new MockLanguageModel({
-        doStream: {
-          stream: convertArrayToReadableStream(mockStreamChunks),
-        },
-      });
-      const originalProviderOptions = {
-        openai: { user: 'original-user' },
-      };
-      const retryProviderOptions = { openai: { user: 'retry-user' } };
-
-      // Act
-      const result = streamText({
-        model: createRetryable({
+        // Act
+        const retryableModel = createRetryable({
           model: baseModel,
           retries: [
-            () => ({
-              model: fallbackModel,
-              providerOptions: retryProviderOptions,
-            }),
+            // Retryable<LanguageModelV2>  with different maxAttempts
+            { model: fallbackModel1, maxAttempts: 2 },
+            async () => ({ model: fallbackModel2, maxAttempts: 3 }),
+            finalModel,
           ],
-        }),
-        prompt,
-        providerOptions: originalProviderOptions,
+        });
+
+        const result = streamText({
+          model: retryableModel,
+          prompt,
+        });
+
+        await convertAsyncIterableToArray(result.fullStream);
+
+        // Assert
+        expect(baseModel.doStream).toHaveBeenCalledTimes(1);
+        expect(fallbackModel1.doStream).toHaveBeenCalledTimes(2);
+        expect(fallbackModel2.doStream).toHaveBeenCalledTimes(3);
+        expect(finalModel.doStream).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    describe('delay', () => {
+      it('should apply delay before retrying', async () => {
+        // Arrange
+        vi.useFakeTimers();
+        const baseModel = new MockLanguageModel({ doStream: retryableError });
+        const fallbackModel = new MockLanguageModel({
+          doStream: {
+            stream: convertArrayToReadableStream(mockStreamChunks),
+          },
+        });
+        const delayMs = 100;
+
+        // Act
+        const result = streamText({
+          model: createRetryable({
+            model: baseModel,
+            retries: [{ model: fallbackModel, delay: delayMs }],
+          }),
+          prompt,
+        });
+
+        const streamPromise = convertAsyncIterableToArray(result.fullStream);
+        await vi.runAllTimersAsync();
+        await streamPromise;
+
+        // Assert
+        expect(baseModel.doStream).toHaveBeenCalledTimes(1);
+        expect(fallbackModel.doStream).toHaveBeenCalledTimes(1);
+
+        vi.useRealTimers();
       });
 
-      await convertAsyncIterableToArray(result.fullStream);
+      it('should apply different delays for multiple retries', async () => {
+        // Arrange
+        vi.useFakeTimers();
+        const baseModel = new MockLanguageModel({ doStream: retryableError });
+        const fallbackModel1 = new MockLanguageModel({
+          doStream: retryableError,
+        });
+        const fallbackModel2 = new MockLanguageModel({
+          doStream: {
+            stream: convertArrayToReadableStream(mockStreamChunks),
+          },
+        });
+        const delay1 = 50;
+        const delay2 = 50;
 
-      // Assert
-      expect(baseModel.doStream).toHaveBeenCalledTimes(1);
-      expect(fallbackModel.doStream).toHaveBeenCalledTimes(1);
-      expect(baseModel.doStream).toHaveBeenCalledWith(
-        expect.objectContaining({
+        // Act
+        const result = streamText({
+          model: createRetryable({
+            model: baseModel,
+            retries: [
+              { model: fallbackModel1, delay: delay1 },
+              () => ({ model: fallbackModel2, delay: delay2 }),
+            ],
+          }),
+          prompt,
+        });
+
+        const streamPromise = convertAsyncIterableToArray(result.fullStream);
+        await vi.runAllTimersAsync();
+        await streamPromise;
+
+        // Assert
+        expect(baseModel.doStream).toHaveBeenCalledTimes(1);
+        expect(fallbackModel1.doStream).toHaveBeenCalledTimes(1);
+        expect(fallbackModel2.doStream).toHaveBeenCalledTimes(1);
+
+        vi.useRealTimers();
+      });
+
+      it('should not delay when delay is not specified', async () => {
+        // Arrange
+        const baseModel = new MockLanguageModel({ doStream: retryableError });
+        const fallbackModel = new MockLanguageModel({
+          doStream: {
+            stream: convertArrayToReadableStream(mockStreamChunks),
+          },
+        });
+
+        // Act
+        const result = streamText({
+          model: createRetryable({
+            model: baseModel,
+            retries: [{ model: fallbackModel }],
+          }),
+          prompt,
+        });
+
+        await convertAsyncIterableToArray(result.fullStream);
+
+        // Assert
+        expect(baseModel.doStream).toHaveBeenCalledTimes(1);
+        expect(fallbackModel.doStream).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    describe('providerOptions', () => {
+      it('should override base model providerOptions with retry model providerOptions', async () => {
+        // Arrange
+        const baseModel = new MockLanguageModel({ doStream: retryableError });
+        const fallbackModel = new MockLanguageModel({
+          doStream: {
+            stream: convertArrayToReadableStream(mockStreamChunks),
+          },
+        });
+        const originalProviderOptions = {
+          openai: { user: 'original-user' },
+        };
+        const retryProviderOptions = { openai: { user: 'retry-user' } };
+
+        // Act
+        const result = streamText({
+          model: createRetryable({
+            model: baseModel,
+            retries: [
+              {
+                model: fallbackModel,
+                providerOptions: retryProviderOptions,
+              },
+            ],
+          }),
+          prompt,
           providerOptions: originalProviderOptions,
-        }),
-      );
-      expect(fallbackModel.doStream).toHaveBeenCalledWith(
-        expect.objectContaining({
-          providerOptions: retryProviderOptions,
-        }),
-      );
+        });
+
+        await convertAsyncIterableToArray(result.fullStream);
+
+        // Assert
+        expect(baseModel.doStream).toHaveBeenCalledTimes(1);
+        expect(fallbackModel.doStream).toHaveBeenCalledTimes(1);
+        expect(baseModel.doStream).toHaveBeenCalledWith(
+          expect.objectContaining({
+            providerOptions: originalProviderOptions,
+          }),
+        );
+        expect(fallbackModel.doStream).toHaveBeenCalledWith(
+          expect.objectContaining({
+            providerOptions: retryProviderOptions,
+          }),
+        );
+      });
     });
   });
 
@@ -1912,98 +2200,102 @@ describe('embed', () => {
     expect(result.embedding).toEqual(mockEmbeddings.embeddings[0]);
   });
 
-  describe('error-based retries', () => {
-    it('should retry with errors', async () => {
-      // Arrange
-      const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
-      const fallbackModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
+  describe('retries', () => {
+    describe('error-based retries', () => {
+      it('should retry with errors', async () => {
+        // Arrange
+        const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
+        const fallbackModel = new MockEmbeddingModel({
+          doEmbed: mockEmbeddings,
+        });
 
-      const fallbackRetryable = (context: RetryContext<EmbeddingModelV2>) => {
-        if (
-          isErrorAttempt(context.current) &&
-          APICallError.isInstance(context.current.error)
-        ) {
-          return { model: fallbackModel, maxAttempts: 1 };
-        }
-        return undefined;
-      };
+        const fallbackRetryable = (context: RetryContext<EmbeddingModelV2>) => {
+          if (
+            isErrorAttempt(context.current) &&
+            APICallError.isInstance(context.current.error)
+          ) {
+            return { model: fallbackModel, maxAttempts: 1 };
+          }
+          return undefined;
+        };
 
-      // Act
-      const result = await embed({
-        model: createRetryable({
-          model: baseModel,
-          retries: [fallbackRetryable],
-        }),
-        value: 'Hello!',
-        //
+        // Act
+        const result = await embed({
+          model: createRetryable({
+            model: baseModel,
+            retries: [fallbackRetryable],
+          }),
+          value: 'Hello!',
+          //
+        });
+
+        // Assert
+        expect(baseModel.doEmbed).toHaveBeenCalledTimes(1);
+        expect(fallbackModel.doEmbed).toHaveBeenCalledTimes(1);
+        expect(result.embedding).toEqual(mockEmbeddings.embeddings[0]);
       });
 
-      // Assert
-      expect(baseModel.doEmbed).toHaveBeenCalledTimes(1);
-      expect(fallbackModel.doEmbed).toHaveBeenCalledTimes(1);
-      expect(result.embedding).toEqual(mockEmbeddings.embeddings[0]);
-    });
+      it('should not retry without errors', async () => {
+        // Arrange
+        const baseModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
+        const fallbackModel1 = new MockEmbeddingModel({
+          doEmbed: mockEmbeddings,
+        });
+        const fallbackModel2 = new MockEmbeddingModel({
+          doEmbed: mockEmbeddings,
+        });
 
-    it('should not retry without errors', async () => {
-      // Arrange
-      const baseModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
-      const fallbackModel1 = new MockEmbeddingModel({
-        doEmbed: mockEmbeddings,
-      });
-      const fallbackModel2 = new MockEmbeddingModel({
-        doEmbed: mockEmbeddings,
-      });
+        // Act
+        const result = await embed({
+          model: createRetryable({
+            model: baseModel,
+            retries: [fallbackModel1, fallbackModel2],
+          }),
+          value: 'Hello!',
+        });
 
-      // Act
-      const result = await embed({
-        model: createRetryable({
-          model: baseModel,
-          retries: [fallbackModel1, fallbackModel2],
-        }),
-        value: 'Hello!',
-      });
-
-      // Assert
-      expect(baseModel.doEmbed).toHaveBeenCalledTimes(1);
-      expect(fallbackModel1.doEmbed).toHaveBeenCalledTimes(0);
-      expect(fallbackModel2.doEmbed).toHaveBeenCalledTimes(0);
-      expect(result.embedding).toEqual(mockEmbeddings.embeddings[0]);
-    });
-
-    it('should use plain embedding models for error-based attempts', async () => {
-      // Arrange
-      const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
-      const fallbackModel1 = new MockEmbeddingModel({
-        doEmbed: mockEmbeddings,
-      });
-      const fallbackModel2 = new MockEmbeddingModel({
-        doEmbed: mockEmbeddings,
+        // Assert
+        expect(baseModel.doEmbed).toHaveBeenCalledTimes(1);
+        expect(fallbackModel1.doEmbed).toHaveBeenCalledTimes(0);
+        expect(fallbackModel2.doEmbed).toHaveBeenCalledTimes(0);
+        expect(result.embedding).toEqual(mockEmbeddings.embeddings[0]);
       });
 
-      const fallbackRetryable = (context: RetryContext<EmbeddingModelV2>) => {
-        if (
-          isErrorAttempt(context.current) &&
-          APICallError.isInstance(context.current.error)
-        ) {
-          return { model: fallbackModel2, maxAttempts: 1 };
-        }
-        return undefined;
-      };
+      it('should use plain embedding models for error-based attempts', async () => {
+        // Arrange
+        const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
+        const fallbackModel1 = new MockEmbeddingModel({
+          doEmbed: mockEmbeddings,
+        });
+        const fallbackModel2 = new MockEmbeddingModel({
+          doEmbed: mockEmbeddings,
+        });
 
-      // Act
-      const result = await embed({
-        model: createRetryable({
-          model: baseModel,
-          retries: [fallbackModel1, fallbackRetryable],
-        }),
-        value: 'Hello!',
+        const fallbackRetryable = (context: RetryContext<EmbeddingModelV2>) => {
+          if (
+            isErrorAttempt(context.current) &&
+            APICallError.isInstance(context.current.error)
+          ) {
+            return { model: fallbackModel2, maxAttempts: 1 };
+          }
+          return undefined;
+        };
+
+        // Act
+        const result = await embed({
+          model: createRetryable({
+            model: baseModel,
+            retries: [fallbackModel1, fallbackRetryable],
+          }),
+          value: 'Hello!',
+        });
+
+        // Assert
+        expect(baseModel.doEmbed).toHaveBeenCalledTimes(1);
+        expect(fallbackModel1.doEmbed).toHaveBeenCalledTimes(1); // Should be called
+        expect(fallbackModel2.doEmbed).toHaveBeenCalledTimes(0);
+        expect(result.embedding).toEqual(mockEmbeddings.embeddings[0]);
       });
-
-      // Assert
-      expect(baseModel.doEmbed).toHaveBeenCalledTimes(1);
-      expect(fallbackModel1.doEmbed).toHaveBeenCalledTimes(1); // Should be called
-      expect(fallbackModel2.doEmbed).toHaveBeenCalledTimes(0);
-      expect(result.embedding).toEqual(mockEmbeddings.embeddings[0]);
     });
   });
 
@@ -2203,238 +2495,246 @@ describe('embed', () => {
     });
   });
 
-  describe('maxAttempts', () => {
-    it('should try each model only once by default', async () => {
-      // Arrange
-      const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
-      const fallbackModel1 = new MockEmbeddingModel({
-        doEmbed: retryableError,
-      });
-      const fallbackModel2 = new MockEmbeddingModel({
-        doEmbed: retryableError,
-      });
-      const finalModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
+  describe('RetryableOptions', () => {
+    describe('maxAttempts', () => {
+      it('should try each model only once by default', async () => {
+        // Arrange
+        const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
+        const fallbackModel1 = new MockEmbeddingModel({
+          doEmbed: retryableError,
+        });
+        const fallbackModel2 = new MockEmbeddingModel({
+          doEmbed: retryableError,
+        });
+        const finalModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
 
-      // Act
-      await embed({
-        model: createRetryable({
-          model: baseModel,
-          retries: [
-            fallbackModel1,
-            () => ({ model: fallbackModel2 }),
-            async () => ({ model: finalModel }),
-          ],
-        }),
-        value: 'Hello!',
-      });
-
-      // Assert
-      expect(baseModel.doEmbed).toHaveBeenCalledTimes(1);
-      expect(fallbackModel1.doEmbed).toHaveBeenCalledTimes(1);
-      expect(fallbackModel2.doEmbed).toHaveBeenCalledTimes(1);
-      expect(finalModel.doEmbed).toHaveBeenCalledTimes(1);
-    });
-
-    it('should try models multiple times if maxAttempts is set', async () => {
-      // Arrange
-      const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
-      const fallbackModel1 = new MockEmbeddingModel({
-        doEmbed: retryableError,
-      });
-      const fallbackModel2 = new MockEmbeddingModel({
-        doEmbed: retryableError,
-      });
-      const finalModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
-
-      // Act
-      await embed({
-        model: createRetryable({
-          model: baseModel,
-          retries: [
-            // Retryable  with different maxAttempts
-            () => ({ model: fallbackModel1, maxAttempts: 2 }),
-            async () => ({ model: fallbackModel2, maxAttempts: 3 }),
-            finalModel,
-          ],
-        }),
-        value: 'Hello!',
-      });
-
-      // Assert
-      expect(baseModel.doEmbed).toHaveBeenCalledTimes(1);
-      expect(fallbackModel1.doEmbed).toHaveBeenCalledTimes(2);
-      expect(fallbackModel2.doEmbed).toHaveBeenCalledTimes(3);
-      expect(finalModel.doEmbed).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  describe('maxRetries', () => {
-    it('should ignore maxRetries setting when retryable matches', async () => {
-      // Arrange
-      const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
-      const fallbackModel = new MockEmbeddingModel({
-        doEmbed: nonRetryableError,
-      });
-
-      // Act & Assert
-      try {
+        // Act
         await embed({
           model: createRetryable({
             model: baseModel,
-            retries: [fallbackModel],
+            retries: [
+              fallbackModel1,
+              { model: fallbackModel2 },
+              async () => ({ model: finalModel }),
+            ],
           }),
           value: 'Hello!',
-          maxRetries: 1, // Should be ignored since RetryError is thrown
         });
-        expect.unreachable('Should throw RetryError');
-      } catch (error) {
-        expect(error).toBeInstanceOf(RetryError);
+
+        // Assert
+        expect(baseModel.doEmbed).toHaveBeenCalledTimes(1);
+        expect(fallbackModel1.doEmbed).toHaveBeenCalledTimes(1);
+        expect(fallbackModel2.doEmbed).toHaveBeenCalledTimes(1);
+        expect(finalModel.doEmbed).toHaveBeenCalledTimes(1);
+      });
+
+      it('should try models multiple times if maxAttempts is set', async () => {
+        // Arrange
+        const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
+        const fallbackModel1 = new MockEmbeddingModel({
+          doEmbed: retryableError,
+        });
+        const fallbackModel2 = new MockEmbeddingModel({
+          doEmbed: retryableError,
+        });
+        const finalModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
+
+        // Act
+        await embed({
+          model: createRetryable({
+            model: baseModel,
+            retries: [
+              // Retryable  with different maxAttempts
+              { model: fallbackModel1, maxAttempts: 2 },
+              async () => ({ model: fallbackModel2, maxAttempts: 3 }),
+              finalModel,
+            ],
+          }),
+          value: 'Hello!',
+        });
+
+        // Assert
+        expect(baseModel.doEmbed).toHaveBeenCalledTimes(1);
+        expect(fallbackModel1.doEmbed).toHaveBeenCalledTimes(2);
+        expect(fallbackModel2.doEmbed).toHaveBeenCalledTimes(3);
+        expect(finalModel.doEmbed).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    describe('maxRetries', () => {
+      it('should ignore maxRetries setting when retryable matches', async () => {
+        // Arrange
+        const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
+        const fallbackModel = new MockEmbeddingModel({
+          doEmbed: nonRetryableError,
+        });
+
+        // Act & Assert
+        try {
+          await embed({
+            model: createRetryable({
+              model: baseModel,
+              retries: [fallbackModel],
+            }),
+            value: 'Hello!',
+            maxRetries: 1, // Should be ignored since RetryError is thrown
+          });
+          expect.unreachable('Should throw RetryError');
+        } catch (error) {
+          expect(error).toBeInstanceOf(RetryError);
+          expect(baseModel.doEmbed).toHaveBeenCalledTimes(1);
+          expect(fallbackModel.doEmbed).toHaveBeenCalledTimes(1);
+        }
+      });
+
+      it('should respect maxRetries setting when no retryable matches', async () => {
+        // Arrange
+        const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
+
+        // Act & Assert
+        try {
+          await embed({
+            model: createRetryable({
+              model: baseModel,
+              retries: [],
+            }),
+            value: 'Hello!',
+            maxRetries: 1, // Should be ignored since RetryError is thrown
+          });
+          expect.unreachable('Should throw RetryError');
+        } catch (error) {
+          expect(error).toBeInstanceOf(RetryError);
+          expect(baseModel.doEmbed).toHaveBeenCalledTimes(2); // 1 initial + 1 retry
+        }
+      });
+    });
+
+    describe('delay', () => {
+      it('should apply delay before retrying', async () => {
+        // Arrange
+        vi.useFakeTimers();
+        const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
+        const fallbackModel = new MockEmbeddingModel({
+          doEmbed: mockEmbeddings,
+        });
+        const delayMs = 100;
+
+        // Act
+        const promise = embed({
+          model: createRetryable({
+            model: baseModel,
+            retries: [{ model: fallbackModel, delay: delayMs }],
+          }),
+          value: 'Hello!',
+        });
+
+        await vi.runAllTimersAsync();
+        await promise;
+
+        // Assert
         expect(baseModel.doEmbed).toHaveBeenCalledTimes(1);
         expect(fallbackModel.doEmbed).toHaveBeenCalledTimes(1);
-      }
-    });
 
-    it('should respect maxRetries setting when no retryable matches', async () => {
-      // Arrange
-      const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
+        vi.useRealTimers();
+      });
 
-      // Act & Assert
-      try {
+      it('should apply different delays for multiple retries', async () => {
+        // Arrange
+        vi.useFakeTimers();
+        const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
+        const fallbackModel1 = new MockEmbeddingModel({
+          doEmbed: retryableError,
+        });
+        const fallbackModel2 = new MockEmbeddingModel({
+          doEmbed: mockEmbeddings,
+        });
+        const delay1 = 50;
+        const delay2 = 50;
+
+        // Act
+        const promise = embed({
+          model: createRetryable({
+            model: baseModel,
+            retries: [
+              { model: fallbackModel1, delay: delay1 },
+              () => ({ model: fallbackModel2, delay: delay2 }),
+            ],
+          }),
+          value: 'Hello!',
+        });
+
+        await vi.runAllTimersAsync();
+        await promise;
+
+        // Assert
+        expect(baseModel.doEmbed).toHaveBeenCalledTimes(1);
+        expect(fallbackModel1.doEmbed).toHaveBeenCalledTimes(1);
+        expect(fallbackModel2.doEmbed).toHaveBeenCalledTimes(1);
+
+        vi.useRealTimers();
+      });
+
+      it('should not delay when delay is not specified', async () => {
+        // Arrange
+        const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
+        const fallbackModel = new MockEmbeddingModel({
+          doEmbed: mockEmbeddings,
+        });
+
+        // Act
         await embed({
           model: createRetryable({
             model: baseModel,
-            retries: [],
+            retries: [{ model: fallbackModel }],
           }),
           value: 'Hello!',
-          maxRetries: 1, // Should be ignored since RetryError is thrown
         });
-        expect.unreachable('Should throw RetryError');
-      } catch (error) {
-        expect(error).toBeInstanceOf(RetryError);
-        expect(baseModel.doEmbed).toHaveBeenCalledTimes(2); // 1 initial + 1 retry
-      }
-    });
-  });
 
-  describe('delay', () => {
-    it('should apply delay before retrying', async () => {
-      // Arrange
-      vi.useFakeTimers();
-      const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
-      const fallbackModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
-      const delayMs = 100;
-
-      // Act
-      const promise = embed({
-        model: createRetryable({
-          model: baseModel,
-          retries: [() => ({ model: fallbackModel, delay: delayMs })],
-        }),
-        value: 'Hello!',
+        // Assert
+        expect(baseModel.doEmbed).toHaveBeenCalledTimes(1);
+        expect(fallbackModel.doEmbed).toHaveBeenCalledTimes(1);
       });
-
-      await vi.runAllTimersAsync();
-      await promise;
-
-      // Assert
-      expect(baseModel.doEmbed).toHaveBeenCalledTimes(1);
-      expect(fallbackModel.doEmbed).toHaveBeenCalledTimes(1);
-
-      vi.useRealTimers();
     });
 
-    it('should apply different delays for multiple retries', async () => {
-      // Arrange
-      vi.useFakeTimers();
-      const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
-      const fallbackModel1 = new MockEmbeddingModel({
-        doEmbed: retryableError,
-      });
-      const fallbackModel2 = new MockEmbeddingModel({
-        doEmbed: mockEmbeddings,
-      });
-      const delay1 = 50;
-      const delay2 = 50;
+    describe('providerOptions', () => {
+      it('should override base model providerOptions with retry model providerOptions', async () => {
+        // Arrange
+        const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
+        const fallbackModel = new MockEmbeddingModel({
+          doEmbed: mockEmbeddings,
+        });
+        const originalProviderOptions = { openai: { user: 'original-user' } };
+        const retryProviderOptions = { openai: { user: 'retry-user' } };
 
-      // Act
-      const promise = embed({
-        model: createRetryable({
-          model: baseModel,
-          retries: [
-            () => ({ model: fallbackModel1, delay: delay1 }),
-            () => ({ model: fallbackModel2, delay: delay2 }),
-          ],
-        }),
-        value: 'Hello!',
-      });
-
-      await vi.runAllTimersAsync();
-      await promise;
-
-      // Assert
-      expect(baseModel.doEmbed).toHaveBeenCalledTimes(1);
-      expect(fallbackModel1.doEmbed).toHaveBeenCalledTimes(1);
-      expect(fallbackModel2.doEmbed).toHaveBeenCalledTimes(1);
-
-      vi.useRealTimers();
-    });
-
-    it('should not delay when delay is not specified', async () => {
-      // Arrange
-      const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
-      const fallbackModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
-
-      // Act
-      await embed({
-        model: createRetryable({
-          model: baseModel,
-          retries: [() => ({ model: fallbackModel })],
-        }),
-        value: 'Hello!',
-      });
-
-      // Assert
-      expect(baseModel.doEmbed).toHaveBeenCalledTimes(1);
-      expect(fallbackModel.doEmbed).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  describe('providerOptions', () => {
-    it('should override base model providerOptions with retry model providerOptions', async () => {
-      // Arrange
-      const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
-      const fallbackModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
-      const originalProviderOptions = { openai: { user: 'original-user' } };
-      const retryProviderOptions = { openai: { user: 'retry-user' } };
-
-      // Act
-      await embed({
-        model: createRetryable({
-          model: baseModel,
-          retries: [
-            () => ({
-              model: fallbackModel,
-              providerOptions: retryProviderOptions,
-            }),
-          ],
-        }),
-        value: 'Hello!',
-        providerOptions: originalProviderOptions,
-      });
-
-      // Assert
-      expect(baseModel.doEmbed).toHaveBeenCalledTimes(1);
-      expect(fallbackModel.doEmbed).toHaveBeenCalledTimes(1);
-      expect(baseModel.doEmbed).toHaveBeenCalledWith(
-        expect.objectContaining({
+        // Act
+        await embed({
+          model: createRetryable({
+            model: baseModel,
+            retries: [
+              {
+                model: fallbackModel,
+                providerOptions: retryProviderOptions,
+              },
+            ],
+          }),
+          value: 'Hello!',
           providerOptions: originalProviderOptions,
-        }),
-      );
-      expect(fallbackModel.doEmbed).toHaveBeenCalledWith(
-        expect.objectContaining({
-          providerOptions: retryProviderOptions,
-        }),
-      );
+        });
+
+        // Assert
+        expect(baseModel.doEmbed).toHaveBeenCalledTimes(1);
+        expect(fallbackModel.doEmbed).toHaveBeenCalledTimes(1);
+        expect(baseModel.doEmbed).toHaveBeenCalledWith(
+          expect.objectContaining({
+            providerOptions: originalProviderOptions,
+          }),
+        );
+        expect(fallbackModel.doEmbed).toHaveBeenCalledWith(
+          expect.objectContaining({
+            providerOptions: retryProviderOptions,
+          }),
+        );
+      });
     });
   });
 
