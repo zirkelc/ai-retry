@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/zirkelc/ai-retry/compare/v0.6.0...v0.7.0) (2025-10-25)
+
+
+### Features
+
+* support static retryables with options ([7fafd30](https://github.com/zirkelc/ai-retry/commit/7fafd3035ec3e96078a6a07cf533a82f60de7280))
+
 ## [0.6.0](https://github.com/zirkelc/ai-retry/compare/v0.5.1...v0.6.0) (2025-10-23)
 
 
