@@ -95,29 +95,37 @@ console.log(result.embedding);
 
 The objects passed to the `retries` are called retryables and control the retry behavior. We can distinguish between two types of retryables:
 
-- **Static retryables** are simply models instances (language or embedding) that will always be used when an error occurs. This is also called a fallback model.
+- **Static retryables** are simply models instances (language or embedding) that will always be used when an error occurs. They are also called fallback models.
 - **Dynamic retryables** are functions that receive the current attempt context (error/result and previous attempts) and decide whether to retry with a different model based on custom logic.
 
-You can think of `retries` as a big `if-else` block, where each dynamic retryable is an `if` condition that can match a certain error/result condition, and static retryables are the `else` branches that match all other conditions. The analogy is not perfect, because the order of retryables matters because `retries` are evaluated in order until one matches:
+You can think of the `retries` array as a big `if-else` block, where each dynamic retryable is an `if` branch that can match a certain error/result condition, and static retryables are the `else` branches that match all other conditions. The analogy is not perfect, because the order of retryables matters because `retries` are evaluated in order until one matches:
 
 ```typescript
-import { openai } from '@ai-sdk/openai';
 import { generateText, streamText } from 'ai';
 import { createRetryable } from 'ai-retry';
 
 const retryableModel = createRetryable({
   // Base model
-  model: openai('gpt-4-mini'),
-  // Retryables are evaluated in order
+  model: openai('gpt-4'),
+  // Retryables are evaluated top-down in order
   retries: [
-    // Dynamic retryable that matches only certain errors
+    // Dynamic retryables act like if-branches:
+    // If error.code == 429 (too many requests) happens, retry with this model
     (context) => {
       return context.current.error.statusCode === 429 
-        ? { model: openai('gpt-3.5-turbo') }  // Retry with this model
-        : undefined;                          // Skip to next retryable
+        ? { model: azure('gpt-4-mini') }   // Retry 
+        : undefined;                       // Skip
     },
 
-    // Static retryable that always matches (fallback)
+    // If error.message ~= "service overloaded", retry with this model
+    (context) => {
+      return context.current.error.message.includes("service overloaded") 
+        ? { model: azure('gpt-4-mini') }   // Retry 
+        : undefined;                       // Skip
+    },
+
+    // Static retryables act like else branches:
+    // Else, always fallback to this model
     anthropic('claude-3-haiku-20240307'),
     // Same as:
     // { model: anthropic('claude-3-haiku-20240307'), maxAttempts: 1 }
@@ -125,7 +133,7 @@ const retryableModel = createRetryable({
 });
 ```
 
-In this example, if the base model fails with a 429 error, it will retry with `gpt-4`. In any other error case, it will fallback to `gpt-3.5-turbo`. If the order would be reversed, the static retryable would catch all errors first, and the dynamic retryable would never be reached.
+In this example, if the base model fails with code 429 or a service overloaded error, it will retry with `gpt-4-mini` on Azure. In any other error case, it will fallback to `claude-3-haiku-20240307` on Anthropic. If the order would be reversed, the static retryable would catch all errors first, and the dynamic retryable would never be reached.
 
 #### Fallbacks
 
