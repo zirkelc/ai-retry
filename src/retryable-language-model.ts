@@ -255,10 +255,13 @@ export class RetryableLanguageModel implements LanguageModelV2 {
     const { result } = await this.withRetry({
       fn: async (currentRetry) => {
         // Apply retry configuration if available
-        const callOptions = {
+        const callOptions: LanguageModelV2CallOptions = {
           ...options,
           providerOptions:
             currentRetry?.providerOptions ?? options.providerOptions,
+          abortSignal: currentRetry?.timeout
+            ? AbortSignal.timeout(currentRetry.timeout)
+            : options.abortSignal,
         };
         return this.currentModel.doGenerate(callOptions);
       },
@@ -282,10 +285,13 @@ export class RetryableLanguageModel implements LanguageModelV2 {
     let { result, attempts } = await this.withRetry({
       fn: async (currentRetry) => {
         // Apply retry configuration if available
-        const callOptions = {
+        const callOptions: LanguageModelV2CallOptions = {
           ...options,
           providerOptions:
             currentRetry?.providerOptions ?? options.providerOptions,
+          abortSignal: currentRetry?.timeout
+            ? AbortSignal.timeout(currentRetry.timeout)
+            : options.abortSignal,
         };
         return this.currentModel.doStream(callOptions);
       },
@@ -378,10 +384,13 @@ export class RetryableLanguageModel implements LanguageModelV2 {
              */
             const retriedResult = await this.withRetry({
               fn: async () => {
-                const callOptions = {
+                const callOptions: LanguageModelV2CallOptions = {
                   ...options,
                   providerOptions:
                     retryModel.providerOptions ?? options.providerOptions,
+                  abortSignal: retryModel.timeout
+                    ? AbortSignal.timeout(retryModel.timeout)
+                    : options.abortSignal,
                 };
                 return this.currentModel.doStream(callOptions);
               },

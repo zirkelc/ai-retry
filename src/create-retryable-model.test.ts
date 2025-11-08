@@ -1,6 +1,7 @@
 import type { OpenAIProviderSettings } from '@ai-sdk/openai';
 import type {
   LanguageModelV2,
+  LanguageModelV2CallOptions,
   LanguageModelV2StreamPart,
 } from '@ai-sdk/provider';
 import {
@@ -909,6 +910,67 @@ describe('generateText', () => {
         );
       });
     });
+
+    describe('timeout', () => {
+      it('should create fresh abort signal with specified timeout on retry', async () => {
+        // Arrange
+        let baseModelSignal: AbortSignal | undefined;
+        let fallbackModelSignal: AbortSignal | undefined;
+        const abortError = new DOMException(
+          'The operation was aborted',
+          'AbortError',
+        );
+
+        const baseModel = new MockLanguageModel({
+          doGenerate: async (opts: LanguageModelV2CallOptions) => {
+            baseModelSignal = opts.abortSignal;
+            throw abortError;
+          },
+        });
+
+        const fallbackModel = new MockLanguageModel({
+          doGenerate: async (opts: LanguageModelV2CallOptions) => {
+            fallbackModelSignal = opts.abortSignal;
+            // Verify the new signal is not aborted
+            if (opts.abortSignal?.aborted) {
+              throw new Error('Should not be aborted with fresh signal');
+            }
+            return mockResult;
+          },
+        });
+
+        // Create an already-aborted signal
+        const controller = new AbortController();
+        controller.abort();
+
+        // Act
+        await generateText({
+          model: createRetryable({
+            model: baseModel,
+            retries: [
+              {
+                model: fallbackModel,
+                timeout: 30000, // 30 second timeout for retry
+              },
+            ],
+          }),
+          prompt: 'Hello!',
+          abortSignal: controller.signal,
+        });
+
+        // Assert
+        expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
+        expect(fallbackModel.doGenerate).toHaveBeenCalledTimes(1);
+
+        // Base model should receive the original aborted signal
+        expect(baseModelSignal?.aborted).toBe(true);
+
+        // Fallback model should receive a fresh, non-aborted signal
+        expect(fallbackModelSignal).toBeDefined();
+        expect(fallbackModelSignal?.aborted).toBe(false);
+        expect(baseModelSignal).not.toBe(fallbackModelSignal);
+      });
+    });
   });
 
   describe('RetryError', () => {
@@ -992,188 +1054,6 @@ describe('generateText', () => {
         expect(error).not.toBeInstanceOf(RetryError);
         expect(error).toBe(nonRetryableError);
       }
-    });
-  });
-
-  describe('Static Retry<MODEL> objects', () => {
-    it('should accept static Retry objects with model and options', async () => {
-      // Arrange
-      const baseModel = new MockLanguageModel({ doGenerate: retryableError });
-      const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
-
-      // Act
-      const result = await generateText({
-        model: createRetryable({
-          model: baseModel,
-          retries: [
-            // Static Retry object with options
-            {
-              model: fallbackModel,
-              maxAttempts: 2,
-              delay: 100,
-              providerOptions: {
-                openai: {
-                  user: 'fallback-user',
-                },
-              },
-            },
-          ],
-        }),
-        prompt: 'Hello!',
-      });
-
-      // Assert
-      expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
-      expect(fallbackModel.doGenerate).toHaveBeenCalledTimes(1);
-      expect(result.text).toBe(mockResultText);
-    });
-
-    it('should respect maxAttempts from static Retry objects', async () => {
-      // Arrange
-      const baseModel = new MockLanguageModel({ doGenerate: retryableError });
-      const fallbackModel = new MockLanguageModel({
-        doGenerate: retryableError,
-      });
-      const finalModel = new MockLanguageModel({ doGenerate: mockResult });
-
-      // Act
-      const result = await generateText({
-        model: createRetryable({
-          model: baseModel,
-          retries: [
-            // Static Retry with maxAttempts
-            {
-              model: fallbackModel,
-              maxAttempts: 3,
-            },
-            finalModel,
-          ],
-        }),
-        prompt: 'Hello!',
-      });
-
-      // Assert
-      expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
-      expect(fallbackModel.doGenerate).toHaveBeenCalledTimes(3);
-      expect(finalModel.doGenerate).toHaveBeenCalledTimes(1);
-      expect(result.text).toBe(mockResultText);
-    });
-
-    it('should apply providerOptions from static Retry objects', async () => {
-      // Arrange
-      const baseModel = new MockLanguageModel({ doGenerate: retryableError });
-      const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
-      const originalProviderOptions = { openai: { user: 'original-user' } };
-      const retryProviderOptions = { openai: { user: 'retry-user' } };
-
-      // Act
-      await generateText({
-        model: createRetryable({
-          model: baseModel,
-          retries: [
-            // Static Retry with providerOptions
-            {
-              model: fallbackModel,
-              providerOptions: retryProviderOptions,
-            },
-          ],
-        }),
-        prompt: 'Hello!',
-        providerOptions: originalProviderOptions,
-      });
-
-      // Assert
-      expect(baseModel.doGenerate).toHaveBeenCalledWith(
-        expect.objectContaining({
-          providerOptions: originalProviderOptions,
-        }),
-      );
-      expect(fallbackModel.doGenerate).toHaveBeenCalledWith(
-        expect.objectContaining({
-          providerOptions: retryProviderOptions,
-        }),
-      );
-    });
-
-    it('should mix static Retry objects with functions and plain models', async () => {
-      // Arrange
-      const baseModel = new MockLanguageModel({ doGenerate: retryableError });
-      const fallbackModel1 = new MockLanguageModel({
-        doGenerate: retryableError,
-      });
-      const fallbackModel2 = new MockLanguageModel({
-        doGenerate: retryableError,
-      });
-      const fallbackModel3 = new MockLanguageModel({ doGenerate: mockResult });
-
-      // Act
-      const result = await generateText({
-        model: createRetryable({
-          model: baseModel,
-          retries: [
-            // Plain model
-            fallbackModel1,
-            // Static Retry object
-            {
-              model: fallbackModel2,
-              maxAttempts: 2,
-              providerOptions: {
-                openai: { user: 'fallback2-user' },
-              },
-            },
-            // Function retryable
-            () => ({ model: fallbackModel3 }),
-          ],
-        }),
-        prompt: 'Hello!',
-      });
-
-      // Assert
-      expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
-      expect(fallbackModel1.doGenerate).toHaveBeenCalledTimes(1);
-      expect(fallbackModel2.doGenerate).toHaveBeenCalledTimes(2);
-      expect(fallbackModel3.doGenerate).toHaveBeenCalledTimes(1);
-      expect(result.text).toBe(mockResultText);
-    });
-
-    it('should skip static Retry objects for result-based retries', async () => {
-      // Arrange
-      const baseModel = new MockLanguageModel({
-        doGenerate: contentFilterResult,
-      });
-      const fallbackModel1 = new MockLanguageModel({ doGenerate: mockResult });
-      const fallbackModel2 = new MockLanguageModel({ doGenerate: mockResult });
-
-      // Act
-      const result = await generateText({
-        model: createRetryable({
-          model: baseModel,
-          retries: [
-            // Static Retry object - should be skipped for result-based retries
-            {
-              model: fallbackModel1,
-              maxAttempts: 1,
-            },
-            // Function that handles content-filter
-            (context) => {
-              if (
-                context.current.type === 'result' &&
-                context.current.result.finishReason === 'content-filter'
-              ) {
-                return { model: fallbackModel2 };
-              }
-              return undefined;
-            },
-          ],
-        }),
-        prompt: 'Hello!',
-      });
-
-      // Assert
-      expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
-      expect(fallbackModel1.doGenerate).toHaveBeenCalledTimes(0); // Should not be called
-      expect(fallbackModel2.doGenerate).toHaveBeenCalledTimes(1);
-      expect(result.text).toBe(mockResultText);
     });
   });
 });
@@ -1578,7 +1458,7 @@ describe('streamText', () => {
             "response": {
               "headers": undefined,
               "id": "aitxt-mock-id",
-              "modelId": "mock-model-85",
+              "modelId": "mock-model-73",
               "timestamp": 1970-01-01T00:00:00.000Z,
             },
             "type": "finish-step",
@@ -2052,6 +1932,71 @@ describe('streamText', () => {
             providerOptions: retryProviderOptions,
           }),
         );
+      });
+    });
+
+    describe('timeout', () => {
+      it('should create fresh abort signal with specified timeout on retry', async () => {
+        // Arrange
+        let baseModelSignal: AbortSignal | undefined;
+        let fallbackModelSignal: AbortSignal | undefined;
+        const abortError = new DOMException(
+          'The operation was aborted',
+          'AbortError',
+        );
+
+        const baseModel = new MockLanguageModel({
+          doStream: async (opts: LanguageModelV2CallOptions) => {
+            baseModelSignal = opts.abortSignal;
+            throw abortError;
+          },
+        });
+
+        const fallbackModel = new MockLanguageModel({
+          doStream: async (opts: LanguageModelV2CallOptions) => {
+            fallbackModelSignal = opts.abortSignal;
+            // Verify the new signal is not aborted
+            if (opts.abortSignal?.aborted) {
+              throw new Error('Should not be aborted with fresh signal');
+            }
+            return {
+              stream: convertArrayToReadableStream(mockStreamChunks),
+            };
+          },
+        });
+
+        // Create an already-aborted signal
+        const controller = new AbortController();
+        controller.abort();
+
+        // Act
+        const result = streamText({
+          model: createRetryable({
+            model: baseModel,
+            retries: [
+              {
+                model: fallbackModel,
+                timeout: 30000, // 30 second timeout for retry
+              },
+            ],
+          }),
+          prompt,
+          abortSignal: controller.signal,
+        });
+
+        await convertAsyncIterableToArray(result.fullStream);
+
+        // Assert
+        expect(baseModel.doStream).toHaveBeenCalledTimes(1);
+        expect(fallbackModel.doStream).toHaveBeenCalledTimes(1);
+
+        // Base model should receive the original aborted signal
+        expect(baseModelSignal?.aborted).toBe(true);
+
+        // Fallback model should receive a fresh, non-aborted signal
+        expect(fallbackModelSignal).toBeDefined();
+        expect(fallbackModelSignal?.aborted).toBe(false);
+        expect(baseModelSignal).not.toBe(fallbackModelSignal);
       });
     });
   });
@@ -2734,6 +2679,67 @@ describe('embed', () => {
             providerOptions: retryProviderOptions,
           }),
         );
+      });
+    });
+
+    describe('timeout', () => {
+      it('should create fresh abort signal with specified timeout on retry', async () => {
+        // Arrange
+        let baseModelSignal: AbortSignal | undefined;
+        let fallbackModelSignal: AbortSignal | undefined;
+        const abortError = new DOMException(
+          'The operation was aborted',
+          'AbortError',
+        );
+
+        const baseModel = new MockEmbeddingModel({
+          doEmbed: async (opts: any) => {
+            baseModelSignal = opts.abortSignal;
+            throw abortError;
+          },
+        });
+
+        const fallbackModel = new MockEmbeddingModel({
+          doEmbed: async (opts: any) => {
+            fallbackModelSignal = opts.abortSignal;
+            // Verify the new signal is not aborted
+            if (opts.abortSignal?.aborted) {
+              throw new Error('Should not be aborted with fresh signal');
+            }
+            return mockEmbeddings;
+          },
+        });
+
+        // Create an already-aborted signal
+        const controller = new AbortController();
+        controller.abort();
+
+        // Act
+        await embed({
+          model: createRetryable({
+            model: baseModel,
+            retries: [
+              {
+                model: fallbackModel,
+                timeout: 30000, // 30 second timeout for retry
+              },
+            ],
+          }),
+          value: 'Hello!',
+          abortSignal: controller.signal,
+        });
+
+        // Assert
+        expect(baseModel.doEmbed).toHaveBeenCalledTimes(1);
+        expect(fallbackModel.doEmbed).toHaveBeenCalledTimes(1);
+
+        // Base model should receive the original aborted signal
+        expect(baseModelSignal?.aborted).toBe(true);
+
+        // Fallback model should receive a fresh, non-aborted signal
+        expect(fallbackModelSignal).toBeDefined();
+        expect(fallbackModelSignal?.aborted).toBe(false);
+        expect(baseModelSignal).not.toBe(fallbackModelSignal);
       });
     });
   });

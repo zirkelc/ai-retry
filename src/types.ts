@@ -72,6 +72,7 @@ export type Retry<MODEL extends LanguageModelV2 | EmbeddingModelV2> = {
   delay?: number;
   backoffFactor?: number;
   providerOptions?: ProviderOptions;
+  timeout?: number;
 };
 
 /**

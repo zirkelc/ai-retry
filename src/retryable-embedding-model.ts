@@ -184,10 +184,13 @@ export class RetryableEmbeddingModel<VALUE> implements EmbeddingModelV2<VALUE> {
     const { result } = await this.withRetry({
       fn: async (currentRetry) => {
         // Apply retry configuration if available
-        const callOptions = {
+        const callOptions: EmbeddingModelV2CallOptions<VALUE> = {
           ...options,
           providerOptions:
             currentRetry?.providerOptions ?? options.providerOptions,
+          abortSignal: currentRetry?.timeout
+            ? AbortSignal.timeout(currentRetry.timeout)
+            : options.abortSignal,
         };
         return this.currentModel.doEmbed(callOptions);
       },

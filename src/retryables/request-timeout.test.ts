@@ -182,6 +182,115 @@ describe('requestTimeout', () => {
       expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
       expect(retryModel.doGenerate).toHaveBeenCalledTimes(0);
     });
+
+    it('should use fresh abort signal on retry (fix for abort signal reuse bug)', async () => {
+      // Arrange
+      let baseModelSignal: AbortSignal | undefined;
+      let retryModelSignal: AbortSignal | undefined;
+
+      // Base model that captures the abort signal and respects it
+      const baseModel = new MockLanguageModel({
+        doGenerate: (async (opts: LanguageModelV2CallOptions) => {
+          baseModelSignal = opts.abortSignal;
+          if (opts.abortSignal?.aborted) {
+            throw new DOMException('The operation was aborted', 'AbortError');
+          }
+          return new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => resolve(mockResult), 5000);
+            opts.abortSignal?.addEventListener('abort', () => {
+              clearTimeout(timeout);
+              reject(
+                new DOMException('The operation was aborted', 'AbortError'),
+              );
+            });
+          });
+        }) as LanguageModelV2GenerateFn,
+      });
+
+      // Retry model that captures its signal and verifies it's not aborted
+      const retryModel = new MockLanguageModel({
+        doGenerate: (async (opts: LanguageModelV2CallOptions) => {
+          retryModelSignal = opts.abortSignal;
+          // This should NOT be aborted since we get a fresh signal with the fix
+          if (opts.abortSignal?.aborted) {
+            throw new DOMException(
+              'Retry failed: signal already aborted',
+              'AbortError',
+            );
+          }
+          return mockResult;
+        }) as LanguageModelV2GenerateFn,
+      });
+
+      // Act
+      const result = await generateText({
+        model: createRetryable({
+          model: baseModel,
+          retries: [requestTimeout(retryModel)], // Uses default 60s timeout
+        }),
+        prompt: 'Hello!',
+        maxRetries: 0,
+        abortSignal: AbortSignal.timeout(100), // Original times out after 100ms
+      });
+
+      // Assert
+      expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
+      expect(retryModel.doGenerate).toHaveBeenCalledTimes(1);
+      expect(result.text).toBe(mockResultText);
+
+      // Verify the signals are different
+      expect(baseModelSignal).toBeDefined();
+      expect(retryModelSignal).toBeDefined();
+      expect(baseModelSignal).not.toBe(retryModelSignal);
+
+      // The original signal should be aborted, the new one should not be
+      expect(baseModelSignal?.aborted).toBe(true);
+      expect(retryModelSignal?.aborted).toBe(false);
+    });
+
+    it('should use custom timeout on retry when specified', async () => {
+      // Arrange
+      const customTimeout = 30000; // 30 seconds
+      let retryModelSignal: AbortSignal | undefined;
+
+      const baseModel = new MockLanguageModel({
+        doGenerate: timeoutError as LanguageModelV2GenerateFn,
+      });
+
+      const retryModel = new MockLanguageModel({
+        doGenerate: (async (opts: LanguageModelV2CallOptions) => {
+          retryModelSignal = opts.abortSignal;
+          // Verify signal is not aborted
+          if (opts.abortSignal?.aborted) {
+            throw new DOMException(
+              'Should not be aborted initially',
+              'AbortError',
+            );
+          }
+          return mockResult;
+        }) as LanguageModelV2GenerateFn,
+      });
+
+      // Act
+      const result = await generateText({
+        model: createRetryable({
+          model: baseModel,
+          retries: [requestTimeout(retryModel, { timeout: customTimeout })],
+        }),
+        prompt: 'Hello!',
+        maxRetries: 0,
+        abortSignal: AbortSignal.timeout(100),
+      });
+
+      // Assert
+      expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
+      expect(retryModel.doGenerate).toHaveBeenCalledTimes(1);
+      expect(result.text).toBe(mockResultText);
+
+      // Verify retry got a fresh signal
+      expect(retryModelSignal).toBeDefined();
+      expect(retryModelSignal?.aborted).toBe(false);
+    });
   });
 
   describe('streamText', () => {

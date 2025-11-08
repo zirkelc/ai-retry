@@ -283,20 +283,26 @@ Handle timeouts by switching to potentially faster models.
 > [!NOTE] 
 > You need to use an `abortSignal` with a timeout on your request. 
 
+When a request times out, the `requestTimeout` retryable will automatically create a fresh abort signal for the retry attempt. This prevents the retry from immediately failing due to the already-aborted signal from the original request. If you do not provide a `timeout` value, a default of 60 seconds is used for the retry attempt.
+
 ```typescript
 import { requestTimeout } from 'ai-retry/retryables';
 
 const retryableModel = createRetryable({
   model: azure('gpt-4'),
   retries: [
-    requestTimeout(azure('gpt-4-mini')), // Use faster model on timeout
+    // Defaults to 60 seconds timeout for the retry attempt
+    requestTimeout(azure('gpt-4-mini')), 
+    
+    // Or specify a custom timeout for the retry attempt
+    requestTimeout(azure('gpt-4-mini'), { timeout: 30_000 }),
   ],
 });
 
 const result = await generateText({
   model: retryableModel,
   prompt: 'Write a vegetarian lasagna recipe for 4 people.',
-  abortSignal: AbortSignal.timeout(60_000), 
+  abortSignal: AbortSignal.timeout(60_000), // Original request timeout
 });
 ```
 
@@ -351,10 +357,10 @@ const retryableModel = createRetryable({
   model: openai('gpt-4'), // Base model
   retries: [
     // Retry base model 3 times with fixed 2s delay
-    retryAfterDelay({ delay: 2000, maxAttempts: 3 }),
+    retryAfterDelay({ delay: 2_000, maxAttempts: 3 }),
 
     // Or retry with exponential backoff (2s, 4s, 8s)
-    retryAfterDelay({ delay: 2000, backoffFactor: 2, maxAttempts: 3 }),
+    retryAfterDelay({ delay: 2_000, backoffFactor: 2, maxAttempts: 3 }),
 
     // Or retry only if the response contains a retry-after header
     retryAfterDelay({ maxAttempts: 3 }),
@@ -375,10 +381,10 @@ const retryableModel = createRetryable({
   model: openai('gpt-4'),
   retries: [
     // Retry model 3 times with fixed 2s delay
-    { model: openai('gpt-4'), delay: 2000, maxAttempts: 3 },
+    { model: openai('gpt-4'), delay: 2_000, maxAttempts: 3 },
 
     // Or retry with exponential backoff (2s, 4s, 8s)
-    { model: openai('gpt-4'), delay: 2000, backoffFactor: 2, maxAttempts: 3 },
+    { model: openai('gpt-4'), delay: 2_000, backoffFactor: 2, maxAttempts: 3 },
   ],
 });
 
@@ -401,6 +407,30 @@ const retryableModel = createRetryable({
     // Wait 5 seconds before retrying on service overload
     serviceOverloaded(openai('gpt-4'), { maxAttempts: 3, delay: 5_000 }),
   ],
+});
+```
+#### Timeouts
+
+When a retry specifies a `timeout` value, a fresh `AbortSignal.timeout()` is created for that retry attempt, replacing any existing abort signal. This is essential when retrying after timeout errors, as the original abort signal would already be in an aborted state.
+
+```typescript
+const retryableModel = createRetryable({
+  model: openai('gpt-4'),
+  retries: [
+    // Provide a fresh 30 second timeout for the retry
+    { 
+      model: openai('gpt-3.5-turbo'), 
+      timeout: 30_000 
+    },
+  ],
+});
+
+// Even if the original request times out, the retry gets a fresh signal
+const result = await generateText({
+  model: retryableModel,
+  prompt: 'Write a story',
+  // Original request timeout
+  abortSignal: AbortSignal.timeout(60_000), 
 });
 ```
 
@@ -517,7 +547,7 @@ type Retryable = (
 
 #### `Retry`
 
-A `Retry` specifies the model to retry and optional settings like `maxAttempts`, `delay`, `backoffFactor`, and `providerOptions`.
+A `Retry` specifies the model to retry and optional settings like `maxAttempts`, `delay`, `backoffFactor`, `timeout`, and `providerOptions`.
 
 ```typescript
 interface Retry {
@@ -525,6 +555,7 @@ interface Retry {
   maxAttempts?: number;      // Maximum retry attempts per model (default: 1)
   delay?: number;            // Delay in milliseconds before retrying
   backoffFactor?: number;    // Multiplier for exponential backoff
+  timeout?: number;          // Timeout in milliseconds for the retry attempt
   providerOptions?: ProviderOptions; // Provider-specific options for the retry
 }
 ```
@@ -534,6 +565,7 @@ interface Retry {
 - `maxAttempts`: Maximum number of times this model can be retried. Default is 1.
 - `delay`: Delay in milliseconds to wait before retrying. The delay respects abort signals from the request.
 - `backoffFactor`: Multiplier for exponential backoff (`delay × backoffFactor^attempt`). If not provided, uses fixed delay.
+- `timeout`: Timeout in milliseconds for creating a fresh `AbortSignal.timeout()` for the retry attempt. This replaces any existing abort signal.
 - `providerOptions`: Provider-specific options that override the original request's provider options during retry attempts.
 
 #### `RetryContext`
