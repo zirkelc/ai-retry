@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/zirkelc/ai-retry/compare/v0.7.0...v0.8.0) (2025-11-08)
+
+
+### Features
+
+* support timeouts in retry attempts ([7c45eda](https://github.com/zirkelc/ai-retry/commit/7c45edafc19be0c3158e128abe7ded5bb6a8308e))
+
 ## [0.7.0](https://github.com/zirkelc/ai-retry/compare/v0.6.0...v0.7.0) (2025-10-25)
 
 
