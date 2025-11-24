@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.0](https://github.com/zirkelc/ai-retry/compare/v0.8.0...v0.9.0) (2025-11-24)
+
+
+### Features
+
+* add service unavailable retryable ([983774b](https://github.com/zirkelc/ai-retry/commit/983774b1337626689e02e2bf80044dd7361a36b3))
+
 ## [0.8.0](https://github.com/zirkelc/ai-retry/compare/v0.7.0...v0.8.0) (2025-11-08)
 
 
