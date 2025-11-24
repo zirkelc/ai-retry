@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.0](https://github.com/zirkelc/ai-retry/compare/v0.9.0...v0.10.0) (2025-11-24)
+
+
+### Features
+
+* disable retries ([5386801](https://github.com/zirkelc/ai-retry/commit/5386801b4545eb7439b9025546bfee4f63c1476e))
+
 ## [0.9.0](https://github.com/zirkelc/ai-retry/compare/v0.8.0...v0.9.0) (2025-11-24)
 
 
