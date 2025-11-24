@@ -45,6 +45,19 @@ export class RetryableLanguageModel implements LanguageModelV2 {
   }
 
   /**
+   * Check if retries are disabled
+   */
+  private isDisabled(): boolean {
+    if (this.options.disabled === undefined) {
+      return false;
+    }
+
+    return typeof this.options.disabled === 'function'
+      ? this.options.disabled()
+      : this.options.disabled;
+  }
+
+  /**
    * Execute a function with retry logic for handling errors
    */
   private async withRetry<
@@ -252,6 +265,13 @@ export class RetryableLanguageModel implements LanguageModelV2 {
      */
     this.currentModel = this.baseModel;
 
+    /**
+     * If retries are disabled, bypass retry machinery entirely
+     */
+    if (this.isDisabled()) {
+      return this.currentModel.doGenerate(options);
+    }
+
     const { result } = await this.withRetry({
       fn: async (currentRetry) => {
         // Apply retry configuration if available
@@ -278,6 +298,13 @@ export class RetryableLanguageModel implements LanguageModelV2 {
      * Always start with the original model
      */
     this.currentModel = this.baseModel;
+
+    /**
+     * If retries are disabled, bypass retry machinery entirely
+     */
+    if (this.isDisabled()) {
+      return this.currentModel.doStream(options);
+    }
 
     /**
      * Perform the initial call to doStream with retry logic to handle errors before any data is streamed.

@@ -391,6 +391,32 @@ By default, if a [`retry-after-ms`](https://learn.microsoft.com/en-us/azure/ai-f
 
 ### Options
 
+#### Disabling Retries
+
+You can disable retries entirely, which is useful for testing or specific environments. When disabled, the base model will execute directly without any retry logic.
+
+```typescript
+const retryableModel = createRetryable({
+  model: openai('gpt-4'), // Base model
+  retries: [/* ... */],
+  disabled: true, // Retries are completely disabled
+});
+
+// Or disable based on environment
+const retryableModel = createRetryable({
+  model: openai('gpt-4'), // Base model
+  retries: [/* ... */],
+  disabled: process.env.NODE_ENV === 'test', // Disable in test environment
+});
+
+// Or use a function for dynamic control
+const retryableModel = createRetryable({
+  model: openai('gpt-4'), // Base model
+  retries: [/* ... */],
+  disabled: () => !featureFlags.isEnabled('ai-retries'), // Check feature flag
+});
+```
+
 #### Retry Delays
 
 You can delay retries with an optional exponential backoff. The delay respects abort signals, so requests can still be cancelled during the delay period.
@@ -548,10 +574,18 @@ Creates a retryable model that works with both language models and embedding mod
 interface RetryableModelOptions<MODEL extends LanguageModelV2 | EmbeddingModelV2> {
   model: MODEL;
   retries: Array<Retryable<MODEL> | MODEL>;
+  disabled?: boolean | (() => boolean);
   onError?: (context: RetryContext<MODEL>) => void;
   onRetry?: (context: RetryContext<MODEL>) => void;
 }
 ```
+
+**Options:**
+- `model`: The base model to use for the initial request.
+- `retries`: Array of retryables (functions, models, or retry objects) to attempt on failure.
+- `disabled`: Disable all retry logic. Can be a boolean or function returning boolean. Default: `false` (retries enabled).
+- `onError`: Callback invoked when an error occurs.
+- `onRetry`: Callback invoked before attempting a retry.
 
 #### `Retryable`
 

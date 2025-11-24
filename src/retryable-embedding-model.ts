@@ -42,6 +42,19 @@ export class RetryableEmbeddingModel<VALUE> implements EmbeddingModelV2<VALUE> {
   }
 
   /**
+   * Check if retries are disabled
+   */
+  private isDisabled(): boolean {
+    if (this.options.disabled === undefined) {
+      return false;
+    }
+
+    return typeof this.options.disabled === 'function'
+      ? this.options.disabled()
+      : this.options.disabled;
+  }
+
+  /**
    * Execute a function with retry logic for handling errors
    */
   private async withRetry<RESULT extends EmbeddingModelV2Embed<VALUE>>(input: {
@@ -180,6 +193,13 @@ export class RetryableEmbeddingModel<VALUE> implements EmbeddingModelV2<VALUE> {
      * Always start with the original model
      */
     this.currentModel = this.baseModel;
+
+    /**
+     * If retries are disabled, bypass retry machinery entirely
+     */
+    if (this.isDisabled()) {
+      return this.currentModel.doEmbed(options);
+    }
 
     const { result } = await this.withRetry({
       fn: async (currentRetry) => {
