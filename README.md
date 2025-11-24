@@ -251,12 +251,16 @@ Errors are tracked per unique model (provider + modelId). That means on the firs
 
 There are several built-in dynamic retryables available for common use cases:
 
+> [!TIP]
+> You are missing a retryable for your use case? [Open an issue](https://github.com/zirkelc/ai-retry/issues/new) and let's discuss it!
+
 - [`contentFilterTriggered`](./src/retryables/content-filter-triggered.ts): Content filter was triggered based on the prompt or completion.
 - [`requestTimeout`](./src/retryables/request-timeout.ts): Request timeout occurred.
 - [`requestNotRetryable`](./src/retryables/request-not-retryable.ts): Request failed with a non-retryable error.
 - [`retryAfterDelay`](./src/retryables/retry-after-delay.ts): Retry with delay and exponential backoff and respect `retry-after` headers.
 - [`serviceOverloaded`](./src/retryables/service-overloaded.ts): Response with status code 529 (service overloaded).
   - Use this retryable to handle Anthropic's overloaded errors.
+- [`serviceUnavailable`](./src/retryables/service-unavailable.ts): Response with status code 503 (service unavailable).
 
 #### Content Filter
 
@@ -320,6 +324,21 @@ const retryableModel = createRetryable({
   model: azure('gpt-4'),
   retries: [
     serviceOverloaded(openai('gpt-4')), // Switch to OpenAI if Azure is overloaded
+  ],
+});
+```
+
+#### Service Unavailable
+
+Handle service unavailable errors (status code 503) by switching to a different provider.
+
+```typescript
+import { serviceUnavailable } from 'ai-retry/retryables';
+
+const retryableModel = createRetryable({
+  model: azure('gpt-4'),
+  retries: [
+    serviceUnavailable(openai('gpt-4')), // Switch to OpenAI if Azure is unavailable
   ],
 });
 ```
