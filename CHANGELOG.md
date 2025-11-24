@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.1](https://github.com/zirkelc/ai-retry/compare/v0.10.0...v0.10.1) (2025-11-24)
+
+
+### Bug Fixes
+
+* missing types ([24bf204](https://github.com/zirkelc/ai-retry/commit/24bf204489ee4e0d6d1db324ccca4bf6ab7a385f))
+
 ## [0.10.0](https://github.com/zirkelc/ai-retry/compare/v0.9.0...v0.10.0) (2025-11-24)
 
 
