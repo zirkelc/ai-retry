@@ -16,6 +16,7 @@ export interface RetryableModelOptions<
 > {
   model: MODEL;
   retries: Retries<MODEL>;
+  disabled?: boolean | (() => boolean);
   onError?: (context: RetryContext<MODEL>) => void;
   onRetry?: (context: RetryContext<MODEL>) => void;
 }
