@@ -30,4 +30,14 @@ jobs:
       - run: pnpm install
       - run: pnpm build
       - run: pnpm test
-      - run: pnpm publish --provenance --no-git-checks
+      - name: Publish to npm
+        run: |
+          # Check if this is a prerelease (beta)
+          VERSION=$(node -p "require('./package.json').version")
+          if [[ "$VERSION" == *"-beta."* ]]; then
+            echo "Publishing beta version: $VERSION"
+            pnpm publish --provenance --no-git-checks --tag beta
+          else
+            echo "Publishing stable version: $VERSION"
+            pnpm publish --provenance --no-git-checks
+          fi
