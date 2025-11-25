@@ -28,9 +28,6 @@ Install the beta version of `ai-retry` to support AI SDK v6.
 npm install ai-retry@beta
 ```
 
-#### AI SDK v6 
-
-
 ### Usage
 
 Create a retryable model by providing a base model and a list of retryables or fallback models.
