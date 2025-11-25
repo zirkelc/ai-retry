@@ -1,8 +1,3 @@
-import type {
-  LanguageModelV2,
-  LanguageModelV2CallOptions,
-  LanguageModelV2StreamPart,
-} from '@ai-sdk/provider';
 import {
   convertArrayToReadableStream,
   convertAsyncIterableToArray,
@@ -17,34 +12,35 @@ import {
   mockStreamOptions,
 } from './test-utils.js';
 import type {
-  EmbeddingModelV2,
-  LanguageModelV2Generate,
+  EmbeddingModel,
+  LanguageModel,
+  LanguageModelCallOptions,
+  LanguageModelGenerate,
+  LanguageModelStreamPart,
   Retryable,
   RetryableModelOptions,
 } from './types.js';
 import { isErrorAttempt, isResultAttempt } from './utils.js';
 
 type OnError = Required<
-  | RetryableModelOptions<LanguageModelV2>
-  | RetryableModelOptions<EmbeddingModelV2<any>>
+  RetryableModelOptions<LanguageModel> | RetryableModelOptions<EmbeddingModel>
 >['onError'];
 type OnRetry = Required<
-  | RetryableModelOptions<LanguageModelV2>
-  | RetryableModelOptions<EmbeddingModelV2<any>>
+  RetryableModelOptions<LanguageModel> | RetryableModelOptions<EmbeddingModel>
 >['onRetry'];
 
 const prompt = 'Hello!';
 
 const mockResultText = 'Hello, world!';
 
-const mockResult: LanguageModelV2Generate = {
+const mockResult: LanguageModelGenerate = {
   finishReason: 'stop',
   usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
   content: [{ type: 'text', text: mockResultText }],
   warnings: [],
 };
 
-const contentFilterResult: LanguageModelV2Generate = {
+const contentFilterResult: LanguageModelGenerate = {
   finishReason: 'content-filter',
   usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
   content: [],
@@ -59,7 +55,7 @@ const testUsage = {
   cachedInputTokens: undefined,
 };
 
-const mockStreamChunks: LanguageModelV2StreamPart[] = [
+const mockStreamChunks: LanguageModelStreamPart[] = [
   {
     type: 'stream-start',
     warnings: [],
@@ -153,7 +149,7 @@ describe('generateText', () => {
         const baseModel = new MockLanguageModel({ doGenerate: retryableError });
         const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
 
-        const fallbackRetryable: Retryable<LanguageModelV2> = (context) => {
+        const fallbackRetryable: Retryable<LanguageModel> = (context) => {
           if (
             isErrorAttempt(context.current) &&
             APICallError.isInstance(context.current.error)
@@ -215,7 +211,7 @@ describe('generateText', () => {
           doGenerate: mockResult,
         });
 
-        const fallbackRetryable: Retryable<LanguageModelV2> = (context) => {
+        const fallbackRetryable: Retryable<LanguageModel> = (context) => {
           if (
             isErrorAttempt(context.current) &&
             APICallError.isInstance(context.current.error)
@@ -253,7 +249,7 @@ describe('generateText', () => {
           doGenerate: mockResult,
         });
 
-        const fallbackRetryable: Retryable<LanguageModelV2> = (context) => {
+        const fallbackRetryable: Retryable<LanguageModel> = (context) => {
           if (
             isErrorAttempt(context.current) &&
             APICallError.isInstance(context.current.error)
@@ -287,7 +283,7 @@ describe('generateText', () => {
           doGenerate: contentFilterResult,
         });
         const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
-        const fallbackRetryable: Retryable<LanguageModelV2> = (context) => {
+        const fallbackRetryable: Retryable<LanguageModel> = (context) => {
           if (
             isResultAttempt(context.current) &&
             context.current.result.finishReason === 'content-filter'
@@ -324,7 +320,7 @@ describe('generateText', () => {
           doGenerate: mockResult,
         });
 
-        const fallbackRetryable: Retryable<LanguageModelV2> = (context) => {
+        const fallbackRetryable: Retryable<LanguageModel> = (context) => {
           if (
             isResultAttempt(context.current) &&
             context.current.result.finishReason === 'content-filter'
@@ -365,7 +361,7 @@ describe('generateText', () => {
           doGenerate: mockResult,
         });
 
-        const fallbackRetryable: Retryable<LanguageModelV2> = (context) => {
+        const fallbackRetryable: Retryable<LanguageModel> = (context) => {
           if (
             isResultAttempt(context.current) &&
             context.current.result.finishReason === 'content-filter'
@@ -402,7 +398,7 @@ describe('generateText', () => {
       const baseModel = new MockLanguageModel({ doGenerate: retryableError });
       const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
 
-      const fallbackRetryable: Retryable<LanguageModelV2> = () => {
+      const fallbackRetryable: Retryable<LanguageModel> = () => {
         return { model: fallbackModel, maxAttempts: 1 };
       };
 
@@ -430,7 +426,7 @@ describe('generateText', () => {
       const baseModel = new MockLanguageModel({ doGenerate: retryableError });
       const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
 
-      const fallbackRetryable: Retryable<LanguageModelV2> = () => {
+      const fallbackRetryable: Retryable<LanguageModel> = () => {
         return { model: fallbackModel, maxAttempts: 1 };
       };
 
@@ -457,7 +453,7 @@ describe('generateText', () => {
       const baseModel = new MockLanguageModel({ doGenerate: retryableError });
       const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
 
-      const fallbackRetryable: Retryable<LanguageModelV2> = () => {
+      const fallbackRetryable: Retryable<LanguageModel> = () => {
         return { model: fallbackModel, maxAttempts: 1 };
       };
 
@@ -488,7 +484,7 @@ describe('generateText', () => {
       const baseModel = new MockLanguageModel({ doGenerate: retryableError });
       const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
 
-      const fallbackRetryable: Retryable<LanguageModelV2> = () => {
+      const fallbackRetryable: Retryable<LanguageModel> = () => {
         return { model: fallbackModel, maxAttempts: 1 };
       };
 
@@ -518,7 +514,7 @@ describe('generateText', () => {
       const baseModel = new MockLanguageModel({ doGenerate: retryableError });
       const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
 
-      const fallbackRetryable: Retryable<LanguageModelV2> = () => {
+      const fallbackRetryable: Retryable<LanguageModel> = () => {
         return { model: fallbackModel, maxAttempts: 1 };
       };
 
@@ -860,7 +856,7 @@ describe('generateText', () => {
           model: createRetryable({
             model: baseModel,
             retries: [
-              // Retryable<LanguageModelV2>  with different maxAttempts
+              // Retryable<LanguageModel>  with different maxAttempts
               { model: fallbackModel1, maxAttempts: 2 },
               async () => ({ model: fallbackModel2, maxAttempts: 3 }),
               finalModel,
@@ -1058,14 +1054,14 @@ describe('generateText', () => {
         );
 
         const baseModel = new MockLanguageModel({
-          doGenerate: async (opts: LanguageModelV2CallOptions) => {
+          doGenerate: async (opts: LanguageModelCallOptions) => {
             baseModelSignal = opts.abortSignal;
             throw abortError;
           },
         });
 
         const fallbackModel = new MockLanguageModel({
-          doGenerate: async (opts: LanguageModelV2CallOptions) => {
+          doGenerate: async (opts: LanguageModelCallOptions) => {
             fallbackModelSignal = opts.abortSignal;
             // Verify the new signal is not aborted
             if (opts.abortSignal?.aborted) {
@@ -1630,7 +1626,7 @@ describe('streamText', () => {
         },
       });
 
-      const fallbackRetryable: Retryable<LanguageModelV2> = () => {
+      const fallbackRetryable: Retryable<LanguageModel> = () => {
         return { model: fallbackModel, maxAttempts: 1 };
       };
 
@@ -1670,7 +1666,7 @@ describe('streamText', () => {
         },
       });
 
-      const fallbackRetryable: Retryable<LanguageModelV2> = () => {
+      const fallbackRetryable: Retryable<LanguageModel> = () => {
         return { model: fallbackModel, maxAttempts: 1 };
       };
 
@@ -1980,7 +1976,7 @@ describe('streamText', () => {
         const retryableModel = createRetryable({
           model: baseModel,
           retries: [
-            // Retryable<LanguageModelV2>  with different maxAttempts
+            // Retryable<LanguageModel>  with different maxAttempts
             { model: fallbackModel1, maxAttempts: 2 },
             async () => ({ model: fallbackModel2, maxAttempts: 3 }),
             finalModel,
@@ -2157,14 +2153,14 @@ describe('streamText', () => {
         );
 
         const baseModel = new MockLanguageModel({
-          doStream: async (opts: LanguageModelV2CallOptions) => {
+          doStream: async (opts: LanguageModelCallOptions) => {
             baseModelSignal = opts.abortSignal;
             throw abortError;
           },
         });
 
         const fallbackModel = new MockLanguageModel({
-          doStream: async (opts: LanguageModelV2CallOptions) => {
+          doStream: async (opts: LanguageModelCallOptions) => {
             fallbackModelSignal = opts.abortSignal;
             // Verify the new signal is not aborted
             if (opts.abortSignal?.aborted) {

@@ -1,5 +1,5 @@
 import { APICallError } from 'ai';
-import type { LanguageModelV2, Retryable, RetryableOptions } from '../types.js';
+import type { LanguageModel, Retryable, RetryableOptions } from '../types.js';
 import {
   isErrorAttempt,
   isObject,
@@ -10,7 +10,7 @@ import {
 /**
  * Fallback to a different model if the content filter was triggered.
  */
-export function contentFilterTriggered<MODEL extends LanguageModelV2>(
+export function contentFilterTriggered<MODEL extends LanguageModel>(
   model: MODEL,
   options?: RetryableOptions<MODEL>,
 ): Retryable<MODEL> {

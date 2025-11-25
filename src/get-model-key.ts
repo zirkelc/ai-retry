@@ -1,10 +1,8 @@
-import type { EmbeddingModelV2, LanguageModelV2 } from './types.js';
+import type { EmbeddingModel, LanguageModel } from './types.js';
 
 /**
- * Generate a unique key for a LanguageModelV2 instance.
+ * Generate a unique key for a LanguageModel instance.
  */
-export const getModelKey = (
-  model: LanguageModelV2 | EmbeddingModelV2,
-): string => {
+export const getModelKey = (model: LanguageModel | EmbeddingModel): string => {
   return `${model.provider}/${model.modelId}`;
 };

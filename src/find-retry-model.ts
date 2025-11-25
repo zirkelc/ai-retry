@@ -1,7 +1,7 @@
 import { getModelKey } from './get-model-key.js';
 import type {
-  EmbeddingModelV2,
-  LanguageModelV2,
+  EmbeddingModel,
+  LanguageModel,
   Retries,
   Retry,
   RetryContext,
@@ -12,7 +12,7 @@ import { isResultAttempt, isRetry } from './utils.js';
  * Find the next model to retry with based on the retry context
  */
 export async function findRetryModel<
-  MODEL extends LanguageModelV2 | EmbeddingModelV2,
+  MODEL extends LanguageModel | EmbeddingModel<any>,
 >(
   retries: Retries<MODEL>,
   context: RetryContext<MODEL>,

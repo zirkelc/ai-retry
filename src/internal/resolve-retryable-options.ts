@@ -1,9 +1,9 @@
 import type {
-  EmbeddingModelV2,
-  LanguageModelV2,
+  EmbeddingModel,
+  LanguageModel,
   RetryableOptions,
 } from '../types.js';
-import { isModelV2 } from '../utils.js';
+import { isModel } from '../utils.js';
 
 /**
  * Helper to resolve `RetryableOptions` from either a model and/or options object.
@@ -13,12 +13,12 @@ import { isModelV2 } from '../utils.js';
  * - `retryable(options)`
  */
 export function resolveRetryableOptions<
-  MODEL extends LanguageModelV2 | EmbeddingModelV2,
+  MODEL extends LanguageModel | EmbeddingModel,
 >(
   modelOrOptions: MODEL | RetryableOptions<MODEL>,
   options?: RetryableOptions<MODEL>,
 ): RetryableOptions<MODEL> & { model?: MODEL } {
-  if (isModelV2(modelOrOptions)) {
+  if (isModel(modelOrOptions)) {
     return {
       ...options,
       model: modelOrOptions,

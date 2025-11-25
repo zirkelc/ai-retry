@@ -39,18 +39,19 @@
     "url": "git+https://github.com/zirkelc/ai-retry.git"
   },
   "peerDependencies": {
-    "ai": "5.x"
+    "ai": "6.x"
   },
   "devDependencies": {
-    "@ai-sdk/anthropic": "^2.0.18",
-    "@ai-sdk/azure": "^2.0.30",
-    "@ai-sdk/groq": "^2.0.24",
-    "@ai-sdk/openai": "^2.0.53",
+    "@ai-sdk/anthropic": "3.0.0-beta.59",
+    "@ai-sdk/azure": "3.0.0-beta.68",
+    "@ai-sdk/groq": "3.0.0-beta.36",
+    "@ai-sdk/openai": "3.0.0-beta.66",
+    "@ai-sdk/test-server": "1.0.0-beta.0",
     "@arethetypeswrong/cli": "^0.18.2",
     "@biomejs/biome": "^2.2.4",
     "@total-typescript/tsconfig": "^1.0.4",
     "@types/node": "^24.3.3",
-    "ai": "^5.0.44",
+    "ai": "6.0.0-beta.116",
     "husky": "^9.1.7",
     "msw": "^2.11.2",
     "pkg-pr-new": "^0.0.60",
@@ -63,7 +64,7 @@
     "zod": "^4.1.8"
   },
   "dependencies": {
-    "@ai-sdk/provider": "^2.0.0",
-    "@ai-sdk/provider-utils": "^3.0.9"
+    "@ai-sdk/provider": "3.0.0-beta.17",
+    "@ai-sdk/provider-utils": "4.0.0-beta.34"
   }
 }

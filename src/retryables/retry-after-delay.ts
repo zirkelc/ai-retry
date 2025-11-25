@@ -1,8 +1,8 @@
 import { APICallError } from 'ai';
 import { parseRetryHeaders } from '../parse-retry-headers.js';
 import type {
-  EmbeddingModelV2,
-  LanguageModelV2,
+  EmbeddingModel,
+  LanguageModel,
   Retryable,
   RetryableOptions,
 } from '../types.js';
@@ -15,9 +15,9 @@ const MAX_RETRY_AFTER_MS = 60_000;
  * Uses the `Retry-After` or `Retry-After-Ms` headers if present.
  * Otherwise uses the specified `delay` and `backoffFactor` if provided.
  */
-export function retryAfterDelay<
-  MODEL extends LanguageModelV2 | EmbeddingModelV2,
->(options: RetryableOptions<MODEL>): Retryable<MODEL> {
+export function retryAfterDelay<MODEL extends LanguageModel | EmbeddingModel>(
+  options: RetryableOptions<MODEL>,
+): Retryable<MODEL> {
   return (context) => {
     const { current } = context;
 

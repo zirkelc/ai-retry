@@ -1,29 +1,29 @@
 import { RetryableEmbeddingModel } from './retryable-embedding-model.js';
 import { RetryableLanguageModel } from './retryable-language-model.js';
 import type {
-  EmbeddingModelV2,
-  LanguageModelV2,
+  EmbeddingModel,
+  LanguageModel,
   RetryableModelOptions,
 } from './types.js';
 
-export function createRetryable<MODEL extends LanguageModelV2>(
+export function createRetryable<MODEL extends LanguageModel>(
   options: RetryableModelOptions<MODEL>,
-): LanguageModelV2;
-export function createRetryable<MODEL extends EmbeddingModelV2>(
+): LanguageModel;
+export function createRetryable<MODEL extends EmbeddingModel>(
   options: RetryableModelOptions<MODEL>,
-): EmbeddingModelV2;
+): EmbeddingModel;
 export function createRetryable(
   options:
-    | RetryableModelOptions<LanguageModelV2>
-    | RetryableModelOptions<EmbeddingModelV2>,
-): LanguageModelV2 | EmbeddingModelV2 {
+    | RetryableModelOptions<LanguageModel>
+    | RetryableModelOptions<EmbeddingModel>,
+): LanguageModel | EmbeddingModel {
   if ('doEmbed' in options.model) {
     return new RetryableEmbeddingModel(
-      options as RetryableModelOptions<EmbeddingModelV2>,
+      options as RetryableModelOptions<EmbeddingModel>,
     );
   }
 
   return new RetryableLanguageModel(
-    options as RetryableModelOptions<LanguageModelV2>,
+    options as RetryableModelOptions<LanguageModel>,
   );
 }

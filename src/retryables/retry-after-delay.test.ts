@@ -1,4 +1,3 @@
-import type { LanguageModelV2StreamPart } from '@ai-sdk/provider';
 import {
   convertArrayToReadableStream,
   convertAsyncIterableToArray,
@@ -8,14 +7,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRetryable } from '../create-retryable-model.js';
 import {
   chunksToText,
-  type EmbeddingModelV2Embed,
+  type EmbeddingModelEmbed,
   MockEmbeddingModel,
   MockLanguageModel,
 } from '../test-utils.js';
 import type {
-  EmbeddingModelV2,
-  LanguageModelV2,
-  LanguageModelV2Generate,
+  EmbeddingModel,
+  LanguageModel,
+  LanguageModelGenerate,
+  LanguageModelStreamPart,
   Retryable,
 } from '../types.js';
 import { isErrorAttempt } from '../utils.js';
@@ -23,14 +23,14 @@ import { retryAfterDelay } from './retry-after-delay.js';
 
 const mockResultText = 'Hello, world!';
 
-const mockResult: LanguageModelV2Generate = {
+const mockResult: LanguageModelGenerate = {
   finishReason: 'stop',
   usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
   content: [{ type: 'text', text: mockResultText }],
   warnings: [],
 };
 
-const mockEmbeddings: EmbeddingModelV2Embed = {
+const mockEmbeddings: EmbeddingModelEmbed = {
   embeddings: [[0.1, 0.2, 0.3]],
   usage: { tokens: 5 },
 };
@@ -131,7 +131,7 @@ const genericRetryableError = new APICallError({
   },
 });
 
-const mockStreamChunks: LanguageModelV2StreamPart[] = [
+const mockStreamChunks: LanguageModelStreamPart[] = [
   {
     type: 'stream-start',
     warnings: [],
@@ -402,7 +402,7 @@ describe('retryAfterDelay', () => {
         },
       });
 
-      const fallbackOnError: Retryable<LanguageModelV2> = (context) => {
+      const fallbackOnError: Retryable<LanguageModel> = (context) => {
         if (
           isErrorAttempt(context.current) &&
           APICallError.isInstance(context.current.error)
@@ -507,7 +507,7 @@ describe('retryAfterDelay', () => {
         },
       });
 
-      const fallbackOnError: Retryable<LanguageModelV2> = (context) => {
+      const fallbackOnError: Retryable<LanguageModel> = (context) => {
         if (
           isErrorAttempt(context.current) &&
           APICallError.isInstance(context.current.error)
@@ -626,7 +626,7 @@ describe('retryAfterDelay', () => {
         },
       });
 
-      const fallbackOnError: Retryable<EmbeddingModelV2> = (context) => {
+      const fallbackOnError: Retryable<EmbeddingModel> = (context) => {
         if (
           isErrorAttempt(context.current) &&
           APICallError.isInstance(context.current.error)

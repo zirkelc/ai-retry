@@ -1,18 +1,25 @@
 import type {
-  EmbeddingModelV2 as AIEmbeddingModelV2,
-  LanguageModelV2,
+  EmbeddingModelV3 as AIEmbeddingModelV3,
+  LanguageModelV3,
+  LanguageModelV3CallOptions,
+  LanguageModelV3StreamPart,
 } from '@ai-sdk/provider';
 import type { ProviderOptions } from '@ai-sdk/provider-utils';
 
-export type EmbeddingModelV2<VALUE = any> = AIEmbeddingModelV2<VALUE>;
+export type EmbeddingModelV3<VALUE = any> = AIEmbeddingModelV3<VALUE>;
+export type { LanguageModelV3 };
 
-export type { LanguageModelV2 };
+export type EmbeddingModel<VALUE = any> = AIEmbeddingModelV3<VALUE>;
+export type LanguageModel = LanguageModelV3;
+
+export type LanguageModelCallOptions = LanguageModelV3CallOptions;
+export type LanguageModelStreamPart = LanguageModelV3StreamPart;
 
 /**
  * Options for creating a retryable model.
  */
 export interface RetryableModelOptions<
-  MODEL extends LanguageModelV2 | EmbeddingModelV2,
+  MODEL extends LanguageModel | EmbeddingModel<any>,
 > {
   model: MODEL;
   retries: Retries<MODEL>;
@@ -24,7 +31,7 @@ export interface RetryableModelOptions<
 /**
  * The context provided to Retryables with the current attempt and all previous attempts.
  */
-export type RetryContext<MODEL extends LanguageModelV2 | EmbeddingModelV2> = {
+export type RetryContext<MODEL extends LanguageModel | EmbeddingModel<any>> = {
   /**
    * Current attempt that caused the retry
    */
@@ -39,7 +46,7 @@ export type RetryContext<MODEL extends LanguageModelV2 | EmbeddingModelV2> = {
  * A retry attempt with an error
  */
 export type RetryErrorAttempt<
-  MODEL extends LanguageModelV2 | EmbeddingModelV2,
+  MODEL extends LanguageModel | EmbeddingModel<any>,
 > = {
   type: 'error';
   error: unknown;
@@ -52,22 +59,22 @@ export type RetryErrorAttempt<
  */
 export type RetryResultAttempt = {
   type: 'result';
-  result: LanguageModelV2Generate;
+  result: LanguageModelGenerate;
   error?: undefined;
-  model: LanguageModelV2;
+  model: LanguageModel;
 };
 
 /**
  * A retry attempt with either an error or a result and the model used
  */
-export type RetryAttempt<MODEL extends LanguageModelV2 | EmbeddingModelV2> =
+export type RetryAttempt<MODEL extends LanguageModel | EmbeddingModel<any>> =
   | RetryErrorAttempt<MODEL>
   | RetryResultAttempt;
 
 /**
  * A model to retry with and the maximum number of attempts for that model.
  */
-export type Retry<MODEL extends LanguageModelV2 | EmbeddingModelV2> = {
+export type Retry<MODEL extends LanguageModel | EmbeddingModel<any>> = {
   model: MODEL;
   maxAttempts?: number;
   delay?: number;
@@ -79,29 +86,30 @@ export type Retry<MODEL extends LanguageModelV2 | EmbeddingModelV2> = {
 /**
  * A function that determines whether to retry with a different model based on the current attempt and all previous attempts.
  */
-export type Retryable<MODEL extends LanguageModelV2 | EmbeddingModelV2> = (
+export type Retryable<MODEL extends LanguageModel | EmbeddingModel<any>> = (
   context: RetryContext<MODEL>,
 ) => Retry<MODEL> | Promise<Retry<MODEL>> | undefined;
 
-export type Retries<MODEL extends LanguageModelV2 | EmbeddingModelV2> = Array<
+export type Retries<MODEL extends LanguageModel | EmbeddingModel<any>> = Array<
   Retryable<MODEL> | Retry<MODEL> | MODEL
 >;
 
-export type RetryableOptions<MODEL extends LanguageModelV2 | EmbeddingModelV2> =
-  Partial<Omit<Retry<MODEL>, 'model'>>;
+export type RetryableOptions<
+  MODEL extends LanguageModel | EmbeddingModel<any>,
+> = Partial<Omit<Retry<MODEL>, 'model'>>;
 
-export type LanguageModelV2Generate = Awaited<
-  ReturnType<LanguageModelV2['doGenerate']>
+export type LanguageModelGenerate = Awaited<
+  ReturnType<LanguageModel['doGenerate']>
 >;
 
-export type LanguageModelV2Stream = Awaited<
-  ReturnType<LanguageModelV2['doStream']>
+export type LanguageModelStream = Awaited<
+  ReturnType<LanguageModel['doStream']>
 >;
 
-export type EmbeddingModelV2CallOptions<VALUE> = Parameters<
-  EmbeddingModelV2<VALUE>['doEmbed']
+export type EmbeddingModelCallOptions<VALUE> = Parameters<
+  EmbeddingModel<VALUE>['doEmbed']
 >[0];
 
-export type EmbeddingModelV2Embed<VALUE> = Awaited<
-  ReturnType<EmbeddingModelV2<VALUE>['doEmbed']>
+export type EmbeddingModelEmbed<VALUE> = Awaited<
+  ReturnType<EmbeddingModel<VALUE>['doEmbed']>
 >;

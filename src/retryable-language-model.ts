@@ -1,16 +1,14 @@
-import type {
-  LanguageModelV2,
-  LanguageModelV2CallOptions,
-  LanguageModelV2StreamPart,
-} from '@ai-sdk/provider';
 import { delay } from '@ai-sdk/provider-utils';
 import { calculateExponentialBackoff } from './calculate-exponential-backoff.js';
 import { countModelAttempts } from './count-model-attempts.js';
 import { findRetryModel } from './find-retry-model.js';
 import { prepareRetryError } from './prepare-retry-error.js';
 import type {
-  LanguageModelV2Generate,
-  LanguageModelV2Stream,
+  LanguageModel,
+  LanguageModelCallOptions,
+  LanguageModelGenerate,
+  LanguageModelStream,
+  LanguageModelStreamPart,
   Retry,
   RetryAttempt,
   RetryableModelOptions,
@@ -20,12 +18,12 @@ import type {
 } from './types.js';
 import { isGenerateResult, isStreamContentPart } from './utils.js';
 
-export class RetryableLanguageModel implements LanguageModelV2 {
-  readonly specificationVersion = 'v2';
+export class RetryableLanguageModel implements LanguageModel {
+  readonly specificationVersion = 'v3';
 
-  private baseModel: LanguageModelV2;
-  private currentModel: LanguageModelV2;
-  private options: RetryableModelOptions<LanguageModelV2>;
+  private baseModel: LanguageModel;
+  private currentModel: LanguageModel;
+  private options: RetryableModelOptions<LanguageModel>;
 
   get modelId() {
     return this.currentModel.modelId;
@@ -38,7 +36,7 @@ export class RetryableLanguageModel implements LanguageModelV2 {
     return this.currentModel.supportedUrls;
   }
 
-  constructor(options: RetryableModelOptions<LanguageModelV2>) {
+  constructor(options: RetryableModelOptions<LanguageModel>) {
     this.options = options;
     this.baseModel = options.model;
     this.currentModel = options.model;
@@ -61,24 +59,24 @@ export class RetryableLanguageModel implements LanguageModelV2 {
    * Execute a function with retry logic for handling errors
    */
   private async withRetry<
-    RESULT extends LanguageModelV2Stream | LanguageModelV2Generate,
+    RESULT extends LanguageModelStream | LanguageModelGenerate,
   >(input: {
-    fn: (currentRetry?: Retry<LanguageModelV2>) => Promise<RESULT>;
-    attempts?: Array<RetryAttempt<LanguageModelV2>>;
+    fn: (currentRetry?: Retry<LanguageModel>) => Promise<RESULT>;
+    attempts?: Array<RetryAttempt<LanguageModel>>;
     abortSignal?: AbortSignal;
   }): Promise<{
     result: RESULT;
-    attempts: Array<RetryAttempt<LanguageModelV2>>;
+    attempts: Array<RetryAttempt<LanguageModel>>;
   }> {
     /**
      * Track all attempts.
      */
-    const attempts: Array<RetryAttempt<LanguageModelV2>> = input.attempts ?? [];
+    const attempts: Array<RetryAttempt<LanguageModel>> = input.attempts ?? [];
 
     /**
      * Track current retry configuration.
      */
-    let currentRetry: Retry<LanguageModelV2> | undefined;
+    let currentRetry: Retry<LanguageModel> | undefined;
 
     while (true) {
       /**
@@ -91,7 +89,7 @@ export class RetryableLanguageModel implements LanguageModelV2 {
        * Skip on the first attempt since no previous attempt exists yet.
        */
       if (previousAttempt) {
-        const currentAttempt: RetryAttempt<LanguageModelV2> = {
+        const currentAttempt: RetryAttempt<LanguageModel> = {
           ...previousAttempt,
           model: this.currentModel,
         };
@@ -101,7 +99,7 @@ export class RetryableLanguageModel implements LanguageModelV2 {
          */
         const updatedAttempts = [...attempts];
 
-        const context: RetryContext<LanguageModelV2> = {
+        const context: RetryContext<LanguageModel> = {
           current: currentAttempt,
           attempts: updatedAttempts,
         };
@@ -191,8 +189,8 @@ export class RetryableLanguageModel implements LanguageModelV2 {
    * Handle a successful result and determine if a retry is needed
    */
   private async handleResult(
-    result: LanguageModelV2Generate,
-    attempts: ReadonlyArray<RetryAttempt<LanguageModelV2>>,
+    result: LanguageModelGenerate,
+    attempts: ReadonlyArray<RetryAttempt<LanguageModel>>,
   ) {
     const resultAttempt: RetryResultAttempt = {
       type: 'result',
@@ -205,7 +203,7 @@ export class RetryableLanguageModel implements LanguageModelV2 {
      */
     const updatedAttempts = [...attempts, resultAttempt];
 
-    const context: RetryContext<LanguageModelV2> = {
+    const context: RetryContext<LanguageModel> = {
       current: resultAttempt,
       attempts: updatedAttempts,
     };
@@ -220,9 +218,9 @@ export class RetryableLanguageModel implements LanguageModelV2 {
    */
   private async handleError(
     error: unknown,
-    attempts: ReadonlyArray<RetryAttempt<LanguageModelV2>>,
+    attempts: ReadonlyArray<RetryAttempt<LanguageModel>>,
   ) {
-    const errorAttempt: RetryErrorAttempt<LanguageModelV2> = {
+    const errorAttempt: RetryErrorAttempt<LanguageModel> = {
       type: 'error',
       error: error,
       model: this.currentModel,
@@ -233,7 +231,7 @@ export class RetryableLanguageModel implements LanguageModelV2 {
      */
     const updatedAttempts = [...attempts, errorAttempt];
 
-    const context: RetryContext<LanguageModelV2> = {
+    const context: RetryContext<LanguageModel> = {
       current: errorAttempt,
       attempts: updatedAttempts,
     };
@@ -258,8 +256,8 @@ export class RetryableLanguageModel implements LanguageModelV2 {
   }
 
   async doGenerate(
-    options: LanguageModelV2CallOptions,
-  ): Promise<LanguageModelV2Generate> {
+    options: LanguageModelCallOptions,
+  ): Promise<LanguageModelGenerate> {
     /**
      * Always start with the original model
      */
@@ -275,7 +273,7 @@ export class RetryableLanguageModel implements LanguageModelV2 {
     const { result } = await this.withRetry({
       fn: async (currentRetry) => {
         // Apply retry configuration if available
-        const callOptions: LanguageModelV2CallOptions = {
+        const callOptions: LanguageModelCallOptions = {
           ...options,
           providerOptions:
             currentRetry?.providerOptions ?? options.providerOptions,
@@ -292,8 +290,8 @@ export class RetryableLanguageModel implements LanguageModelV2 {
   }
 
   async doStream(
-    options: LanguageModelV2CallOptions,
-  ): Promise<LanguageModelV2Stream> {
+    options: LanguageModelCallOptions,
+  ): Promise<LanguageModelStream> {
     /**
      * Always start with the original model
      */
@@ -312,7 +310,7 @@ export class RetryableLanguageModel implements LanguageModelV2 {
     let { result, attempts } = await this.withRetry({
       fn: async (currentRetry) => {
         // Apply retry configuration if available
-        const callOptions: LanguageModelV2CallOptions = {
+        const callOptions: LanguageModelCallOptions = {
           ...options,
           providerOptions:
             currentRetry?.providerOptions ?? options.providerOptions,
@@ -331,7 +329,7 @@ export class RetryableLanguageModel implements LanguageModelV2 {
     const retryableStream = new ReadableStream({
       start: async (controller) => {
         let reader:
-          | ReadableStreamDefaultReader<LanguageModelV2StreamPart>
+          | ReadableStreamDefaultReader<LanguageModelStreamPart>
           | undefined;
         let isStreaming = false;
 
@@ -411,7 +409,7 @@ export class RetryableLanguageModel implements LanguageModelV2 {
              */
             const retriedResult = await this.withRetry({
               fn: async () => {
-                const callOptions: LanguageModelV2CallOptions = {
+                const callOptions: LanguageModelCallOptions = {
                   ...options,
                   providerOptions:
                     retryModel.providerOptions ?? options.providerOptions,
