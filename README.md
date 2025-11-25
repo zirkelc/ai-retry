@@ -19,11 +19,17 @@ It supports two types of retries:
 
 ### Installation
 
-This library only supports AI SDK v5.
+Install the beta version of `ai-retry` to support AI SDK v6.
+
+> [!NOTE]
+> AI SDK v6 is still in beta, so break changes are expected.
 
 ```bash
-npm install ai-retry
+npm install ai-retry@beta
 ```
+
+#### AI SDK v6 
+
 
 ### Usage
 
