@@ -21,6 +21,9 @@ It supports two types of retries:
 
 This library only supports AI SDK v5.
 
+> [!NOTE]
+> AI SDK v6 support is available in the [v6 branch](https://github.com/zirkelc/ai-retry/tree/v6).
+
 ```bash
 npm install ai-retry
 ```
