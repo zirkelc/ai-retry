@@ -54,13 +54,12 @@
     "husky": "^9.1.7",
     "msw": "^2.11.2",
     "pkg-pr-new": "^0.0.60",
-    "publint": "^0.3.13",
-    "tsdown": "^0.15.9",
-    "tsx": "^4.20.5",
+    "publint": "^0.3.15",
+    "tsdown": "^0.16.7",
+    "tsx": "^4.20.6",
     "typescript": "^5.9.2",
-    "unbuild": "^3.6.1",
-    "vitest": "^3.2.4",
-    "zod": "^4.1.8"
+    "vitest": "^4.0.14",
+    "zod": "^4.1.13"
   },
   "dependencies": {
     "@ai-sdk/provider": "^2.0.0",
