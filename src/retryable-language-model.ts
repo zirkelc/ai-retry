@@ -338,6 +338,7 @@ export class RetryableLanguageModel implements LanguageModelV2 {
         while (true) {
           try {
             reader = result.stream.getReader();
+            let shouldRetryFromFinish = false;
 
             while (true) {
               const { done, value } = await reader.read();
@@ -355,6 +356,62 @@ export class RetryableLanguageModel implements LanguageModelV2 {
               }
 
               /**
+               * If the stream part is a finish and no data has been streamed yet,
+               * check if we should retry based on the finish reason (result-based retry)
+               */
+              if (value.type === 'finish') {
+                if (!isStreaming) {
+                  // Check if any retry handler wants to retry based on finish reason
+                  const { retryModel, attempt } = await this.handleResult(
+                    {
+                      finishReason: value.finishReason,
+                      content: [],
+                      usage: {
+                        inputTokens: value.usage.inputTokens || 0,
+                        outputTokens: value.usage.outputTokens || 0,
+                        totalTokens: value.usage.totalTokens || 0,
+                      },
+                      warnings: [],
+                    },
+                    attempts,
+                  );
+
+                  if (retryModel) {
+                    // Save the attempt
+                    attempts.push(attempt);
+
+                    // Apply delay if configured
+                    if (retryModel.delay) {
+                      const modelAttemptsCount = countModelAttempts(
+                        retryModel.model,
+                        attempts,
+                      );
+                      const calculatedDelay = calculateExponentialBackoff(
+                        retryModel.delay,
+                        retryModel.backoffFactor,
+                        modelAttemptsCount,
+                      );
+                      await delay(calculatedDelay, {
+                        abortSignal: options.abortSignal,
+                      });
+                    }
+
+                    // Update current model
+                    this.currentModel = retryModel.model;
+
+                    // Mark that we should retry after breaking from inner loop
+                    shouldRetryFromFinish = true;
+                    break;
+                  }
+                }
+
+                // Either no retry needed or streaming already occurred
+                // Enqueue the finish part and exit the loop
+                controller.enqueue(value);
+                break;
+              }
+
+              /**
                * Mark that streaming has started once we receive actual content
                */
               if (isStreamContentPart(value)) {
@@ -365,6 +422,32 @@ export class RetryableLanguageModel implements LanguageModelV2 {
                * Enqueue the chunk to the consumer of the stream
                */
               controller.enqueue(value);
+            }
+
+            // Release the reader
+            reader.releaseLock();
+            reader = undefined;
+
+            // If we need to retry due to finish reason, continue the outer loop
+            if (shouldRetryFromFinish) {
+              // Get new stream from updated model
+              const retriedResult = await this.withRetry({
+                fn: async () => {
+                  const callOptions: LanguageModelV2CallOptions = {
+                    ...options,
+                    providerOptions: options.providerOptions,
+                    abortSignal: options.abortSignal,
+                  };
+                  return this.currentModel.doStream(callOptions);
+                },
+                attempts,
+                abortSignal: options.abortSignal,
+              });
+
+              result = retriedResult.result;
+              attempts = retriedResult.attempts;
+              isStreaming = false; // Reset for the new stream
+              continue;
             }
 
             controller.close();
