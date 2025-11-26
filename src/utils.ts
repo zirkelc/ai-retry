@@ -1,9 +1,12 @@
+import { gateway } from 'ai';
 import type {
   EmbeddingModel,
   LanguageModel,
   LanguageModelGenerate,
   LanguageModelStream,
   LanguageModelStreamPart,
+  ResolvableLanguageModel,
+  ResolvedModel,
   Retry,
   RetryAttempt,
   RetryErrorAttempt,
@@ -16,23 +19,25 @@ export const isObject = (value: unknown): value is Record<string, unknown> =>
 export const isString = (value: unknown): value is string =>
   typeof value === 'string';
 
-export const isModelV2 = (
+export const isModel = (
   model: unknown,
 ): model is LanguageModel | EmbeddingModel =>
-  isLanguageModelV2(model) || isEmbeddingModelV2(model);
+  isLanguageModel(model) || isEmbeddingModel(model);
 
-export const isLanguageModelV2 = (model: unknown): model is LanguageModel =>
+export const isLanguageModel = (model: unknown): model is LanguageModel =>
   isObject(model) &&
   'provider' in model &&
   'modelId' in model &&
   'specificationVersion' in model &&
+  'doGenerate' in model &&
   model.specificationVersion === 'v2';
 
-export const isEmbeddingModelV2 = (model: unknown): model is EmbeddingModel =>
+export const isEmbeddingModel = (model: unknown): model is EmbeddingModel =>
   isObject(model) &&
   'provider' in model &&
   'modelId' in model &&
   'specificationVersion' in model &&
+  'doEmbed' in model &&
   model.specificationVersion === 'v2';
 
 export const isStreamResult = (
@@ -80,9 +85,9 @@ export const isStreamContentPart = (part: LanguageModelStreamPart) => {
 };
 
 /**
- * Type guard to check if a value is a Retry object (has a model property with a MODEL)
+ * Type guard to check if a value is a Retry object
  */
 export const isRetry = <MODEL extends LanguageModel | EmbeddingModel>(
   value: unknown,
 ): value is Retry<MODEL> =>
-  isObject(value) && 'model' in value && isModelV2(value.model);
+  isObject(value) && 'model' in value && isModel(value.model);

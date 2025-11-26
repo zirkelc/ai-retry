@@ -3,7 +3,7 @@ import type {
   LanguageModel,
   RetryableOptions,
 } from '../types.js';
-import { isModelV2 } from '../utils.js';
+import { isModel } from '../utils.js';
 
 /**
  * Helper to resolve `RetryableOptions` from either a model and/or options object.
@@ -18,7 +18,7 @@ export function resolveRetryableOptions<
   modelOrOptions: MODEL | RetryableOptions<MODEL>,
   options?: RetryableOptions<MODEL>,
 ): RetryableOptions<MODEL> & { model?: MODEL } {
-  if (isModelV2(modelOrOptions)) {
+  if (isModel(modelOrOptions)) {
     return {
       ...options,
       model: modelOrOptions,

@@ -1,7 +1,9 @@
 import { getModelKey } from './get-model-key.js';
+import { resolveModel } from './resolve-model.js';
 import type {
   EmbeddingModel,
   LanguageModel,
+  ResolvedModel,
   Retries,
   Retry,
   RetryContext,
@@ -16,7 +18,9 @@ export async function findRetryModel<
 >(
   retries: Retries<MODEL>,
   context: RetryContext<MODEL>,
-): Promise<Retry<MODEL> | undefined> {
+): Promise<
+  (Omit<Retry<MODEL>, 'model'> & { model: ResolvedModel<MODEL> }) | undefined
+> {
   /**
    * Filter retryables based on attempt type:
    * - Result-based attempts: Only consider function retryables (skip plain models and static Retry objects)
@@ -45,9 +49,15 @@ export async function findRetryModel<
 
     if (retryModel) {
       /**
+       * The model can be string or an instance.
+       * If it is a string, we need to resolve it to an instance.
+       */
+      const resolvedModel = resolveModel(retryModel.model);
+
+      /**
        * The model key uniquely identifies a model instance (provider + modelId)
        */
-      const retryModelKey = getModelKey(retryModel.model);
+      const retryModelKey = getModelKey(resolvedModel);
 
       /**
        * Find all attempts with the same model
@@ -62,7 +72,7 @@ export async function findRetryModel<
        * Check if the model can still be retried based on maxAttempts
        */
       if (retryAttempts.length < maxAttempts) {
-        return retryModel;
+        return { ...retryModel, model: resolvedModel as ResolvedModel<MODEL> };
       }
     }
   }

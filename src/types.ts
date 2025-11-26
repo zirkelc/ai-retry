@@ -3,13 +3,40 @@ import type {
   LanguageModelV2,
   LanguageModelV2CallOptions,
   LanguageModelV2StreamPart,
+  SharedV2ProviderOptions,
 } from '@ai-sdk/provider';
-import type { ProviderOptions } from '@ai-sdk/provider-utils';
+import type { GatewayModelId, gateway } from 'ai';
+
+type Literals<T> = T extends string
+  ? string extends T
+    ? never // It's `string` or `string & {}`, exclude it
+    : T // It's a literal, keep it
+  : never;
 
 export type LanguageModel = LanguageModelV2;
 export type EmbeddingModel<VALUE = unknown> = EmbeddingModelV2<VALUE>;
 export type LanguageModelCallOptions = LanguageModelV2CallOptions;
 export type LanguageModelStreamPart = LanguageModelV2StreamPart;
+export type ProviderOptions = SharedV2ProviderOptions;
+
+// export  type GatewayEmbeddingModelId = Parameters<typeof gateway['textEmbeddingModel']>[0];
+export type GatewayLanguageModelId = Parameters<
+  (typeof gateway)['languageModel']
+>[0];
+
+export type ResolvableLanguageModel =
+  | LanguageModel
+  | Literals<GatewayLanguageModelId>;
+export type ResolvableModel<MODEL extends LanguageModel | EmbeddingModel> =
+  MODEL extends LanguageModel ? ResolvableLanguageModel : EmbeddingModel;
+export type ResolvedModel<
+  MODEL extends ResolvableLanguageModel | EmbeddingModel,
+> = MODEL extends ResolvableLanguageModel
+  ? LanguageModel
+  : MODEL extends EmbeddingModel
+    ? EmbeddingModel
+    : never;
+
 /**
  * Options for creating a retryable model.
  */
@@ -68,7 +95,7 @@ export type RetryAttempt<MODEL extends LanguageModel | EmbeddingModel> =
  * A model to retry with and the maximum number of attempts for that model.
  */
 export type Retry<MODEL extends LanguageModel | EmbeddingModel> = {
-  model: MODEL;
+  model: ResolvableModel<MODEL>;
   maxAttempts?: number;
   delay?: number;
   backoffFactor?: number;
@@ -80,11 +107,11 @@ export type Retry<MODEL extends LanguageModel | EmbeddingModel> = {
  * A function that determines whether to retry with a different model based on the current attempt and all previous attempts.
  */
 export type Retryable<MODEL extends LanguageModel | EmbeddingModel> = (
-  context: RetryContext<MODEL>,
+  context: any,
 ) => Retry<MODEL> | Promise<Retry<MODEL> | undefined> | undefined;
 
 export type Retries<MODEL extends LanguageModel | EmbeddingModel> = Array<
-  Retryable<MODEL> | Retry<MODEL> | MODEL
+  Retryable<MODEL> | Retry<MODEL> | ResolvableModel<MODEL>
 >;
 
 export type RetryableOptions<MODEL extends LanguageModel | EmbeddingModel> =
