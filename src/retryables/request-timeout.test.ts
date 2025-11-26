@@ -1,7 +1,3 @@
-import type {
-  LanguageModelV2CallOptions,
-  LanguageModelV2StreamPart,
-} from '@ai-sdk/provider';
 import {
   convertArrayToReadableStream,
   convertAsyncIterableToArray,
@@ -11,34 +7,36 @@ import { describe, expect, it } from 'vitest';
 import { createRetryable } from '../create-retryable-model.js';
 import {
   chunksToText,
-  type EmbeddingModelV2Embed,
-  type LanguageModelV2GenerateFn,
-  type LanguageModelV2StreamFn,
+  type EmbeddingModelEmbed,
+  type LanguageModelGenerateFn,
+  type LanguageModelStreamFn,
   MockEmbeddingModel,
   MockLanguageModel,
 } from '../test-utils.js';
 import type {
-  EmbeddingModelV2CallOptions,
-  LanguageModelV2Generate,
+  EmbeddingModelCallOptions,
+  LanguageModelCallOptions,
+  LanguageModelGenerate,
+  LanguageModelStreamPart,
 } from '../types.js';
 import { requestTimeout } from './request-timeout.js';
 
 const mockResultText = 'Hello, world!';
 
-const mockResult: LanguageModelV2Generate = {
+const mockResult: LanguageModelGenerate = {
   finishReason: 'stop',
   usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
   content: [{ type: 'text', text: mockResultText }],
   warnings: [],
 };
 
-const mockEmbeddings: EmbeddingModelV2Embed = {
+const mockEmbeddings: EmbeddingModelEmbed = {
   embeddings: [[0.1, 0.2, 0.3]],
   usage: { tokens: 5 },
 };
 
 const embeddingTimeoutError = async (
-  opts: EmbeddingModelV2CallOptions<unknown>,
+  opts: EmbeddingModelCallOptions<unknown>,
 ) => {
   // Check if abortSignal is aborted and throw appropriate error
   if (opts.abortSignal?.aborted) {
@@ -58,7 +56,7 @@ const embeddingTimeoutError = async (
   });
 };
 
-const timeoutError = async (opts: LanguageModelV2CallOptions) => {
+const timeoutError = async (opts: LanguageModelCallOptions) => {
   // Check if abortSignal is aborted and throw appropriate error
   if (opts.abortSignal?.aborted) {
     throw new DOMException('The operation was aborted', 'AbortError');
@@ -92,7 +90,7 @@ const genericError = new APICallError({
   },
 });
 
-const mockStreamChunks: LanguageModelV2StreamPart[] = [
+const mockStreamChunks: LanguageModelStreamPart[] = [
   {
     type: 'stream-start',
     warnings: [],
@@ -139,7 +137,7 @@ describe('requestTimeout', () => {
     it('should fallback in case of timeout error', async () => {
       // Arrange
       const baseModel = new MockLanguageModel({
-        doGenerate: timeoutError as LanguageModelV2GenerateFn,
+        doGenerate: timeoutError as LanguageModelGenerateFn,
       });
       const retryModel = new MockLanguageModel({ doGenerate: mockResult });
 
@@ -190,7 +188,7 @@ describe('requestTimeout', () => {
 
       // Base model that captures the abort signal and respects it
       const baseModel = new MockLanguageModel({
-        doGenerate: (async (opts: LanguageModelV2CallOptions) => {
+        doGenerate: (async (opts: LanguageModelCallOptions) => {
           baseModelSignal = opts.abortSignal;
           if (opts.abortSignal?.aborted) {
             throw new DOMException('The operation was aborted', 'AbortError');
@@ -204,12 +202,12 @@ describe('requestTimeout', () => {
               );
             });
           });
-        }) as LanguageModelV2GenerateFn,
+        }) as LanguageModelGenerateFn,
       });
 
       // Retry model that captures its signal and verifies it's not aborted
       const retryModel = new MockLanguageModel({
-        doGenerate: (async (opts: LanguageModelV2CallOptions) => {
+        doGenerate: (async (opts: LanguageModelCallOptions) => {
           retryModelSignal = opts.abortSignal;
           // This should NOT be aborted since we get a fresh signal with the fix
           if (opts.abortSignal?.aborted) {
@@ -219,7 +217,7 @@ describe('requestTimeout', () => {
             );
           }
           return mockResult;
-        }) as LanguageModelV2GenerateFn,
+        }) as LanguageModelGenerateFn,
       });
 
       // Act
@@ -254,11 +252,11 @@ describe('requestTimeout', () => {
       let retryModelSignal: AbortSignal | undefined;
 
       const baseModel = new MockLanguageModel({
-        doGenerate: timeoutError as LanguageModelV2GenerateFn,
+        doGenerate: timeoutError as LanguageModelGenerateFn,
       });
 
       const retryModel = new MockLanguageModel({
-        doGenerate: (async (opts: LanguageModelV2CallOptions) => {
+        doGenerate: (async (opts: LanguageModelCallOptions) => {
           retryModelSignal = opts.abortSignal;
           // Verify signal is not aborted
           if (opts.abortSignal?.aborted) {
@@ -268,7 +266,7 @@ describe('requestTimeout', () => {
             );
           }
           return mockResult;
-        }) as LanguageModelV2GenerateFn,
+        }) as LanguageModelGenerateFn,
       });
 
       // Act
@@ -333,7 +331,7 @@ describe('requestTimeout', () => {
     it.todo('should fallback in case of timeout error', async () => {
       // Arrange
       const baseModel = new MockLanguageModel({
-        doStream: timeoutError as LanguageModelV2StreamFn,
+        doStream: timeoutError as LanguageModelStreamFn,
       });
       const retryModel = new MockLanguageModel({
         doStream: {

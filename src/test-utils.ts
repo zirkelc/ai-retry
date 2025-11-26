@@ -1,25 +1,23 @@
-import type { LanguageModelV2 } from '@ai-sdk/provider';
 import type { generateText, streamText, TextStreamPart } from 'ai';
 import { vi } from 'vitest';
-import type { EmbeddingModelV2 } from './types.js';
+import type {
+  EmbeddingModel,
+  EmbeddingModelEmbed,
+  LanguageModel,
+  LanguageModelGenerate,
+  LanguageModelStream,
+} from './types.js';
 
 type StreamText = Parameters<typeof streamText>[0];
 type GenerateText = Parameters<typeof generateText>[0];
 
-export type LanguageModelV2GenerateFn = LanguageModelV2['doGenerate'];
-export type LanguageModelV2StreamFn = LanguageModelV2['doStream'];
+export type LanguageModelGenerateFn = LanguageModel['doGenerate'];
+export type LanguageModelStreamFn = LanguageModel['doStream'];
 
-export type LanguageModelV2Generate = Awaited<
-  ReturnType<LanguageModelV2GenerateFn>
->;
-export type LanguageModelV2Stream = Awaited<
-  ReturnType<LanguageModelV2StreamFn>
->;
+export type EmbeddingModelEmbedFn = EmbeddingModel<number>['doEmbed'];
 
-export type EmbeddingModelV2EmbedFn = EmbeddingModelV2<number>['doEmbed'];
-export type EmbeddingModelV2Embed = Awaited<
-  ReturnType<EmbeddingModelV2EmbedFn>
->;
+// Re-export the types for convenience in tests
+export type { EmbeddingModelEmbed, LanguageModelGenerate, LanguageModelStream };
 
 const mockGenerateId = () => 'aitxt-mock-id';
 const mockCurrentDate = () => new Date(0);
@@ -44,15 +42,15 @@ const generateMockModelId = () => {
   return `mock-model-${mockModelCounter}`;
 };
 
-export class MockLanguageModel implements LanguageModelV2 {
+export class MockLanguageModel implements LanguageModel {
   readonly specificationVersion = 'v2';
 
-  readonly supportedUrls: LanguageModelV2['supportedUrls'];
-  readonly provider: LanguageModelV2['provider'];
-  readonly modelId: LanguageModelV2['modelId'];
+  readonly supportedUrls: LanguageModel['supportedUrls'];
+  readonly provider: LanguageModel['provider'];
+  readonly modelId: LanguageModel['modelId'];
 
-  doGenerate: LanguageModelV2['doGenerate'];
-  doStream: LanguageModelV2['doStream'];
+  doGenerate: LanguageModel['doGenerate'];
+  doStream: LanguageModel['doStream'];
 
   constructor({
     doGenerate = (): never => {
@@ -62,8 +60,8 @@ export class MockLanguageModel implements LanguageModelV2 {
       throw new Error('Not implemented');
     },
   }: {
-    doGenerate?: LanguageModelV2Generate | LanguageModelV2GenerateFn | Error;
-    doStream?: LanguageModelV2Stream | LanguageModelV2StreamFn | Error;
+    doGenerate?: LanguageModelGenerate | LanguageModelGenerateFn | Error;
+    doStream?: LanguageModelStream | LanguageModelStreamFn | Error;
   } = {}) {
     this.provider = 'mock-provider';
     this.modelId = generateMockModelId();
@@ -81,27 +79,25 @@ export class MockLanguageModel implements LanguageModelV2 {
   }
 }
 
-export class MockEmbeddingModel implements EmbeddingModelV2<number> {
+export class MockEmbeddingModel implements EmbeddingModel<number> {
   readonly specificationVersion = 'v2';
 
-  readonly supportedUrls: LanguageModelV2['supportedUrls'];
-  readonly provider: LanguageModelV2['provider'];
-  readonly modelId: LanguageModelV2['modelId'];
+  readonly provider: EmbeddingModel['provider'];
+  readonly modelId: EmbeddingModel['modelId'];
   readonly maxEmbeddingsPerCall = 1;
   readonly supportsParallelCalls = true;
 
-  doEmbed: EmbeddingModelV2['doEmbed'];
+  doEmbed: EmbeddingModel['doEmbed'];
 
   constructor({
     doEmbed = (): never => {
       throw new Error('Not implemented');
     },
   }: {
-    doEmbed?: EmbeddingModelV2Embed | EmbeddingModelV2EmbedFn | Error;
+    doEmbed?: EmbeddingModelEmbed | EmbeddingModelEmbedFn | Error;
   } = {}) {
     this.provider = 'mock-provider';
     this.modelId = generateMockModelId();
-    this.supportedUrls = {};
     this.doEmbed = vi.fn(async (opts) => {
       if (doEmbed instanceof Error) throw doEmbed;
       if (typeof doEmbed === 'function') return doEmbed(opts);

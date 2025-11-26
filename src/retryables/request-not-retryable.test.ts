@@ -1,4 +1,3 @@
-import type { LanguageModelV2StreamPart } from '@ai-sdk/provider';
 import {
   convertArrayToReadableStream,
   convertAsyncIterableToArray,
@@ -8,23 +7,26 @@ import { describe, expect, it } from 'vitest';
 import { createRetryable } from '../create-retryable-model.js';
 import {
   chunksToText,
-  type EmbeddingModelV2Embed,
+  type EmbeddingModelEmbed,
   MockEmbeddingModel,
   MockLanguageModel,
 } from '../test-utils.js';
-import type { LanguageModelV2Generate } from '../types.js';
+import type {
+  LanguageModelGenerate,
+  LanguageModelStreamPart,
+} from '../types.js';
 import { requestNotRetryable } from './request-not-retryable.js';
 
 const mockResultText = 'Hello, world!';
 
-const mockResult: LanguageModelV2Generate = {
+const mockResult: LanguageModelGenerate = {
   finishReason: 'stop',
   usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
   content: [{ type: 'text', text: mockResultText }],
   warnings: [],
 };
 
-const mockEmbeddings: EmbeddingModelV2Embed = {
+const mockEmbeddings: EmbeddingModelEmbed = {
   embeddings: [[0.1, 0.2, 0.3]],
   usage: { tokens: 5 },
 };
@@ -63,7 +65,7 @@ const retryableError = new APICallError({
   },
 });
 
-const mockStreamChunks: LanguageModelV2StreamPart[] = [
+const mockStreamChunks: LanguageModelStreamPart[] = [
   {
     type: 'stream-start',
     warnings: [],

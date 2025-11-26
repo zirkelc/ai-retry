@@ -3,26 +3,26 @@
   "version": "0.10.1",
   "description": "AI SDK Retry",
   "packageManager": "pnpm@10.0.0",
-  "main": "./dist/index.js",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "main": "./dist/index.mjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
   "type": "module",
   "files": [
     "dist"
   ],
   "exports": {
-    ".": "./dist/index.js",
-    "./retryables": "./dist/retryables/index.js",
+    ".": "./dist/index.mjs",
+    "./retryables": "./dist/retryables/index.mjs",
     "./package.json": "./package.json"
   },
   "publishConfig": {
     "access": "public"
   },
   "scripts": {
-    "prepublishOnly": "pnpm build",
-    "publish:alpha": "pnpm version prerelease --preid alpha && pnpm publish --tag alpha",
+    "prepublishOnly": "pnpm build && pnpm typecheck",
     "build": "tsdown",
     "test": "vitest",
+    "typecheck": "tsc --noEmit",
     "lint": "biome check . --write",
     "prepare": "husky"
   },

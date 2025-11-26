@@ -1,11 +1,9 @@
 import type {
-  LanguageModelV2,
-  LanguageModelV2StreamPart,
-} from '@ai-sdk/provider';
-import type {
-  EmbeddingModelV2,
-  LanguageModelV2Generate,
-  LanguageModelV2Stream,
+  EmbeddingModel,
+  LanguageModel,
+  LanguageModelGenerate,
+  LanguageModelStream,
+  LanguageModelStreamPart,
   Retry,
   RetryAttempt,
   RetryErrorAttempt,
@@ -20,17 +18,17 @@ export const isString = (value: unknown): value is string =>
 
 export const isModelV2 = (
   model: unknown,
-): model is LanguageModelV2 | EmbeddingModelV2 =>
+): model is LanguageModel | EmbeddingModel =>
   isLanguageModelV2(model) || isEmbeddingModelV2(model);
 
-export const isLanguageModelV2 = (model: unknown): model is LanguageModelV2 =>
+export const isLanguageModelV2 = (model: unknown): model is LanguageModel =>
   isObject(model) &&
   'provider' in model &&
   'modelId' in model &&
   'specificationVersion' in model &&
   model.specificationVersion === 'v2';
 
-export const isEmbeddingModelV2 = (model: unknown): model is EmbeddingModelV2 =>
+export const isEmbeddingModelV2 = (model: unknown): model is EmbeddingModel =>
   isObject(model) &&
   'provider' in model &&
   'modelId' in model &&
@@ -38,12 +36,12 @@ export const isEmbeddingModelV2 = (model: unknown): model is EmbeddingModelV2 =>
   model.specificationVersion === 'v2';
 
 export const isStreamResult = (
-  result: LanguageModelV2Generate | LanguageModelV2Stream,
-): result is LanguageModelV2Stream => 'stream' in result;
+  result: LanguageModelGenerate | LanguageModelStream,
+): result is LanguageModelStream => 'stream' in result;
 
 export const isGenerateResult = (
-  result: LanguageModelV2Generate | LanguageModelV2Stream,
-): result is LanguageModelV2Generate => 'content' in result;
+  result: LanguageModelGenerate | LanguageModelStream,
+): result is LanguageModelGenerate => 'content' in result;
 
 /**
  * Type guard to check if a retry attempt is an error attempt
@@ -68,7 +66,7 @@ export function isResultAttempt(
  * These types are also emitted by `onChunk` callbacks.
  * @see https://github.com/vercel/ai/blob/1fe4bd4144bff927f5319d9d206e782a73979ccb/packages/ai/src/generate-text/stream-text.ts#L686-L697
  */
-export const isStreamContentPart = (part: LanguageModelV2StreamPart) => {
+export const isStreamContentPart = (part: LanguageModelStreamPart) => {
   return (
     part.type === 'text-delta' ||
     part.type === 'reasoning-delta' ||
@@ -84,7 +82,7 @@ export const isStreamContentPart = (part: LanguageModelV2StreamPart) => {
 /**
  * Type guard to check if a value is a Retry object (has a model property with a MODEL)
  */
-export const isRetry = <MODEL extends LanguageModelV2 | EmbeddingModelV2>(
+export const isRetry = <MODEL extends LanguageModel | EmbeddingModel>(
   value: unknown,
 ): value is Retry<MODEL> =>
   isObject(value) && 'model' in value && isModelV2(value.model);

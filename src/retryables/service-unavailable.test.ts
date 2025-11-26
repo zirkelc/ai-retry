@@ -1,4 +1,3 @@
-import type { LanguageModelV2StreamPart } from '@ai-sdk/provider';
 import {
   convertArrayToReadableStream,
   convertAsyncIterableToArray,
@@ -8,16 +7,19 @@ import { describe, expect, it } from 'vitest';
 import { createRetryable } from '../create-retryable-model.js';
 import {
   chunksToText,
-  type EmbeddingModelV2Embed,
+  type EmbeddingModelEmbed,
   MockEmbeddingModel,
   MockLanguageModel,
 } from '../test-utils.js';
-import type { LanguageModelV2Generate } from '../types.js';
+import type {
+  LanguageModelGenerate,
+  LanguageModelStreamPart,
+} from '../types.js';
 import { serviceUnavailable } from './service-unavailable.js';
 
 const mockResultText = 'Hello, world!';
 
-const mockResult: LanguageModelV2Generate = {
+const mockResult: LanguageModelGenerate = {
   finishReason: 'stop',
   usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
   content: [{ type: 'text', text: mockResultText }],
@@ -35,7 +37,7 @@ const unavailableError = new APICallError({
   data: {},
 });
 
-const mockStreamChunks: LanguageModelV2StreamPart[] = [
+const mockStreamChunks: LanguageModelStreamPart[] = [
   {
     type: 'stream-start',
     warnings: [],
@@ -58,7 +60,7 @@ const mockStreamChunks: LanguageModelV2StreamPart[] = [
   },
 ];
 
-const mockEmbeddings: EmbeddingModelV2Embed = {
+const mockEmbeddings: EmbeddingModelEmbed = {
   embeddings: [[0.1, 0.2, 0.3]],
 };
 

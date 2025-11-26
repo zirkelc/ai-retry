@@ -1,4 +1,3 @@
-import type { LanguageModelV2StreamPart } from '@ai-sdk/provider';
 import {
   convertArrayToReadableStream,
   convertAsyncIterableToArray,
@@ -12,26 +11,29 @@ import {
 import { describe, expect, it } from 'vitest';
 import { createRetryable } from '../create-retryable-model.js';
 import { chunksToText, MockLanguageModel } from '../test-utils.js';
-import type { LanguageModelV2Generate } from '../types.js';
+import type {
+  LanguageModelGenerate,
+  LanguageModelStreamPart,
+} from '../types.js';
 import { contentFilterTriggered } from './content-filter-triggered.js';
 
 const mockResultText = 'Hello, world!';
 
-const mockResult: LanguageModelV2Generate = {
+const mockResult: LanguageModelGenerate = {
   finishReason: 'stop',
   usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
   content: [{ type: 'text', text: mockResultText }],
   warnings: [],
 };
 
-const contentFilterResult: LanguageModelV2Generate = {
+const contentFilterResult: LanguageModelGenerate = {
   finishReason: 'content-filter',
   usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
   content: [],
   warnings: [],
 };
 
-const contentFilterChunks: LanguageModelV2StreamPart[] = [
+const contentFilterChunks: LanguageModelStreamPart[] = [
   {
     type: 'stream-start',
     warnings: [],
@@ -72,7 +74,7 @@ const apiCallError = new APICallError({
   },
 });
 
-const mockStreamChunks: LanguageModelV2StreamPart[] = [
+const mockStreamChunks: LanguageModelStreamPart[] = [
   {
     type: 'stream-start',
     warnings: [],

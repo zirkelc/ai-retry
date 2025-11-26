@@ -1,7 +1,7 @@
 import { APICallError } from 'ai';
 import type {
-  EmbeddingModelV2,
-  LanguageModelV2,
+  EmbeddingModel,
+  LanguageModel,
   Retryable,
   RetryableOptions,
 } from '../types.js';
@@ -11,7 +11,7 @@ import { isErrorAttempt } from '../utils.js';
  * Fallback to a different model if the error is non-retryable.
  */
 export function requestNotRetryable<
-  MODEL extends LanguageModelV2 | EmbeddingModelV2,
+  MODEL extends LanguageModel | EmbeddingModel,
 >(model: MODEL, options?: RetryableOptions<MODEL>): Retryable<MODEL> {
   return (context) => {
     const { current } = context;

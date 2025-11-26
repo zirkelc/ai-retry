@@ -1,7 +1,7 @@
 import { isAbortError } from '@ai-sdk/provider-utils';
 import type {
-  EmbeddingModelV2,
-  LanguageModelV2,
+  EmbeddingModel,
+  LanguageModel,
   Retryable,
   RetryableOptions,
 } from '../types.js';
@@ -12,9 +12,10 @@ import { isErrorAttempt } from '../utils.js';
  * Use in combination with the `abortSignal` option.
  * If no timeout is specified, a default of 60 seconds is used.
  */
-export function requestTimeout<
-  MODEL extends LanguageModelV2 | EmbeddingModelV2,
->(model: MODEL, options?: RetryableOptions<MODEL>): Retryable<MODEL> {
+export function requestTimeout<MODEL extends LanguageModel | EmbeddingModel>(
+  model: MODEL,
+  options?: RetryableOptions<MODEL>,
+): Retryable<MODEL> {
   return (context) => {
     const { current } = context;
 

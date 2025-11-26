@@ -1,18 +1,15 @@
 import { getErrorMessage } from '@ai-sdk/provider';
 import { RetryError } from 'ai';
-import type {
-  EmbeddingModelV2,
-  LanguageModelV2,
-  RetryAttempt,
-} from './types.js';
+import type { EmbeddingModel, LanguageModel, RetryAttempt } from './types.js';
 import { isErrorAttempt } from './utils.js';
 
 /**
  * Prepare a RetryError that includes all errors from previous attempts.
  */
-export function prepareRetryError<
-  MODEL extends LanguageModelV2 | EmbeddingModelV2,
->(error: unknown, attempts: Array<RetryAttempt<MODEL>>) {
+export function prepareRetryError<MODEL extends LanguageModel | EmbeddingModel>(
+  error: unknown,
+  attempts: Array<RetryAttempt<MODEL>>,
+) {
   const errorMessage = getErrorMessage(error);
   const errors = attempts.flatMap((a) =>
     isErrorAttempt(a)

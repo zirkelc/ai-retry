@@ -1,29 +1,20 @@
-import type { LanguageModelV2 } from '@ai-sdk/provider';
 import { APICallError, embed, RetryError } from 'ai';
 import { describe, expect, it, vi } from 'vitest';
 import { createRetryable } from './create-retryable-model.js';
-import {
-  type EmbeddingModelV2Embed,
-  MockEmbeddingModel,
-} from './test-utils.js';
+import { type EmbeddingModelEmbed, MockEmbeddingModel } from './test-utils.js';
 import type {
-  EmbeddingModelV2,
+  EmbeddingModel,
+  LanguageModel,
   Retryable,
   RetryableModelOptions,
   RetryContext,
 } from './types.js';
 import { isErrorAttempt } from './utils.js';
 
-type OnError = Required<
-  | RetryableModelOptions<LanguageModelV2>
-  | RetryableModelOptions<EmbeddingModelV2<any>>
->['onError'];
-type OnRetry = Required<
-  | RetryableModelOptions<LanguageModelV2>
-  | RetryableModelOptions<EmbeddingModelV2<any>>
->['onRetry'];
+type OnError = Required<RetryableModelOptions<EmbeddingModel>>['onError'];
+type OnRetry = Required<RetryableModelOptions<EmbeddingModel>>['onRetry'];
 
-const mockEmbeddings: EmbeddingModelV2Embed = {
+const mockEmbeddings: EmbeddingModelEmbed<number> = {
   embeddings: [[0.1, 0.2, 0.3]],
   usage: { tokens: 5 },
 };
@@ -93,7 +84,7 @@ describe('embed', () => {
           doEmbed: mockEmbeddings,
         });
 
-        const fallbackRetryable = (context: RetryContext<EmbeddingModelV2>) => {
+        const fallbackRetryable = (context: RetryContext<EmbeddingModel>) => {
           if (
             isErrorAttempt(context.current) &&
             APICallError.isInstance(context.current.error)
@@ -155,7 +146,7 @@ describe('embed', () => {
           doEmbed: mockEmbeddings,
         });
 
-        const fallbackRetryable = (context: RetryContext<EmbeddingModelV2>) => {
+        const fallbackRetryable = (context: RetryContext<EmbeddingModel>) => {
           if (
             isErrorAttempt(context.current) &&
             APICallError.isInstance(context.current.error)
@@ -191,7 +182,7 @@ describe('embed', () => {
         doEmbed: mockEmbeddings,
       });
 
-      const fallbackRetryable: Retryable<EmbeddingModelV2> = () => {
+      const fallbackRetryable: Retryable<EmbeddingModel> = () => {
         return { model: fallbackModel, maxAttempts: 1 };
       };
 
@@ -221,7 +212,7 @@ describe('embed', () => {
         doEmbed: mockEmbeddings,
       });
 
-      const fallbackRetryable: Retryable<EmbeddingModelV2> = () => {
+      const fallbackRetryable: Retryable<EmbeddingModel> = () => {
         return { model: fallbackModel, maxAttempts: 1 };
       };
 

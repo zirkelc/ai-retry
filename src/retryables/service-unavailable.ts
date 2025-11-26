@@ -1,7 +1,7 @@
 import { APICallError } from 'ai';
 import type {
-  EmbeddingModelV2,
-  LanguageModelV2,
+  EmbeddingModel,
+  LanguageModel,
   Retryable,
   RetryableOptions,
 } from '../types.js';
@@ -12,7 +12,7 @@ import { isErrorAttempt } from '../utils.js';
  * This retryable handles HTTP status code 503 (Service Unavailable).
  */
 export function serviceUnavailable<
-  MODEL extends LanguageModelV2 | EmbeddingModelV2,
+  MODEL extends LanguageModel | EmbeddingModel,
 >(model: MODEL, options?: RetryableOptions<MODEL>): Retryable<MODEL> {
   return (context) => {
     const { current } = context;
