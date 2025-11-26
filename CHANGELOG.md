@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.10.3](https://github.com/zirkelc/ai-retry/compare/v0.10.2...v0.10.3) (2025-11-26)
+
+
+### Bug Fixes
+
+* support promise&lt;undefined&gt; ([9673c19](https://github.com/zirkelc/ai-retry/commit/9673c19866980b66d94ad378e8d08b963e54cf06))
+
+## [0.10.2](https://github.com/zirkelc/ai-retry/compare/v0.10.1...v0.10.2) (2025-11-26)
+
+
+### Bug Fixes
+
+* refactor types ([8ecadc4](https://github.com/zirkelc/ai-retry/commit/8ecadc4f3b39da6388080ee0365ef736bc6e5da6))
+
 ## [0.10.1](https://github.com/zirkelc/ai-retry/compare/v0.10.0...v0.10.1) (2025-11-24)
 
 

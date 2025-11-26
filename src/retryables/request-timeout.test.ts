@@ -7,7 +7,6 @@ import { describe, expect, it } from 'vitest';
 import { createRetryable } from '../create-retryable-model.js';
 import {
   chunksToText,
-  type EmbeddingModelEmbed,
   type LanguageModelGenerateFn,
   type LanguageModelStreamFn,
   MockEmbeddingModel,
@@ -15,6 +14,7 @@ import {
 } from '../test-utils.js';
 import type {
   EmbeddingModelCallOptions,
+  EmbeddingModelEmbed,
   LanguageModelCallOptions,
   LanguageModelGenerate,
   LanguageModelStreamPart,

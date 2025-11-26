@@ -24,6 +24,9 @@ Install the beta version of `ai-retry` to support AI SDK v6.
 > [!NOTE]
 > AI SDK v6 is still in beta, so break changes are expected.
 
+> [!NOTE]
+> AI SDK v6 support is available in the [v6 branch](https://github.com/zirkelc/ai-retry/tree/v6).
+
 ```bash
 npm install ai-retry@beta
 ```

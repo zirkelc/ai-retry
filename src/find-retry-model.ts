@@ -12,7 +12,7 @@ import { isResultAttempt, isRetry } from './utils.js';
  * Find the next model to retry with based on the retry context
  */
 export async function findRetryModel<
-  MODEL extends LanguageModel | EmbeddingModel<any>,
+  MODEL extends LanguageModel | EmbeddingModel,
 >(
   retries: Retries<MODEL>,
   context: RetryContext<MODEL>,

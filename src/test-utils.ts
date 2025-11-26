@@ -1,20 +1,19 @@
 import type { generateText, streamText, TextStreamPart } from 'ai';
 import { vi } from 'vitest';
-import type { EmbeddingModel, LanguageModel } from './types.js';
+import type {
+  EmbeddingModel,
+  EmbeddingModelEmbed,
+  LanguageModel,
+  LanguageModelGenerate,
+  LanguageModelStream,
+} from './types.js';
 
 type StreamText = Parameters<typeof streamText>[0];
 type GenerateText = Parameters<typeof generateText>[0];
 
 export type LanguageModelGenerateFn = LanguageModel['doGenerate'];
 export type LanguageModelStreamFn = LanguageModel['doStream'];
-
-export type LanguageModelGenerate = Awaited<
-  ReturnType<LanguageModelGenerateFn>
->;
-export type LanguageModelStream = Awaited<ReturnType<LanguageModelStreamFn>>;
-
 export type EmbeddingModelEmbedFn = EmbeddingModel<number>['doEmbed'];
-export type EmbeddingModelEmbed = Awaited<ReturnType<EmbeddingModelEmbedFn>>;
 
 const mockGenerateId = () => 'aitxt-mock-id';
 const mockCurrentDate = () => new Date(0);

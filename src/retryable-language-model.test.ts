@@ -12,7 +12,6 @@ import {
   mockStreamOptions,
 } from './test-utils.js';
 import type {
-  EmbeddingModel,
   LanguageModel,
   LanguageModelCallOptions,
   LanguageModelGenerate,
@@ -22,12 +21,8 @@ import type {
 } from './types.js';
 import { isErrorAttempt, isResultAttempt } from './utils.js';
 
-type OnError = Required<
-  RetryableModelOptions<LanguageModel> | RetryableModelOptions<EmbeddingModel>
->['onError'];
-type OnRetry = Required<
-  RetryableModelOptions<LanguageModel> | RetryableModelOptions<EmbeddingModel>
->['onRetry'];
+type OnError = Required<RetryableModelOptions<LanguageModel>>['onError'];
+type OnRetry = Required<RetryableModelOptions<LanguageModel>>['onRetry'];
 
 const prompt = 'Hello!';
 
