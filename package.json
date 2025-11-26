@@ -1,6 +1,6 @@
 {
   "name": "ai-retry",
-  "version": "0.10.2",
+  "version": "0.10.3",
   "description": "AI SDK Retry",
   "packageManager": "pnpm@10.0.0",
   "main": "./dist/index.mjs",
