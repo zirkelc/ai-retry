@@ -81,7 +81,7 @@ export type Retry<MODEL extends LanguageModel | EmbeddingModel> = {
  */
 export type Retryable<MODEL extends LanguageModel | EmbeddingModel> = (
   context: RetryContext<MODEL>,
-) => Retry<MODEL> | Promise<Retry<MODEL>> | undefined;
+) => Retry<MODEL> | Promise<Retry<MODEL> | undefined> | undefined;
 
 export type Retries<MODEL extends LanguageModel | EmbeddingModel> = Array<
   Retryable<MODEL> | Retry<MODEL> | MODEL
