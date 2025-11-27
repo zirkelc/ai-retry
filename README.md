@@ -324,10 +324,22 @@ Handle service overload errors (status code 529) by switching to a provider.
 import { serviceOverloaded } from 'ai-retry/retryables';
 
 const retryableModel = createRetryable({
-  model: azure('gpt-4'),
+  model: anthropic('claude-sonnet-4-0'),
   retries: [
-    serviceOverloaded(openai('gpt-4')), // Switch to OpenAI if Azure is overloaded
+    // Retry with delay and exponential backoff
+    serviceOverloaded(anthropic('claude-sonnet-4-0'), {
+      delay: 5_000,
+      backoffFactor: 2,
+      maxAttempts: 5,
+    }),
+    // Or switch to a different provider
+    serviceOverloaded(openai('gpt-4')),
   ],
+});
+
+const result = streamText({
+  model: retryableModel,
+  prompt: 'Write a story about a robot...',
 });
 ```
 
