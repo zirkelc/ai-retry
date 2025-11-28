@@ -83,11 +83,3 @@ export const isStreamContentPart = (part: LanguageModelStreamPart) => {
     part.type === 'raw'
   );
 };
-
-/**
- * Type guard to check if a value is a Retry object
- */
-export const isRetry = <MODEL extends LanguageModel | EmbeddingModel>(
-  value: unknown,
-): value is Retry<MODEL> =>
-  isObject(value) && 'model' in value && isModel(value.model);

@@ -9,7 +9,7 @@ import type {
 } from './types.js';
 import { isEmbeddingModel, isModel } from './utils.js';
 
-export function createRetryable(
+export function createRetryable<MODEL extends LanguageModel>(
   options: Omit<RetryableModelOptions<LanguageModel>, 'model'> & {
     model: GatewayLanguageModelId;
   },
@@ -17,21 +17,19 @@ export function createRetryable(
 // export function createRetryable<MODEL extends EmbeddingModel>(
 //   options: Omit<RetryableModelOptions<MODEL>, 'model'> & { model: GatewayEmbeddingModelId },
 // ): EmbeddingModel;
-export function createRetryable(
-  options: RetryableModelOptions<LanguageModel>,
+export function createRetryable<MODEL extends LanguageModel>(
+  options: RetryableModelOptions<MODEL>,
 ): LanguageModel;
-export function createRetryable(
-  options: RetryableModelOptions<EmbeddingModel>,
+export function createRetryable<MODEL extends EmbeddingModel>(
+  options: RetryableModelOptions<MODEL>,
 ): EmbeddingModel;
 export function createRetryable(
   options:
     | RetryableModelOptions<LanguageModel>
     | RetryableModelOptions<EmbeddingModel>
-    // | RetryableModelOptions<EmbeddingModel>
     | (Omit<RetryableModelOptions<LanguageModel>, 'model'> & {
         model: GatewayLanguageModelId;
       }),
-  // | Omit<RetryableModelOptions<EmbeddingModel>, 'model'> & { model: GatewayEmbeddingModelId }
 ): LanguageModel | EmbeddingModel {
   const model = isModel(options.model) ? options.model : gateway(options.model);
 

@@ -3,6 +3,7 @@ import { parseRetryHeaders } from '../parse-retry-headers.js';
 import type {
   EmbeddingModel,
   LanguageModel,
+  ResolvableLanguageModel,
   Retryable,
   RetryableOptions,
 } from '../types.js';
@@ -15,17 +16,19 @@ const MAX_RETRY_AFTER_MS = 60_000;
  * Uses the `Retry-After` or `Retry-After-Ms` headers if present.
  * Otherwise uses the specified `delay` and `backoffFactor` if provided.
  */
-export function retryAfterDelay<MODEL extends LanguageModel | EmbeddingModel>(
+export function retryAfterDelay<
+  MODEL extends ResolvableLanguageModel | EmbeddingModel,
+>(
   options: RetryableOptions<MODEL>,
-): Retryable<MODEL> {
-  return (context) => {
+): Retryable<MODEL extends string ? LanguageModel : MODEL> {
+  return ((context) => {
     const { current } = context;
 
     if (isErrorAttempt(current)) {
       const { error } = current;
 
       if (APICallError.isInstance(error) && error.isRetryable === true) {
-        const model = current.model;
+        const model = current.model as unknown as MODEL;
 
         const headerDelay = parseRetryHeaders(error.responseHeaders);
         if (headerDelay !== null) {
@@ -45,5 +48,5 @@ export function retryAfterDelay<MODEL extends LanguageModel | EmbeddingModel>(
     }
 
     return undefined;
-  };
+  }) as Retryable<MODEL extends string ? LanguageModel : MODEL>;
 }

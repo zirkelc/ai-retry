@@ -3,12 +3,15 @@ import { resolveModel } from './resolve-model.js';
 import type {
   EmbeddingModel,
   LanguageModel,
+  ResolvableLanguageModel,
+  ResolvableVariant,
   ResolvedModel,
   Retries,
   Retry,
+  Retryable,
   RetryContext,
 } from './types.js';
-import { isResultAttempt, isRetry } from './utils.js';
+import { isObject, isResultAttempt } from './utils.js';
 
 /**
  * Find the next model to retry with based on the retry context
@@ -37,14 +40,17 @@ export async function findRetryModel<
     let retryModel: Retry<MODEL> | undefined;
 
     if (typeof retry === 'function') {
-      // Function retryable
-      retryModel = await retry(context);
-    } else if (isRetry(retry)) {
+      // Function retryable - call it with context
+      // The function can be either Retryable<MODEL> or Retryable<ResolvableLanguageModel>
+      // At runtime, both work because the context is structurally compatible
+      // We use type assertion here because TypeScript can't prove the union type compatibility
+      retryModel = await (retry as Retryable<MODEL>)(context);
+    } else if (isObject(retry) && 'model' in retry) {
       // Static Retry object
-      retryModel = retry;
+      retryModel = retry as Retry<MODEL>;
     } else {
       // Plain model
-      retryModel = { model: retry };
+      retryModel = { model: retry } as Retry<MODEL>;
     }
 
     if (retryModel) {
@@ -52,7 +58,8 @@ export async function findRetryModel<
        * The model can be string or an instance.
        * If it is a string, we need to resolve it to an instance.
        */
-      const resolvedModel = resolveModel(retryModel.model);
+      const modelValue = retryModel.model;
+      const resolvedModel = resolveModel(modelValue);
 
       /**
        * The model key uniquely identifies a model instance (provider + modelId)
@@ -72,7 +79,10 @@ export async function findRetryModel<
        * Check if the model can still be retried based on maxAttempts
        */
       if (retryAttempts.length < maxAttempts) {
-        return { ...retryModel, model: resolvedModel as ResolvedModel<MODEL> };
+        return {
+          ...retryModel,
+          model: resolvedModel,
+        };
       }
     }
   }
