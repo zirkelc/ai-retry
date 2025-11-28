@@ -4,7 +4,6 @@ import type {
   LanguageModelGenerate,
   LanguageModelStream,
   LanguageModelStreamPart,
-  Retry,
   RetryAttempt,
   RetryErrorAttempt,
   RetryResultAttempt,
@@ -26,6 +25,7 @@ export const isLanguageModel = (model: unknown): model is LanguageModel =>
   'provider' in model &&
   'modelId' in model &&
   'specificationVersion' in model &&
+  'doGenerate' in model &&
   model.specificationVersion === 'v3';
 
 export const isEmbeddingModel = (model: unknown): model is EmbeddingModel =>
@@ -33,6 +33,7 @@ export const isEmbeddingModel = (model: unknown): model is EmbeddingModel =>
   'provider' in model &&
   'modelId' in model &&
   'specificationVersion' in model &&
+  'doEmbed' in model &&
   model.specificationVersion === 'v3';
 
 export const isStreamResult = (
@@ -78,11 +79,3 @@ export const isStreamContentPart = (part: LanguageModelStreamPart) => {
     part.type === 'raw'
   );
 };
-
-/**
- * Type guard to check if a value is a Retry object (has a model property with a MODEL)
- */
-export const isRetry = <MODEL extends LanguageModel | EmbeddingModel>(
-  value: unknown,
-): value is Retry<MODEL> =>
-  isObject(value) && 'model' in value && isModel(value.model);

@@ -21,6 +21,9 @@ importers:
       '@ai-sdk/azure':
         specifier: 3.0.0-beta.68
         version: 3.0.0-beta.68(zod@4.1.13)
+      '@ai-sdk/gateway':
+        specifier: 2.0.0-beta.66
+        version: 2.0.0-beta.66(zod@4.1.13)
       '@ai-sdk/groq':
         specifier: 3.0.0-beta.36
         version: 3.0.0-beta.36(zod@4.1.13)
@@ -105,6 +108,12 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
+  '@ai-sdk/gateway@2.0.0-beta.66':
+    resolution: {integrity: sha512-9H4Y4pFcTlDqLOjhJNfHVJrmQiGGqzQLIDNKSGhab90KYgeZc7NouQF752jUIlEZCY1S4QynuUKISTUsKR6Qjg==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
+
   '@ai-sdk/groq@3.0.0-beta.36':
     resolution: {integrity: sha512-7iLX+mVuhrA7qPoAQEUTDhth6i78QRVMgj37FdMGoZ9T3Df0A39uIOnCZgHoIy614e/qJmAiwPO99LT6jf6eTA==}
     engines: {node: '>=18'}
@@ -133,8 +142,28 @@ packages:
       effect:
         optional: true
 
+  '@ai-sdk/provider-utils@4.0.0-beta.38':
+    resolution: {integrity: sha512-m1klVKT8KntgEIxHnSGEzdhdn48Uf/w6fe5rPWGnpTd+P532mADV7BC4txNYp40ziS5Z9VV1g1wn2xRScwEeRw==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      '@valibot/to-json-schema': ^1.3.0
+      arktype: ^2.1.22
+      effect: ^3.18.4
+      zod: ^3.25.76 || ^4.1.8
+    peerDependenciesMeta:
+      '@valibot/to-json-schema':
+        optional: true
+      arktype:
+        optional: true
+      effect:
+        optional: true
+
   '@ai-sdk/provider@3.0.0-beta.17':
     resolution: {integrity: sha512-1Jek+B4W/8KV48Lcsnl7QBXD22fmwDISz//JRGtPRjexrwr2bSeFJ3yqWpvQo6CYttac9GYf3MTiho4iSl+V2A==}
+    engines: {node: '>=18'}
+
+  '@ai-sdk/provider@3.0.0-beta.20':
+    resolution: {integrity: sha512-+JqXbqHHtucRsMFGidygRyftpjX1GD2r4cG3Sh2URZ6g8IaN8k4loXNh2gX92dd4YjlYYn3eTHp3R8dDJfX25Q==}
     engines: {node: '>=18'}
 
   '@ai-sdk/test-server@1.0.0-beta.1':
@@ -1617,6 +1646,17 @@ snapshots:
       - arktype
       - effect
 
+  '@ai-sdk/gateway@2.0.0-beta.66(zod@4.1.13)':
+    dependencies:
+      '@ai-sdk/provider': 3.0.0-beta.20
+      '@ai-sdk/provider-utils': 4.0.0-beta.38(zod@4.1.13)
+      '@vercel/oidc': 3.0.5
+      zod: 4.1.13
+    transitivePeerDependencies:
+      - '@valibot/to-json-schema'
+      - arktype
+      - effect
+
   '@ai-sdk/groq@3.0.0-beta.36(zod@4.1.13)':
     dependencies:
       '@ai-sdk/provider': 3.0.0-beta.17
@@ -1644,7 +1684,18 @@ snapshots:
       eventsource-parser: 3.0.6
       zod: 4.1.13
 
+  '@ai-sdk/provider-utils@4.0.0-beta.38(zod@4.1.13)':
+    dependencies:
+      '@ai-sdk/provider': 3.0.0-beta.20
+      '@standard-schema/spec': 1.0.0
+      eventsource-parser: 3.0.6
+      zod: 4.1.13
+
   '@ai-sdk/provider@3.0.0-beta.17':
+    dependencies:
+      json-schema: 0.4.0
+
+  '@ai-sdk/provider@3.0.0-beta.20':
     dependencies:
       json-schema: 0.4.0
 

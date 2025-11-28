@@ -97,6 +97,41 @@ const result = await embed({
 console.log(result.embedding);
 ```
 
+#### Vercel AI Gateway
+
+You can use `ai-retry` with Vercel AI Gateway by providing the model as a string. Internally, the model will be resolved with the default `gateway` [provider instance](https://ai-sdk.dev/providers/ai-sdk-providers/ai-gateway#provider-instance) from AI SDK.
+
+```typescript
+import { gateway } from 'ai';
+import { createRetryable } from 'ai-retry';
+
+const retryableModel = createRetryable({
+  model: 'openai/gpt-5',
+  retries: [
+    'anthropic/claude-sonnet-4'
+  ]
+});
+
+// Is the same as:
+const retryableModel = createRetryable({
+  model: gateway('openai/gpt-5'),
+  retries: [
+    gateway('anthropic/claude-sonnet-4')
+  ]
+});
+```
+
+By default, the `gateway` provider resolves model strings as language models. If you want to use an embedding model, you need to use the `textEmbeddingModel` method.
+
+```typescript
+import { gateway } from 'ai';
+import { createRetryable } from 'ai-retry';
+
+const retryableModel = createRetryable({
+  model: gateway.textEmbeddingModel('openai/text-embedding-3-large'),
+});
+```
+
 ### Retryables
 
 The objects passed to the `retries` are called retryables and control the retry behavior. We can distinguish between two types of retryables:

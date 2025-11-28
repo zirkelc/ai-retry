@@ -316,7 +316,8 @@ describe('serviceOverloaded', () => {
       `);
     });
 
-    describe('anthropic', () => {
+    // overloaded error has been integrated into AI SDK, so we don't need to test it here
+    describe.skip('anthropic', () => {
       process.env.ANTHROPIC_API_KEY = 'test-anthropic-key';
       process.env.OPENAI_API_KEY = 'test-openai-key';
 
