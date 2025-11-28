@@ -1,9 +1,7 @@
 import { APICallError } from 'ai';
 import type {
   EmbeddingModel,
-  LanguageModel,
   ResolvableLanguageModel,
-  Retry,
   Retryable,
   RetryableOptions,
 } from '../types.js';

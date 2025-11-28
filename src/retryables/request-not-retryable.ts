@@ -1,7 +1,6 @@
 import { APICallError } from 'ai';
 import type {
   EmbeddingModel,
-  LanguageModel,
   ResolvableLanguageModel,
   Retryable,
   RetryableOptions,
@@ -13,11 +12,8 @@ import { isErrorAttempt } from '../utils.js';
  */
 export function requestNotRetryable<
   MODEL extends ResolvableLanguageModel | EmbeddingModel,
->(
-  model: MODEL,
-  options?: RetryableOptions<MODEL>,
-): Retryable<MODEL extends string ? LanguageModel : MODEL> {
-  return ((context) => {
+>(model: MODEL, options?: RetryableOptions<MODEL>): Retryable<MODEL> {
+  return (context) => {
     const { current } = context;
 
     if (isErrorAttempt(current)) {
@@ -30,5 +26,5 @@ export function requestNotRetryable<
     }
 
     return undefined;
-  }) as Retryable<MODEL extends string ? LanguageModel : MODEL>;
+  };
 }

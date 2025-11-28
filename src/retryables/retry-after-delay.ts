@@ -2,7 +2,6 @@ import { APICallError } from 'ai';
 import { parseRetryHeaders } from '../parse-retry-headers.js';
 import type {
   EmbeddingModel,
-  LanguageModel,
   ResolvableLanguageModel,
   Retryable,
   RetryableOptions,
@@ -18,10 +17,8 @@ const MAX_RETRY_AFTER_MS = 60_000;
  */
 export function retryAfterDelay<
   MODEL extends ResolvableLanguageModel | EmbeddingModel,
->(
-  options: RetryableOptions<MODEL>,
-): Retryable<MODEL extends string ? LanguageModel : MODEL> {
-  return ((context) => {
+>(options: RetryableOptions<MODEL>): Retryable<MODEL> {
+  return (context) => {
     const { current } = context;
 
     if (isErrorAttempt(current)) {
@@ -48,5 +45,5 @@ export function retryAfterDelay<
     }
 
     return undefined;
-  }) as Retryable<MODEL extends string ? LanguageModel : MODEL>;
+  };
 }

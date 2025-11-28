@@ -1,13 +1,9 @@
-import { gateway } from 'ai';
 import type {
   EmbeddingModel,
   LanguageModel,
   LanguageModelGenerate,
   LanguageModelStream,
   LanguageModelStreamPart,
-  ResolvableLanguageModel,
-  ResolvedModel,
-  Retry,
   RetryAttempt,
   RetryErrorAttempt,
   RetryResultAttempt,
