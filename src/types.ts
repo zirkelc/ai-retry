@@ -2,14 +2,16 @@ import type {
   EmbeddingModelV2,
   LanguageModelV2,
   LanguageModelV2CallOptions,
+  LanguageModelV2Prompt,
   LanguageModelV2StreamPart,
+  SharedV2ProviderOptions,
 } from '@ai-sdk/provider';
-import type { ProviderOptions } from '@ai-sdk/provider-utils';
 
 export type LanguageModel = LanguageModelV2;
-export type EmbeddingModel<VALUE = unknown> = EmbeddingModelV2<VALUE>;
+export type EmbeddingModel<VALUE = any> = EmbeddingModelV2<VALUE>;
 export type LanguageModelCallOptions = LanguageModelV2CallOptions;
 export type LanguageModelStreamPart = LanguageModelV2StreamPart;
+export type LanguageModelPrompt = LanguageModelV2Prompt;
 /**
  * Options for creating a retryable model.
  */
@@ -65,16 +67,62 @@ export type RetryAttempt<MODEL extends LanguageModel | EmbeddingModel> =
   | RetryResultAttempt;
 
 /**
+ * Call options that can be overridden during retry for language models.
+ * Excludes `abortSignal` (handled via `timeout`), `includeRawChunks` (internal),
+ * `responseFormat`, `tools`, and `toolChoice`.
+ */
+export type LanguageModelRetryCallOptions = Pick<
+  LanguageModelCallOptions,
+  | 'prompt'
+  | 'maxOutputTokens'
+  | 'temperature'
+  | 'stopSequences'
+  | 'topP'
+  | 'topK'
+  | 'presencePenalty'
+  | 'frequencyPenalty'
+  | 'seed'
+  | 'headers'
+  | 'providerOptions'
+>;
+
+/**
+ * Call options that can be overridden during retry for embedding models.
+ * Excludes `abortSignal` (handled via `timeout`).
+ */
+export type EmbeddingModelRetryCallOptions<VALUE = any> = Pick<
+  EmbeddingModelCallOptions<VALUE>,
+  'values' | 'headers' | 'providerOptions'
+>;
+
+/**
  * A model to retry with and the maximum number of attempts for that model.
+ * Includes all possible call options - language model options are only applicable
+ * when MODEL is a LanguageModel, and embedding model options are only applicable
+ * when MODEL is an EmbeddingModel.
  */
 export type Retry<MODEL extends LanguageModel | EmbeddingModel> = {
   model: MODEL;
+  /**
+   * Maximum number of attempts for this model.
+   */
   maxAttempts?: number;
+  /**
+   * Delay in milliseconds before retrying.
+   */
   delay?: number;
+  /**
+   * Factor to multiply the delay by for exponential backoff.
+   */
   backoffFactor?: number;
-  providerOptions?: ProviderOptions;
+  /**
+   * Timeout in milliseconds for the retry request.
+   * Creates a new AbortSignal with this timeout.
+   */
   timeout?: number;
-};
+} & (MODEL extends LanguageModel
+  ? Partial<LanguageModelRetryCallOptions>
+  : Partial<EmbeddingModelRetryCallOptions>);
 
 /**
  * A function that determines whether to retry with a different model based on the current attempt and all previous attempts.
@@ -98,7 +146,7 @@ export type LanguageModelStream = Awaited<
   ReturnType<LanguageModel['doStream']>
 >;
 
-export type EmbeddingModelCallOptions<VALUE> = Parameters<
+export type EmbeddingModelCallOptions<VALUE = any> = Parameters<
   EmbeddingModel<VALUE>['doEmbed']
 >[0];
 

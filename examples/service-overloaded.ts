@@ -2,7 +2,7 @@ import { anthropic } from '@ai-sdk/anthropic';
 import { openai } from '@ai-sdk/openai';
 import { streamText } from 'ai';
 import { createRetryable } from 'ai-retry';
-import { serviceOverloaded } from 'ai-retry/retryables';
+import { serviceOverloaded } from '../src/retryables/service-overloaded.js';
 
 const retryableModel = createRetryable({
   model: anthropic('claude-sonnet-4-0'),

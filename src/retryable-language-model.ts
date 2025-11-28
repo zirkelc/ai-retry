@@ -56,6 +56,40 @@ export class RetryableLanguageModel implements LanguageModel {
   }
 
   /**
+   * Apply retry configuration options to call options.
+   * Overrides the original options with any options specified in the retry config.
+   */
+  private applyRetryCallOptions(
+    options: LanguageModelCallOptions,
+    currentRetry?: Retry<LanguageModel>,
+  ): LanguageModelCallOptions {
+    if (!currentRetry) return options;
+
+    return {
+      ...options,
+      // Override prompt if specified
+      prompt: currentRetry.prompt ?? options.prompt,
+      // Override generation parameters
+      maxOutputTokens: currentRetry.maxOutputTokens ?? options.maxOutputTokens,
+      temperature: currentRetry.temperature ?? options.temperature,
+      stopSequences: currentRetry.stopSequences ?? options.stopSequences,
+      topP: currentRetry.topP ?? options.topP,
+      topK: currentRetry.topK ?? options.topK,
+      presencePenalty: currentRetry.presencePenalty ?? options.presencePenalty,
+      frequencyPenalty:
+        currentRetry.frequencyPenalty ?? options.frequencyPenalty,
+      seed: currentRetry.seed ?? options.seed,
+      // Override HTTP options
+      headers: currentRetry.headers ?? options.headers,
+      providerOptions: currentRetry.providerOptions ?? options.providerOptions,
+      // Handle timeout -> abortSignal conversion
+      abortSignal: currentRetry.timeout
+        ? AbortSignal.timeout(currentRetry.timeout)
+        : options.abortSignal,
+    };
+  }
+
+  /**
    * Execute a function with retry logic for handling errors
    */
   private async withRetry<
@@ -272,15 +306,7 @@ export class RetryableLanguageModel implements LanguageModel {
 
     const { result } = await this.withRetry({
       fn: async (currentRetry) => {
-        // Apply retry configuration if available
-        const callOptions: LanguageModelCallOptions = {
-          ...options,
-          providerOptions:
-            currentRetry?.providerOptions ?? options.providerOptions,
-          abortSignal: currentRetry?.timeout
-            ? AbortSignal.timeout(currentRetry.timeout)
-            : options.abortSignal,
-        };
+        const callOptions = this.applyRetryCallOptions(options, currentRetry);
         return this.currentModel.doGenerate(callOptions);
       },
       abortSignal: options.abortSignal,
@@ -309,15 +335,7 @@ export class RetryableLanguageModel implements LanguageModel {
      */
     let { result, attempts } = await this.withRetry({
       fn: async (currentRetry) => {
-        // Apply retry configuration if available
-        const callOptions: LanguageModelCallOptions = {
-          ...options,
-          providerOptions:
-            currentRetry?.providerOptions ?? options.providerOptions,
-          abortSignal: currentRetry?.timeout
-            ? AbortSignal.timeout(currentRetry.timeout)
-            : options.abortSignal,
-        };
+        const callOptions = this.applyRetryCallOptions(options, currentRetry);
         return this.currentModel.doStream(callOptions);
       },
       abortSignal: options.abortSignal,
@@ -409,14 +427,10 @@ export class RetryableLanguageModel implements LanguageModel {
              */
             const retriedResult = await this.withRetry({
               fn: async () => {
-                const callOptions: LanguageModelCallOptions = {
-                  ...options,
-                  providerOptions:
-                    retryModel.providerOptions ?? options.providerOptions,
-                  abortSignal: retryModel.timeout
-                    ? AbortSignal.timeout(retryModel.timeout)
-                    : options.abortSignal,
-                };
+                const callOptions = this.applyRetryCallOptions(
+                  options,
+                  retryModel,
+                );
                 return this.currentModel.doStream(callOptions);
               },
               attempts,

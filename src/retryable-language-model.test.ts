@@ -1099,6 +1099,270 @@ describe('generateText', () => {
         expect(baseModelSignal).not.toBe(fallbackModelSignal);
       });
     });
+
+    describe('prompt', () => {
+      it('should override prompt on retry', async () => {
+        // Arrange
+        const baseModel = new MockLanguageModel({ doGenerate: retryableError });
+        const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
+        const overridePrompt = [
+          {
+            role: 'user' as const,
+            content: [{ type: 'text' as const, text: 'Modified prompt' }],
+          },
+        ];
+
+        // Act
+        await generateText({
+          model: createRetryable({
+            model: baseModel,
+            retries: [{ model: fallbackModel, prompt: overridePrompt }],
+          }),
+          prompt: 'Original prompt',
+        });
+
+        // Assert
+        expect(fallbackModel.doGenerate).toHaveBeenCalledWith(
+          expect.objectContaining({ prompt: overridePrompt }),
+        );
+      });
+    });
+
+    describe('temperature', () => {
+      it('should override temperature on retry', async () => {
+        // Arrange
+        const baseModel = new MockLanguageModel({ doGenerate: retryableError });
+        const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
+
+        // Act
+        await generateText({
+          model: createRetryable({
+            model: baseModel,
+            retries: [{ model: fallbackModel, temperature: 0.5 }],
+          }),
+          prompt: 'Hello!',
+          temperature: 1.0,
+        });
+
+        // Assert
+        expect(baseModel.doGenerate).toHaveBeenCalledWith(
+          expect.objectContaining({ temperature: 1.0 }),
+        );
+        expect(fallbackModel.doGenerate).toHaveBeenCalledWith(
+          expect.objectContaining({ temperature: 0.5 }),
+        );
+      });
+    });
+
+    describe('topP', () => {
+      it('should override topP on retry', async () => {
+        // Arrange
+        const baseModel = new MockLanguageModel({ doGenerate: retryableError });
+        const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
+
+        // Act
+        await generateText({
+          model: createRetryable({
+            model: baseModel,
+            retries: [{ model: fallbackModel, topP: 0.8 }],
+          }),
+          prompt: 'Hello!',
+          topP: 1.0,
+        });
+
+        // Assert
+        expect(baseModel.doGenerate).toHaveBeenCalledWith(
+          expect.objectContaining({ topP: 1.0 }),
+        );
+        expect(fallbackModel.doGenerate).toHaveBeenCalledWith(
+          expect.objectContaining({ topP: 0.8 }),
+        );
+      });
+    });
+
+    describe('topK', () => {
+      it('should override topK on retry', async () => {
+        // Arrange
+        const baseModel = new MockLanguageModel({ doGenerate: retryableError });
+        const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
+
+        // Act
+        await generateText({
+          model: createRetryable({
+            model: baseModel,
+            retries: [{ model: fallbackModel, topK: 10 }],
+          }),
+          prompt: 'Hello!',
+          topK: 50,
+        });
+
+        // Assert
+        expect(baseModel.doGenerate).toHaveBeenCalledWith(
+          expect.objectContaining({ topK: 50 }),
+        );
+        expect(fallbackModel.doGenerate).toHaveBeenCalledWith(
+          expect.objectContaining({ topK: 10 }),
+        );
+      });
+    });
+
+    describe('maxOutputTokens', () => {
+      it('should override maxOutputTokens on retry', async () => {
+        // Arrange
+        const baseModel = new MockLanguageModel({ doGenerate: retryableError });
+        const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
+
+        // Act
+        await generateText({
+          model: createRetryable({
+            model: baseModel,
+            retries: [{ model: fallbackModel, maxOutputTokens: 500 }],
+          }),
+          prompt: 'Hello!',
+          maxOutputTokens: 1000,
+        });
+
+        // Assert
+        expect(baseModel.doGenerate).toHaveBeenCalledWith(
+          expect.objectContaining({ maxOutputTokens: 1000 }),
+        );
+        expect(fallbackModel.doGenerate).toHaveBeenCalledWith(
+          expect.objectContaining({ maxOutputTokens: 500 }),
+        );
+      });
+    });
+
+    describe('seed', () => {
+      it('should override seed on retry', async () => {
+        // Arrange
+        const baseModel = new MockLanguageModel({ doGenerate: retryableError });
+        const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
+
+        // Act
+        await generateText({
+          model: createRetryable({
+            model: baseModel,
+            retries: [{ model: fallbackModel, seed: 42 }],
+          }),
+          prompt: 'Hello!',
+          seed: 123,
+        });
+
+        // Assert
+        expect(baseModel.doGenerate).toHaveBeenCalledWith(
+          expect.objectContaining({ seed: 123 }),
+        );
+        expect(fallbackModel.doGenerate).toHaveBeenCalledWith(
+          expect.objectContaining({ seed: 42 }),
+        );
+      });
+    });
+
+    describe('stopSequences', () => {
+      it('should override stopSequences on retry', async () => {
+        // Arrange
+        const baseModel = new MockLanguageModel({ doGenerate: retryableError });
+        const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
+
+        // Act
+        await generateText({
+          model: createRetryable({
+            model: baseModel,
+            retries: [{ model: fallbackModel, stopSequences: ['RETRY_STOP'] }],
+          }),
+          prompt: 'Hello!',
+          stopSequences: ['ORIGINAL_STOP'],
+        });
+
+        // Assert
+        expect(baseModel.doGenerate).toHaveBeenCalledWith(
+          expect.objectContaining({ stopSequences: ['ORIGINAL_STOP'] }),
+        );
+        expect(fallbackModel.doGenerate).toHaveBeenCalledWith(
+          expect.objectContaining({ stopSequences: ['RETRY_STOP'] }),
+        );
+      });
+    });
+
+    describe('presencePenalty', () => {
+      it('should override presencePenalty on retry', async () => {
+        // Arrange
+        const baseModel = new MockLanguageModel({ doGenerate: retryableError });
+        const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
+
+        // Act
+        await generateText({
+          model: createRetryable({
+            model: baseModel,
+            retries: [{ model: fallbackModel, presencePenalty: 0.5 }],
+          }),
+          prompt: 'Hello!',
+          presencePenalty: 0.0,
+        });
+
+        // Assert
+        expect(baseModel.doGenerate).toHaveBeenCalledWith(
+          expect.objectContaining({ presencePenalty: 0.0 }),
+        );
+        expect(fallbackModel.doGenerate).toHaveBeenCalledWith(
+          expect.objectContaining({ presencePenalty: 0.5 }),
+        );
+      });
+    });
+
+    describe('frequencyPenalty', () => {
+      it('should override frequencyPenalty on retry', async () => {
+        // Arrange
+        const baseModel = new MockLanguageModel({ doGenerate: retryableError });
+        const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
+
+        // Act
+        await generateText({
+          model: createRetryable({
+            model: baseModel,
+            retries: [{ model: fallbackModel, frequencyPenalty: 0.8 }],
+          }),
+          prompt: 'Hello!',
+          frequencyPenalty: 0.2,
+        });
+
+        // Assert
+        expect(baseModel.doGenerate).toHaveBeenCalledWith(
+          expect.objectContaining({ frequencyPenalty: 0.2 }),
+        );
+        expect(fallbackModel.doGenerate).toHaveBeenCalledWith(
+          expect.objectContaining({ frequencyPenalty: 0.8 }),
+        );
+      });
+    });
+
+    describe('headers', () => {
+      it('should override headers on retry', async () => {
+        // Arrange
+        const baseModel = new MockLanguageModel({ doGenerate: retryableError });
+        const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
+        // Use lowercase headers to match what AI SDK expects
+        const retryHeaders = { 'x-retry': 'retry' };
+
+        // Act
+        await generateText({
+          model: createRetryable({
+            model: baseModel,
+            retries: [{ model: fallbackModel, headers: retryHeaders }],
+          }),
+          prompt: 'Hello!',
+        });
+
+        // Assert - check that retry headers are passed to fallback model
+        expect(fallbackModel.doGenerate).toHaveBeenCalledWith(
+          expect.objectContaining({
+            headers: expect.objectContaining({
+              'x-retry': 'retry',
+            }),
+          }),
+        );
+      });
+    });
   });
 
   describe('RetryError', () => {
@@ -1586,7 +1850,7 @@ describe('streamText', () => {
             "response": {
               "headers": undefined,
               "id": "aitxt-mock-id",
-              "modelId": "mock-model-83",
+              "modelId": "mock-model-103",
               "timestamp": 1970-01-01T00:00:00.000Z,
             },
             "type": "finish-step",

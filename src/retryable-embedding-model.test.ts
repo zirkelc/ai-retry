@@ -733,6 +733,61 @@ describe('embed', () => {
         expect(baseModelSignal).not.toBe(fallbackModelSignal);
       });
     });
+
+    describe('values', () => {
+      it('should override values on retry', async () => {
+        // Arrange
+        const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
+        const fallbackModel = new MockEmbeddingModel({
+          doEmbed: mockEmbeddings,
+        });
+        const overrideValues = ['modified value'];
+
+        // Act
+        await embed({
+          model: createRetryable({
+            model: baseModel,
+            retries: [{ model: fallbackModel, values: overrideValues }],
+          }),
+          value: 'original value',
+        });
+
+        // Assert
+        expect(fallbackModel.doEmbed).toHaveBeenCalledWith(
+          expect.objectContaining({ values: overrideValues }),
+        );
+      });
+    });
+
+    describe('headers', () => {
+      it('should override headers on retry', async () => {
+        // Arrange
+        const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
+        const fallbackModel = new MockEmbeddingModel({
+          doEmbed: mockEmbeddings,
+        });
+        // Use lowercase headers to match what AI SDK expects
+        const retryHeaders = { 'x-retry': 'retry' };
+
+        // Act
+        await embed({
+          model: createRetryable({
+            model: baseModel,
+            retries: [{ model: fallbackModel, headers: retryHeaders }],
+          }),
+          value: 'Hello!',
+        });
+
+        // Assert - check that retry headers are passed to fallback model
+        expect(fallbackModel.doEmbed).toHaveBeenCalledWith(
+          expect.objectContaining({
+            headers: expect.objectContaining({
+              'x-retry': 'retry',
+            }),
+          }),
+        );
+      });
+    });
   });
 
   describe('RetryError', () => {

@@ -55,6 +55,30 @@ export class RetryableEmbeddingModel<VALUE> implements EmbeddingModel<VALUE> {
   }
 
   /**
+   * Apply retry configuration options to call options.
+   * Overrides the original options with any options specified in the retry config.
+   */
+  private applyRetryCallOptions(
+    options: EmbeddingModelCallOptions<VALUE>,
+    currentRetry?: Retry<EmbeddingModel<VALUE>>,
+  ): EmbeddingModelCallOptions<VALUE> {
+    if (!currentRetry) return options;
+
+    return {
+      ...options,
+      // Override values if specified (cast to VALUE[] since the type is generic)
+      values: (currentRetry.values as VALUE[] | undefined) ?? options.values,
+      // Override HTTP options
+      headers: currentRetry.headers ?? options.headers,
+      providerOptions: currentRetry.providerOptions ?? options.providerOptions,
+      // Handle timeout -> abortSignal conversion
+      abortSignal: currentRetry.timeout
+        ? AbortSignal.timeout(currentRetry.timeout)
+        : options.abortSignal,
+    };
+  }
+
+  /**
    * Execute a function with retry logic for handling errors
    */
   private async withRetry<RESULT extends EmbeddingModelEmbed<VALUE>>(input: {
@@ -203,15 +227,7 @@ export class RetryableEmbeddingModel<VALUE> implements EmbeddingModel<VALUE> {
 
     const { result } = await this.withRetry({
       fn: async (currentRetry) => {
-        // Apply retry configuration if available
-        const callOptions: EmbeddingModelCallOptions<VALUE> = {
-          ...options,
-          providerOptions:
-            currentRetry?.providerOptions ?? options.providerOptions,
-          abortSignal: currentRetry?.timeout
-            ? AbortSignal.timeout(currentRetry.timeout)
-            : options.abortSignal,
-        };
+        const callOptions = this.applyRetryCallOptions(options, currentRetry);
         return this.currentModel.doEmbed(callOptions);
       },
       abortSignal: options.abortSignal,
