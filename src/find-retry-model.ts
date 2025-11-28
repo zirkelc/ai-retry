@@ -3,8 +3,6 @@ import { resolveModel } from './resolve-model.js';
 import type {
   EmbeddingModel,
   LanguageModel,
-  ResolvableLanguageModel,
-  ResolvableVariant,
   ResolvedModel,
   Retries,
   Retry,
@@ -21,9 +19,7 @@ export async function findRetryModel<
 >(
   retries: Retries<MODEL>,
   context: RetryContext<MODEL>,
-): Promise<
-  (Omit<Retry<MODEL>, 'model'> & { model: ResolvedModel<MODEL> }) | undefined
-> {
+): Promise<Retry<ResolvedModel<MODEL>> | undefined> {
   /**
    * Filter retryables based on attempt type:
    * - Result-based attempts: Only consider function retryables (skip plain models and static Retry objects)

@@ -28,13 +28,12 @@ export type ResolvableLanguageModel =
   | LanguageModel
   | Literals<GatewayLanguageModelId>;
 
+export type ResolvableModel<MODEL extends LanguageModel | EmbeddingModel> =
+  MODEL extends LanguageModel ? ResolvableLanguageModel : EmbeddingModel;
+
 export type ResolvedModel<
   MODEL extends ResolvableLanguageModel | EmbeddingModel,
-> = MODEL extends ResolvableLanguageModel
-  ? LanguageModel
-  : MODEL extends EmbeddingModel
-    ? EmbeddingModel
-    : never;
+> = MODEL extends ResolvableLanguageModel ? LanguageModel : EmbeddingModel;
 
 /**
  * Options for creating a retryable model.
@@ -120,16 +119,10 @@ export type Retryable<MODEL extends ResolvableLanguageModel | EmbeddingModel> =
     context: RetryContext<MODEL>,
   ) => Retry<MODEL> | Promise<Retry<MODEL> | undefined> | undefined;
 
-export type ResolvableVariant<MODEL extends LanguageModel | EmbeddingModel> =
-  MODEL extends LanguageModel ? ResolvableLanguageModel : never;
-
 export type Retries<MODEL extends LanguageModel | EmbeddingModel> = Array<
-  | Retryable<MODEL>
-  | Retryable<ResolvableVariant<MODEL>>
-  | Retry<MODEL>
-  | Retry<ResolvableVariant<MODEL>>
-  | MODEL
-  | ResolvableVariant<MODEL>
+  | Retryable<ResolvableModel<MODEL>>
+  | Retry<ResolvableModel<MODEL>>
+  | ResolvableModel<MODEL>
 >;
 
 export type RetryableOptions<
