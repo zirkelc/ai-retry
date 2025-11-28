@@ -19,6 +19,7 @@ import type {
   LanguageModelStreamPart,
   Retryable,
   RetryableModelOptions,
+  RetryContext,
 } from './types.js';
 import { isErrorAttempt, isResultAttempt } from './utils.js';
 
@@ -611,7 +612,7 @@ describe('generateText', () => {
         model: createRetryable({
           model: baseModel,
           retries: [
-            (context) => {
+            (context: RetryContext<LanguageModel>) => {
               if (
                 isResultAttempt(context.current) &&
                 context.current.result.finishReason === 'content-filter'
@@ -712,7 +713,7 @@ describe('generateText', () => {
         model: createRetryable({
           model: baseModel,
           retries: [
-            (context) => {
+            (context: RetryContext<LanguageModel>) => {
               if (
                 isResultAttempt(context.current) &&
                 context.current.result.finishReason === 'content-filter'

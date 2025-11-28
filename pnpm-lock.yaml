@@ -21,6 +21,9 @@ importers:
       '@ai-sdk/azure':
         specifier: ^2.0.30
         version: 2.0.74(zod@4.1.13)
+      '@ai-sdk/gateway':
+        specifier: ^2.0.15
+        version: 2.0.15(zod@4.1.13)
       '@ai-sdk/groq':
         specifier: ^2.0.24
         version: 2.0.31(zod@4.1.13)
@@ -40,7 +43,7 @@ importers:
         specifier: ^24.3.3
         version: 24.10.1
       ai:
-        specifier: ^5.0.44
+        specifier: ^5.0.102
         version: 5.0.102(zod@4.1.13)
       husky:
         specifier: ^9.1.7
