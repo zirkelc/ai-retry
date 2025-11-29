@@ -803,6 +803,145 @@ describe('generateText', () => {
     });
   });
 
+  describe('attempt options', () => {
+    it('should include call options in error attempts', async () => {
+      // Arrange
+      const baseModel = new MockLanguageModel({ doGenerate: retryableError });
+      const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
+      const onErrorSpy = vi.fn<OnError>();
+
+      // Act
+      await generateText({
+        model: createRetryable({
+          model: baseModel,
+          retries: [fallbackModel],
+          onError: onErrorSpy,
+        }),
+        prompt: 'Hello!',
+        temperature: 0.7,
+        maxOutputTokens: 1000,
+      });
+
+      // Assert
+      expect(onErrorSpy).toHaveBeenCalledTimes(1);
+
+      const errorContext = onErrorSpy.mock.calls[0]![0];
+      expect(errorContext.current.options).toBeDefined();
+      expect(errorContext.current.options.temperature).toBe(0.7);
+      expect(errorContext.current.options.maxOutputTokens).toBe(1000);
+    });
+
+    it('should include call options in result attempts', async () => {
+      // Arrange
+      const baseModel = new MockLanguageModel({
+        doGenerate: contentFilterResult,
+      });
+      const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
+      const onRetrySpy = vi.fn<OnRetry>();
+
+      // Act
+      await generateText({
+        model: createRetryable({
+          model: baseModel,
+          retries: [
+            (context) => {
+              if (
+                isResultAttempt(context.current) &&
+                context.current.result.finishReason === 'content-filter'
+              ) {
+                return { model: fallbackModel, maxAttempts: 1 };
+              }
+              return undefined;
+            },
+          ],
+          onRetry: onRetrySpy,
+        }),
+        prompt: 'Hello!',
+        temperature: 0.8,
+        seed: 42,
+      });
+
+      // Assert
+      expect(onRetrySpy).toHaveBeenCalledTimes(1);
+
+      const retryContext = onRetrySpy.mock.calls[0]![0];
+      expect(isResultAttempt(retryContext.current)).toBe(true);
+      if (isResultAttempt(retryContext.current)) {
+        expect(retryContext.current.options).toBeDefined();
+        expect(retryContext.current.options.temperature).toBe(0.8);
+        expect(retryContext.current.options.seed).toBe(42);
+      }
+    });
+
+    it('should reflect overridden options in retry attempts', async () => {
+      // Arrange
+      const baseModel = new MockLanguageModel({ doGenerate: retryableError });
+      const fallbackModel = new MockLanguageModel({
+        doGenerate: nonRetryableError,
+      });
+      const finalModel = new MockLanguageModel({ doGenerate: mockResult });
+      const onErrorSpy = vi.fn<OnError>();
+
+      // Act
+      await generateText({
+        model: createRetryable({
+          model: baseModel,
+          retries: [
+            { model: fallbackModel, options: { temperature: 0.5 } },
+            finalModel,
+          ],
+          onError: onErrorSpy,
+        }),
+        prompt: 'Hello!',
+        temperature: 1.0,
+      });
+
+      // Assert
+      expect(onErrorSpy).toHaveBeenCalledTimes(2);
+
+      // First attempt should have original temperature
+      const firstErrorContext = onErrorSpy.mock.calls[0]![0];
+      expect(firstErrorContext.current.options.temperature).toBe(1.0);
+
+      // Second attempt should have overridden temperature
+      const secondErrorContext = onErrorSpy.mock.calls[1]![0];
+      expect(secondErrorContext.current.options.temperature).toBe(0.5);
+    });
+
+    it('should include prompt in options', async () => {
+      // Arrange
+      const baseModel = new MockLanguageModel({ doGenerate: retryableError });
+      const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
+      const onErrorSpy = vi.fn<OnError>();
+
+      // Act
+      await generateText({
+        model: createRetryable({
+          model: baseModel,
+          retries: [fallbackModel],
+          onError: onErrorSpy,
+        }),
+        prompt: 'Test prompt',
+      });
+
+      // Assert
+      expect(onErrorSpy).toHaveBeenCalledTimes(1);
+
+      const errorContext = onErrorSpy.mock.calls[0]![0];
+      expect(errorContext.current.options.prompt).toBeDefined();
+      expect(errorContext.current.options.prompt).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            role: 'user',
+            content: expect.arrayContaining([
+              expect.objectContaining({ type: 'text', text: 'Test prompt' }),
+            ]),
+          }),
+        ]),
+      );
+    });
+  });
+
   describe('RetryableOptions', () => {
     describe('maxAttempts', () => {
       it('should try each model only once by default', async () => {
@@ -1116,7 +1255,9 @@ describe('generateText', () => {
         await generateText({
           model: createRetryable({
             model: baseModel,
-            retries: [{ model: fallbackModel, prompt: overridePrompt }],
+            retries: [
+              { model: fallbackModel, options: { prompt: overridePrompt } },
+            ],
           }),
           prompt: 'Original prompt',
         });
@@ -1138,7 +1279,7 @@ describe('generateText', () => {
         await generateText({
           model: createRetryable({
             model: baseModel,
-            retries: [{ model: fallbackModel, temperature: 0.5 }],
+            retries: [{ model: fallbackModel, options: { temperature: 0.5 } }],
           }),
           prompt: 'Hello!',
           temperature: 1.0,
@@ -1164,7 +1305,7 @@ describe('generateText', () => {
         await generateText({
           model: createRetryable({
             model: baseModel,
-            retries: [{ model: fallbackModel, topP: 0.8 }],
+            retries: [{ model: fallbackModel, options: { topP: 0.8 } }],
           }),
           prompt: 'Hello!',
           topP: 1.0,
@@ -1190,7 +1331,7 @@ describe('generateText', () => {
         await generateText({
           model: createRetryable({
             model: baseModel,
-            retries: [{ model: fallbackModel, topK: 10 }],
+            retries: [{ model: fallbackModel, options: { topK: 10 } }],
           }),
           prompt: 'Hello!',
           topK: 50,
@@ -1216,7 +1357,9 @@ describe('generateText', () => {
         await generateText({
           model: createRetryable({
             model: baseModel,
-            retries: [{ model: fallbackModel, maxOutputTokens: 500 }],
+            retries: [
+              { model: fallbackModel, options: { maxOutputTokens: 500 } },
+            ],
           }),
           prompt: 'Hello!',
           maxOutputTokens: 1000,
@@ -1242,7 +1385,7 @@ describe('generateText', () => {
         await generateText({
           model: createRetryable({
             model: baseModel,
-            retries: [{ model: fallbackModel, seed: 42 }],
+            retries: [{ model: fallbackModel, options: { seed: 42 } }],
           }),
           prompt: 'Hello!',
           seed: 123,
@@ -1268,7 +1411,12 @@ describe('generateText', () => {
         await generateText({
           model: createRetryable({
             model: baseModel,
-            retries: [{ model: fallbackModel, stopSequences: ['RETRY_STOP'] }],
+            retries: [
+              {
+                model: fallbackModel,
+                options: { stopSequences: ['RETRY_STOP'] },
+              },
+            ],
           }),
           prompt: 'Hello!',
           stopSequences: ['ORIGINAL_STOP'],
@@ -1294,7 +1442,9 @@ describe('generateText', () => {
         await generateText({
           model: createRetryable({
             model: baseModel,
-            retries: [{ model: fallbackModel, presencePenalty: 0.5 }],
+            retries: [
+              { model: fallbackModel, options: { presencePenalty: 0.5 } },
+            ],
           }),
           prompt: 'Hello!',
           presencePenalty: 0.0,
@@ -1320,7 +1470,9 @@ describe('generateText', () => {
         await generateText({
           model: createRetryable({
             model: baseModel,
-            retries: [{ model: fallbackModel, frequencyPenalty: 0.8 }],
+            retries: [
+              { model: fallbackModel, options: { frequencyPenalty: 0.8 } },
+            ],
           }),
           prompt: 'Hello!',
           frequencyPenalty: 0.2,
@@ -1348,7 +1500,9 @@ describe('generateText', () => {
         await generateText({
           model: createRetryable({
             model: baseModel,
-            retries: [{ model: fallbackModel, headers: retryHeaders }],
+            retries: [
+              { model: fallbackModel, options: { headers: retryHeaders } },
+            ],
           }),
           prompt: 'Hello!',
         });
@@ -1850,7 +2004,7 @@ describe('streamText', () => {
             "response": {
               "headers": undefined,
               "id": "aitxt-mock-id",
-              "modelId": "mock-model-103",
+              "modelId": "mock-model-112",
               "timestamp": 1970-01-01T00:00:00.000Z,
             },
             "type": "finish-step",

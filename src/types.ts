@@ -12,18 +12,92 @@ export type EmbeddingModel<VALUE = any> = EmbeddingModelV2<VALUE>;
 export type LanguageModelCallOptions = LanguageModelV2CallOptions;
 export type LanguageModelStreamPart = LanguageModelV2StreamPart;
 export type LanguageModelPrompt = LanguageModelV2Prompt;
+
+export type LanguageModelGenerate = Awaited<
+  ReturnType<LanguageModel['doGenerate']>
+>;
+
+export type LanguageModelStream = Awaited<
+  ReturnType<LanguageModel['doStream']>
+>;
+
+export type EmbeddingModelCallOptions<VALUE = any> = Parameters<
+  EmbeddingModel<VALUE>['doEmbed']
+>[0];
+
+export type EmbeddingModelEmbed<VALUE = any> = Awaited<
+  ReturnType<EmbeddingModel<VALUE>['doEmbed']>
+>;
+
 /**
- * Options for creating a retryable model.
+ * Call options that can be overridden during retry for language models.
+ * Excludes `abortSignal` (handled via `timeout`), `includeRawChunks` (internal),
+ * `responseFormat`, `tools`, and `toolChoice`.
  */
-export interface RetryableModelOptions<
-  MODEL extends LanguageModel | EmbeddingModel,
-> {
+export type LanguageModelRetryCallOptions = Partial<
+  Pick<
+    LanguageModelCallOptions,
+    | 'prompt'
+    | 'maxOutputTokens'
+    | 'temperature'
+    | 'stopSequences'
+    | 'topP'
+    | 'topK'
+    | 'presencePenalty'
+    | 'frequencyPenalty'
+    | 'seed'
+    | 'headers'
+    | 'providerOptions'
+  >
+>;
+
+/**
+ * Call options that can be overridden during retry for embedding models.
+ * Excludes `abortSignal` (handled via `timeout`).
+ */
+export type EmbeddingModelRetryCallOptions<VALUE = any> = Partial<
+  Pick<
+    EmbeddingModelCallOptions<VALUE>,
+    'values' | 'headers' | 'providerOptions'
+  >
+>;
+
+/**
+ * A retry attempt with an error
+ */
+export type RetryErrorAttempt<MODEL extends LanguageModel | EmbeddingModel> = {
+  type: 'error';
+  error: unknown;
+  result?: undefined;
   model: MODEL;
-  retries: Retries<MODEL>;
-  disabled?: boolean | (() => boolean);
-  onError?: (context: RetryContext<MODEL>) => void;
-  onRetry?: (context: RetryContext<MODEL>) => void;
-}
+  /**
+   * The call options used for this attempt.
+   */
+  options: MODEL extends LanguageModel
+    ? LanguageModelRetryCallOptions
+    : EmbeddingModelRetryCallOptions;
+};
+
+/**
+ * A retry attempt with a successful result
+ */
+export type RetryResultAttempt = {
+  type: 'result';
+  result: LanguageModelGenerate;
+  error?: undefined;
+  model: LanguageModel;
+  /**
+   * The call options used for this attempt.
+   */
+  options: LanguageModelRetryCallOptions;
+};
+
+/**
+ * A retry attempt with either an error or a result and the model used
+ */
+export type RetryAttempt<MODEL extends LanguageModel | EmbeddingModel> =
+  | RetryErrorAttempt<MODEL>
+  | RetryResultAttempt;
 
 /**
  * The context provided to Retryables with the current attempt and all previous attempts.
@@ -40,66 +114,20 @@ export type RetryContext<MODEL extends LanguageModel | EmbeddingModel> = {
 };
 
 /**
- * A retry attempt with an error
+ * Options for creating a retryable model.
  */
-export type RetryErrorAttempt<MODEL extends LanguageModel | EmbeddingModel> = {
-  type: 'error';
-  error: unknown;
-  result?: undefined;
+export interface RetryableModelOptions<
+  MODEL extends LanguageModel | EmbeddingModel,
+> {
   model: MODEL;
-};
-
-/**
- * A retry attempt with a successful result
- */
-export type RetryResultAttempt = {
-  type: 'result';
-  result: LanguageModelGenerate;
-  error?: undefined;
-  model: LanguageModel;
-};
-
-/**
- * A retry attempt with either an error or a result and the model used
- */
-export type RetryAttempt<MODEL extends LanguageModel | EmbeddingModel> =
-  | RetryErrorAttempt<MODEL>
-  | RetryResultAttempt;
-
-/**
- * Call options that can be overridden during retry for language models.
- * Excludes `abortSignal` (handled via `timeout`), `includeRawChunks` (internal),
- * `responseFormat`, `tools`, and `toolChoice`.
- */
-export type LanguageModelRetryCallOptions = Pick<
-  LanguageModelCallOptions,
-  | 'prompt'
-  | 'maxOutputTokens'
-  | 'temperature'
-  | 'stopSequences'
-  | 'topP'
-  | 'topK'
-  | 'presencePenalty'
-  | 'frequencyPenalty'
-  | 'seed'
-  | 'headers'
-  | 'providerOptions'
->;
-
-/**
- * Call options that can be overridden during retry for embedding models.
- * Excludes `abortSignal` (handled via `timeout`).
- */
-export type EmbeddingModelRetryCallOptions<VALUE = any> = Pick<
-  EmbeddingModelCallOptions<VALUE>,
-  'values' | 'headers' | 'providerOptions'
->;
+  retries: Retries<MODEL>;
+  disabled?: boolean | (() => boolean);
+  onError?: (context: RetryContext<MODEL>) => void;
+  onRetry?: (context: RetryContext<MODEL>) => void;
+}
 
 /**
  * A model to retry with and the maximum number of attempts for that model.
- * Includes all possible call options - language model options are only applicable
- * when MODEL is a LanguageModel, and embedding model options are only applicable
- * when MODEL is an EmbeddingModel.
  */
 export type Retry<MODEL extends LanguageModel | EmbeddingModel> = {
   model: MODEL;
@@ -120,9 +148,20 @@ export type Retry<MODEL extends LanguageModel | EmbeddingModel> = {
    * Creates a new AbortSignal with this timeout.
    */
   timeout?: number;
-} & (MODEL extends LanguageModel
-  ? Partial<LanguageModelRetryCallOptions>
-  : Partial<EmbeddingModelRetryCallOptions>);
+  /**
+   * Call options to override for this retry.
+   */
+  options?: MODEL extends LanguageModel
+    ? Partial<LanguageModelRetryCallOptions>
+    : Partial<EmbeddingModelRetryCallOptions>;
+  /**
+   * @deprecated Use `options.providerOptions` instead.
+   * Provider options to override for this retry.
+   * If both `providerOptions` and `options.providerOptions` are set,
+   * `options.providerOptions` takes precedence.
+   */
+  providerOptions?: SharedV2ProviderOptions;
+};
 
 /**
  * A function that determines whether to retry with a different model based on the current attempt and all previous attempts.
@@ -137,19 +176,3 @@ export type Retries<MODEL extends LanguageModel | EmbeddingModel> = Array<
 
 export type RetryableOptions<MODEL extends LanguageModel | EmbeddingModel> =
   Partial<Omit<Retry<MODEL>, 'model'>>;
-
-export type LanguageModelGenerate = Awaited<
-  ReturnType<LanguageModel['doGenerate']>
->;
-
-export type LanguageModelStream = Awaited<
-  ReturnType<LanguageModel['doStream']>
->;
-
-export type EmbeddingModelCallOptions<VALUE = any> = Parameters<
-  EmbeddingModel<VALUE>['doEmbed']
->[0];
-
-export type EmbeddingModelEmbed<VALUE = any> = Awaited<
-  ReturnType<EmbeddingModel<VALUE>['doEmbed']>
->;

@@ -431,6 +431,73 @@ describe('embed', () => {
     });
   });
 
+  describe('attempt options', () => {
+    it('should include call options in error attempts', async () => {
+      // Arrange
+      const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
+      const fallbackModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
+      const onErrorSpy = vi.fn<OnError>();
+
+      // Act
+      await embed({
+        model: createRetryable({
+          model: baseModel,
+          retries: [fallbackModel],
+          onError: onErrorSpy,
+        }),
+        value: 'test value',
+      });
+
+      // Assert
+      expect(onErrorSpy).toHaveBeenCalledTimes(1);
+
+      const errorContext = onErrorSpy.mock.calls[0]![0];
+      expect(errorContext.current.options).toBeDefined();
+      expect(
+        (errorContext.current.options as { values: string[] }).values,
+      ).toEqual(['test value']);
+    });
+
+    it('should reflect overridden options in retry attempts', async () => {
+      // Arrange
+      const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
+      const fallbackModel = new MockEmbeddingModel({
+        doEmbed: nonRetryableError,
+      });
+      const finalModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
+      const onErrorSpy = vi.fn<OnError>();
+      const overrideValues = ['overridden value'];
+
+      // Act
+      await embed({
+        model: createRetryable({
+          model: baseModel,
+          retries: [
+            { model: fallbackModel, options: { values: overrideValues } },
+            finalModel,
+          ],
+          onError: onErrorSpy,
+        }),
+        value: 'original value',
+      });
+
+      // Assert
+      expect(onErrorSpy).toHaveBeenCalledTimes(2);
+
+      // First attempt should have original value
+      const firstErrorContext = onErrorSpy.mock.calls[0]![0];
+      expect(
+        (firstErrorContext.current.options as { values: string[] }).values,
+      ).toEqual(['original value']);
+
+      // Second attempt should have overridden value
+      const secondErrorContext = onErrorSpy.mock.calls[1]![0];
+      expect(
+        (secondErrorContext.current.options as { values: string[] }).values,
+      ).toEqual(overrideValues);
+    });
+  });
+
   describe('RetryableOptions', () => {
     describe('maxAttempts', () => {
       it('should try each model only once by default', async () => {
@@ -747,7 +814,9 @@ describe('embed', () => {
         await embed({
           model: createRetryable({
             model: baseModel,
-            retries: [{ model: fallbackModel, values: overrideValues }],
+            retries: [
+              { model: fallbackModel, options: { values: overrideValues } },
+            ],
           }),
           value: 'original value',
         });
@@ -773,7 +842,9 @@ describe('embed', () => {
         await embed({
           model: createRetryable({
             model: baseModel,
-            retries: [{ model: fallbackModel, headers: retryHeaders }],
+            retries: [
+              { model: fallbackModel, options: { headers: retryHeaders } },
+            ],
           }),
           value: 'Hello!',
         });

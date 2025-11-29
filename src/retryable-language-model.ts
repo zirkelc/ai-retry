@@ -7,6 +7,7 @@ import type {
   LanguageModel,
   LanguageModelCallOptions,
   LanguageModelGenerate,
+  LanguageModelRetryCallOptions,
   LanguageModelStream,
   LanguageModelStreamPart,
   Retry,
@@ -56,36 +57,40 @@ export class RetryableLanguageModel implements LanguageModel {
   }
 
   /**
-   * Apply retry configuration options to call options.
-   * Overrides the original options with any options specified in the retry config.
+   * Get the retry call options overrides from a retry configuration.
    */
-  private applyRetryCallOptions(
-    options: LanguageModelCallOptions,
+  private getRetryCallOptions(
+    callOptions: LanguageModelCallOptions,
     currentRetry?: Retry<LanguageModel>,
   ): LanguageModelCallOptions {
-    if (!currentRetry) return options;
+    const retryOptions = currentRetry?.options ?? {};
 
     return {
-      ...options,
+      ...callOptions,
       // Override prompt if specified
-      prompt: currentRetry.prompt ?? options.prompt,
+      prompt: retryOptions.prompt ?? callOptions.prompt,
       // Override generation parameters
-      maxOutputTokens: currentRetry.maxOutputTokens ?? options.maxOutputTokens,
-      temperature: currentRetry.temperature ?? options.temperature,
-      stopSequences: currentRetry.stopSequences ?? options.stopSequences,
-      topP: currentRetry.topP ?? options.topP,
-      topK: currentRetry.topK ?? options.topK,
-      presencePenalty: currentRetry.presencePenalty ?? options.presencePenalty,
+      maxOutputTokens:
+        retryOptions.maxOutputTokens ?? callOptions.maxOutputTokens,
+      temperature: retryOptions.temperature ?? callOptions.temperature,
+      stopSequences: retryOptions.stopSequences ?? callOptions.stopSequences,
+      topP: retryOptions.topP ?? callOptions.topP,
+      topK: retryOptions.topK ?? callOptions.topK,
+      presencePenalty:
+        retryOptions.presencePenalty ?? callOptions.presencePenalty,
       frequencyPenalty:
-        currentRetry.frequencyPenalty ?? options.frequencyPenalty,
-      seed: currentRetry.seed ?? options.seed,
+        retryOptions.frequencyPenalty ?? callOptions.frequencyPenalty,
+      seed: retryOptions.seed ?? callOptions.seed,
       // Override HTTP options
-      headers: currentRetry.headers ?? options.headers,
-      providerOptions: currentRetry.providerOptions ?? options.providerOptions,
-      // Handle timeout -> abortSignal conversion
-      abortSignal: currentRetry.timeout
+      headers: retryOptions.headers ?? callOptions.headers,
+      // Support deprecated providerOptions at top level for backward compatibility
+      providerOptions:
+        retryOptions.providerOptions ??
+        currentRetry?.providerOptions ??
+        callOptions.providerOptions,
+      abortSignal: currentRetry?.timeout
         ? AbortSignal.timeout(currentRetry.timeout)
-        : options.abortSignal,
+        : callOptions.abortSignal,
     };
   }
 
@@ -96,8 +101,8 @@ export class RetryableLanguageModel implements LanguageModel {
     RESULT extends LanguageModelStream | LanguageModelGenerate,
   >(input: {
     fn: (currentRetry?: Retry<LanguageModel>) => Promise<RESULT>;
+    callOptions: LanguageModelCallOptions;
     attempts?: Array<RetryAttempt<LanguageModel>>;
-    abortSignal?: AbortSignal;
   }): Promise<{
     result: RESULT;
     attempts: Array<RetryAttempt<LanguageModel>>;
@@ -141,6 +146,14 @@ export class RetryableLanguageModel implements LanguageModel {
         this.options.onRetry?.(context);
       }
 
+      /**
+       * Get the retry call options overrides for this attempt
+       */
+      const retryCallOptions = this.getRetryCallOptions(
+        input.callOptions,
+        currentRetry,
+      );
+
       try {
         /**
          * Call the function that may need to be retried
@@ -154,6 +167,7 @@ export class RetryableLanguageModel implements LanguageModel {
           const { retryModel, attempt } = await this.handleResult(
             result,
             attempts,
+            retryCallOptions,
           );
 
           attempts.push(attempt);
@@ -177,7 +191,9 @@ export class RetryableLanguageModel implements LanguageModel {
                 retryModel.backoffFactor,
                 modelAttemptsCount,
               );
-              await delay(calculatedDelay, { abortSignal: input.abortSignal });
+              await delay(calculatedDelay, {
+                abortSignal: retryCallOptions.abortSignal,
+              });
             }
 
             this.currentModel = retryModel.model;
@@ -192,7 +208,11 @@ export class RetryableLanguageModel implements LanguageModel {
 
         return { result, attempts };
       } catch (error) {
-        const { retryModel, attempt } = await this.handleError(error, attempts);
+        const { retryModel, attempt } = await this.handleError(
+          error,
+          attempts,
+          retryCallOptions,
+        );
 
         attempts.push(attempt);
 
@@ -210,7 +230,9 @@ export class RetryableLanguageModel implements LanguageModel {
             retryModel.backoffFactor,
             modelAttemptsCount,
           );
-          await delay(calculatedDelay, { abortSignal: input.abortSignal });
+          await delay(calculatedDelay, {
+            abortSignal: retryCallOptions.abortSignal,
+          });
         }
 
         this.currentModel = retryModel.model;
@@ -225,11 +247,13 @@ export class RetryableLanguageModel implements LanguageModel {
   private async handleResult(
     result: LanguageModelGenerate,
     attempts: ReadonlyArray<RetryAttempt<LanguageModel>>,
+    callOptions: LanguageModelRetryCallOptions,
   ) {
     const resultAttempt: RetryResultAttempt = {
       type: 'result',
       result: result,
       model: this.currentModel,
+      options: callOptions,
     };
 
     /**
@@ -253,11 +277,13 @@ export class RetryableLanguageModel implements LanguageModel {
   private async handleError(
     error: unknown,
     attempts: ReadonlyArray<RetryAttempt<LanguageModel>>,
+    callOptions: LanguageModelRetryCallOptions,
   ) {
     const errorAttempt: RetryErrorAttempt<LanguageModel> = {
       type: 'error',
       error: error,
       model: this.currentModel,
+      options: callOptions,
     };
 
     /**
@@ -290,7 +316,7 @@ export class RetryableLanguageModel implements LanguageModel {
   }
 
   async doGenerate(
-    options: LanguageModelCallOptions,
+    callOptions: LanguageModelCallOptions,
   ): Promise<LanguageModelGenerate> {
     /**
      * Always start with the original model
@@ -301,22 +327,26 @@ export class RetryableLanguageModel implements LanguageModel {
      * If retries are disabled, bypass retry machinery entirely
      */
     if (this.isDisabled()) {
-      return this.currentModel.doGenerate(options);
+      return this.currentModel.doGenerate(callOptions);
     }
 
     const { result } = await this.withRetry({
       fn: async (currentRetry) => {
-        const callOptions = this.applyRetryCallOptions(options, currentRetry);
-        return this.currentModel.doGenerate(callOptions);
+        const retryCallOptions = this.getRetryCallOptions(
+          callOptions,
+          currentRetry,
+        );
+
+        return this.currentModel.doGenerate(retryCallOptions);
       },
-      abortSignal: options.abortSignal,
+      callOptions: callOptions,
     });
 
     return result;
   }
 
   async doStream(
-    options: LanguageModelCallOptions,
+    callOptions: LanguageModelCallOptions,
   ): Promise<LanguageModelStream> {
     /**
      * Always start with the original model
@@ -327,7 +357,7 @@ export class RetryableLanguageModel implements LanguageModel {
      * If retries are disabled, bypass retry machinery entirely
      */
     if (this.isDisabled()) {
-      return this.currentModel.doStream(options);
+      return this.currentModel.doStream(callOptions);
     }
 
     /**
@@ -335,11 +365,20 @@ export class RetryableLanguageModel implements LanguageModel {
      */
     let { result, attempts } = await this.withRetry({
       fn: async (currentRetry) => {
-        const callOptions = this.applyRetryCallOptions(options, currentRetry);
-        return this.currentModel.doStream(callOptions);
+        const retryCallOptions = this.getRetryCallOptions(
+          callOptions,
+          currentRetry,
+        );
+
+        return this.currentModel.doStream(retryCallOptions);
       },
-      abortSignal: options.abortSignal,
+      callOptions: callOptions,
     });
+
+    /**
+     * Track the current retry model for computing call options in the stream handler
+     */
+    let currentRetry: Retry<LanguageModel> | undefined;
 
     /**
      * Wrap the original stream to handle retries if an error occurs during streaming.
@@ -387,12 +426,21 @@ export class RetryableLanguageModel implements LanguageModel {
             break;
           } catch (error) {
             /**
+             * Get the retry call options for the failed attempt
+             */
+            const retryCallOptions = this.getRetryCallOptions(
+              callOptions,
+              currentRetry,
+            );
+
+            /**
              * Check if the error from the stream can be retried.
              * Otherwise it will rethrow the error.
              */
             const { retryModel, attempt } = await this.handleError(
               error,
               attempts,
+              retryCallOptions,
             );
 
             /**
@@ -415,26 +463,28 @@ export class RetryableLanguageModel implements LanguageModel {
                 modelAttemptsCount,
               );
               await delay(calculatedDelay, {
-                abortSignal: options.abortSignal,
+                abortSignal: retryCallOptions.abortSignal,
               });
             }
 
             this.currentModel = retryModel.model;
+            currentRetry = retryModel;
 
             /**
              * Retry the request by calling doStream again.
              * This will create a new stream.
              */
             const retriedResult = await this.withRetry({
-              fn: async () => {
-                const callOptions = this.applyRetryCallOptions(
-                  options,
-                  retryModel,
+              fn: async (innerRetry) => {
+                const innerRetryCallOptions = this.getRetryCallOptions(
+                  callOptions,
+                  innerRetry,
                 );
-                return this.currentModel.doStream(callOptions);
+
+                return this.currentModel.doStream(innerRetryCallOptions);
               },
+              callOptions: callOptions,
               attempts,
-              abortSignal: options.abortSignal,
             });
 
             /**

@@ -549,6 +549,93 @@ const result = await generateText({
 
 The retry's `providerOptions` will completely replace the original ones during retry attempts. This works for all model types (language and embedding) and all operations (generate, stream, embed).
 
+#### Call Options
+
+You can override various call options when retrying requests. This is useful for adjusting parameters like temperature, max tokens, or even the prompt itself for retry attempts. Call options are specified in the `options` field of the retry object.
+
+**Language Model Options:**
+
+```typescript
+const retryableModel = createRetryable({
+  model: openai('gpt-4'),
+  retries: [
+    {
+      model: anthropic('claude-3-haiku'),
+      options: {
+        // Override generation parameters for more deterministic output
+        temperature: 0.3,
+        topP: 0.9,
+        maxOutputTokens: 500,
+        // Set a seed for reproducibility
+        seed: 42,
+      },
+    },
+    // Dynamic retry with prompt modification
+    (context) => {
+      if (isErrorAttempt(context.current)) {
+        return {
+          model: openai('gpt-3.5-turbo'),
+          options: {
+            // Modify the prompt for the retry
+            prompt: [
+              { role: 'system', content: [{ type: 'text', text: 'Be more concise.' }] },
+              ...context.current.options.prompt,
+            ],
+            temperature: 0.2,
+          },
+        };
+      }
+    },
+  ],
+});
+```
+
+**Embedding Model Options:**
+
+```typescript
+const retryableModel = createRetryable({
+  model: openai.embedding('text-embedding-3-large'),
+  retries: [
+    {
+      model: openai.embedding('text-embedding-ada-002'),
+      options: {
+        // Override the values to embed
+        values: ['modified input text'],
+        // Custom headers for the retry
+        headers: { 'x-retry-attempt': 'true' },
+      },
+    },
+  ],
+});
+```
+
+The following options can be overridden for **language models** (in the `options` field):
+
+| Option | Description |
+|--------|-------------|
+| `prompt` | Override the entire prompt for the retry |
+| `temperature` | Temperature setting for controlling randomness |
+| `topP` | Nucleus sampling parameter |
+| `topK` | Top-K sampling parameter |
+| `maxOutputTokens` | Maximum number of tokens to generate |
+| `seed` | Random seed for deterministic generation |
+| `stopSequences` | Stop sequences to end generation |
+| `presencePenalty` | Presence penalty for reducing repetition |
+| `frequencyPenalty` | Frequency penalty for reducing repetition |
+| `headers` | Additional HTTP headers |
+| `providerOptions` | Provider-specific options |
+
+The following options can be overridden for **embedding models** (in the `options` field):
+
+| Option | Description |
+|--------|-------------|
+| `values` | Override the values to embed |
+| `headers` | Additional HTTP headers |
+| `providerOptions` | Provider-specific options |
+
+> [!NOTE]
+> Override options completely replace the original values (they are not merged). If you don't specify an option, the original value from the request is used.
+
 #### Logging
 
 You can use the following callbacks to log retry attempts and errors:
@@ -615,26 +702,71 @@ type Retryable = (
 
 #### `Retry`
 
-A `Retry` specifies the model to retry and optional settings like `maxAttempts`, `delay`, `backoffFactor`, `timeout`, and `providerOptions`.
+A `Retry` specifies the model to retry and optional settings. The available options depend on the model type (language model or embedding model).
 
 ```typescript
-interface Retry {
+// Base options available for all model types
+interface RetryBase {
   model: LanguageModelV2 | EmbeddingModelV2;
   maxAttempts?: number;      // Maximum retry attempts per model (default: 1)
   delay?: number;            // Delay in milliseconds before retrying
   backoffFactor?: number;    // Multiplier for exponential backoff
   timeout?: number;          // Timeout in milliseconds for the retry attempt
-  providerOptions?: ProviderOptions; // Provider-specific options for the retry
+  providerOptions?: ProviderOptions; // @deprecated - use options.providerOptions instead
+}
+
+// For Language Models - includes call options that can be overridden
+type Retry<LanguageModelV2> = RetryBase & {
+  options?: {
+    prompt?: LanguageModelV2Prompt;
+    maxOutputTokens?: number;
+    temperature?: number;
+    stopSequences?: string[];
+    topP?: number;
+    topK?: number;
+    presencePenalty?: number;
+    frequencyPenalty?: number;
+    seed?: number;
+    headers?: Record<string, string | undefined>;
+    providerOptions?: ProviderOptions;
+  };
+}
+
+// For Embedding Models - includes call options that can be overridden
+type Retry<EmbeddingModelV2> = RetryBase & {
+  options?: {
+    values?: Array<VALUE>;
+    headers?: Record<string, string | undefined>;
+    providerOptions?: ProviderOptions;
+  };
 }
 ```
 
-**Options:**
+**Base Options (all models):**
 - `model`: The model to use for the retry attempt.
 - `maxAttempts`: Maximum number of times this model can be retried. Default is 1.
 - `delay`: Delay in milliseconds to wait before retrying. The delay respects abort signals from the request.
 - `backoffFactor`: Multiplier for exponential backoff (`delay × backoffFactor^attempt`). If not provided, uses fixed delay.
 - `timeout`: Timeout in milliseconds for creating a fresh `AbortSignal.timeout()` for the retry attempt. This replaces any existing abort signal.
-- `providerOptions`: Provider-specific options that override the original request's provider options during retry attempts.
+- `providerOptions`: **(Deprecated)** Use `options.providerOptions` instead. If both are set, `options.providerOptions` takes precedence.
+
+**Language Model Options (in `options` field):**
+- `prompt`: Override the prompt for the retry attempt.
+- `maxOutputTokens`: Maximum number of tokens to generate.
+- `temperature`: Temperature setting for controlling randomness.
+- `stopSequences`: Stop sequences to end generation.
+- `topP`: Nucleus sampling parameter.
+- `topK`: Top-K sampling parameter.
+- `presencePenalty`: Presence penalty for reducing repetition.
+- `frequencyPenalty`: Frequency penalty for reducing repetition.
+- `seed`: Random seed for deterministic generation.
+- `headers`: Additional HTTP headers for the request.
+- `providerOptions`: Provider-specific options that override the original request's provider options.
+
+**Embedding Model Options (in `options` field):**
+- `values`: Override the values to embed for the retry attempt.
+- `headers`: Additional HTTP headers for the request.
+- `providerOptions`: Provider-specific options that override the original request's provider options.
 
 #### `RetryContext`
 
@@ -649,13 +781,23 @@ interface RetryContext {
 
 #### `RetryAttempt`
 
-A `RetryAttempt` represents a single attempt with a specific model, which can be either an error or a successful result that triggered a retry.
+A `RetryAttempt` represents a single attempt with a specific model, which can be either an error or a successful result that triggered a retry. Each attempt includes the call options that were used.
 
 ```typescript
 // For both language and embedding models
 type RetryAttempt =
-  | { type: 'error'; error: unknown; model: LanguageModelV2 | EmbeddingModelV2 }
-  | { type: 'result'; result: LanguageModelV2Generate; model: LanguageModelV2 };
+  | { 
+      type: 'error'; 
+      error: unknown; 
+      model: LanguageModelV2 | EmbeddingModelV2;
+      options: LanguageModelRetryCallOptions | EmbeddingModelRetryCallOptions;
+    }
+  | { 
+      type: 'result'; 
+      result: LanguageModelV2Generate; 
+      model: LanguageModelV2;
+      options: LanguageModelRetryCallOptions;
+    };
 
 // Note: Result-based retries only apply to language models, not embedding models
 
@@ -663,6 +805,8 @@ type RetryAttempt =
 function isErrorAttempt(attempt: RetryAttempt): attempt is RetryErrorAttempt;
 function isResultAttempt(attempt: RetryAttempt): attempt is RetryResultAttempt;
 ```
+
+The `options` field contains the call options that were used for that specific attempt. This is useful for debugging or logging what parameters were actually used when an error occurred or a result was received. For retry attempts, this will reflect any overridden options from the retry configuration.
 
 ### License
 
