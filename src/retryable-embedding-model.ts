@@ -66,9 +66,7 @@ export class RetryableEmbeddingModel<VALUE> implements EmbeddingModel<VALUE> {
 
     return {
       ...callOptions,
-      // Override values if specified (cast to VALUE[] since the type is generic)
       values: retryOptions.values ?? callOptions.values,
-      // Override HTTP options
       headers: retryOptions.headers ?? callOptions.headers,
       // Support deprecated providerOptions at top level for backward compatibility
       providerOptions:
@@ -85,10 +83,9 @@ export class RetryableEmbeddingModel<VALUE> implements EmbeddingModel<VALUE> {
    * Execute a function with retry logic for handling errors
    */
   private async withRetry<RESULT extends EmbeddingModelEmbed<VALUE>>(input: {
-    fn: (currentRetry?: Retry<EmbeddingModel<VALUE>>) => Promise<RESULT>;
+    fn: (retryCallOptions: EmbeddingModelCallOptions<VALUE>) => Promise<RESULT>;
     callOptions: EmbeddingModelCallOptions<VALUE>;
     attempts?: Array<RetryErrorAttempt<EmbeddingModel<VALUE>>>;
-    // abortSignal?: AbortSignal;
   }): Promise<{
     result: RESULT;
     attempts: Array<RetryErrorAttempt<EmbeddingModel<VALUE>>>;
@@ -145,7 +142,7 @@ export class RetryableEmbeddingModel<VALUE> implements EmbeddingModel<VALUE> {
         /**
          * Call the function that may need to be retried
          */
-        const result = await input.fn(currentRetry);
+        const result = await input.fn(retryCallOptions);
 
         return { result, attempts };
       } catch (error) {
@@ -192,7 +189,7 @@ export class RetryableEmbeddingModel<VALUE> implements EmbeddingModel<VALUE> {
   private async handleError(
     error: unknown,
     attempts: ReadonlyArray<RetryErrorAttempt<EmbeddingModel<VALUE>>>,
-    callOptions: EmbeddingModelRetryCallOptions<VALUE>,
+    callOptions: EmbeddingModelCallOptions<VALUE>,
   ) {
     const errorAttempt: RetryErrorAttempt<EmbeddingModel<VALUE>> = {
       type: 'error',
@@ -246,12 +243,7 @@ export class RetryableEmbeddingModel<VALUE> implements EmbeddingModel<VALUE> {
     }
 
     const { result } = await this.withRetry({
-      fn: async (currentRetry) => {
-        const retryCallOptions = this.getRetryCallOptions(
-          callOptions,
-          currentRetry,
-        );
-
+      fn: async (retryCallOptions) => {
         return this.currentModel.doEmbed(retryCallOptions);
       },
       callOptions: callOptions,

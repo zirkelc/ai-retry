@@ -138,6 +138,58 @@ const retryableModel = createRetryable({
 
 In this example, if the base model fails with code 429 or a service overloaded error, it will retry with `gpt-4-mini` on Azure. In any other error case, it will fallback to `claude-3-haiku-20240307` on Anthropic. If the order would be reversed, the static retryable would catch all errors first, and the dynamic retryable would never be reached.
 
+#### Errors vs Results
+
+Dynamic retryables can be further divided based on what triggers them:
+
+- **Error-based retryables** handle API errors where the request throws an error (e.g., timeouts, rate limits, service unavailable, etc.)
+- **Result-based retryables** handle successful responses that still need retrying (e.g., content filtering, guardrails, etc.)
+
+Both types of retryables have the same interface and receive the current attempt as context. You can use the `isErrorAttempt` and `isResultAttempt` type guards to check the type of the current attempt.
+
+```typescript
+import { generateText } from 'ai';
+import { createRetryable, isErrorAttempt, isResultAttempt } from 'ai-retry';
+import type { Retryable } from 'ai-retry';
+
+// Error-based retryable: handles thrown errors (e.g., timeouts, rate limits)
+const errorBasedRetry: Retryable = (context) => {
+  if (isErrorAttempt(context.current)) {
+    const { error } = context.current;
+    // The request threw an error - e.g., network timeout, 429 rate limit
+    console.log('Request failed with error:', error);
+    return { model: anthropic('claude-3-haiku-20240307') };
+  }
+  return undefined;
+};
+
+// Result-based retryable: handles successful responses that need retrying
+const resultBasedRetry: Retryable = (context) => {
+  if (isResultAttempt(context.current)) {
+    const { result } = context.current;
+    // The request succeeded, but the response indicates a problem
+    if (result.finishReason === 'content-filter') {
+      console.log('Content was filtered, trying different model');
+      return { model: openai('gpt-4') };
+    }
+  }
+  return undefined;
+};
+
+const retryableModel = createRetryable({
+  model: azure('gpt-4-mini'),
+  retries: [
+    // Error-based: catches thrown errors like timeouts, rate limits, etc.
+    errorBasedRetry,
+    
+    // Result-based: catches successful responses that need retrying
+    resultBasedRetry,
+  ],
+});
+```
+
+Result-based retryables are only available for generate calls like `generateText` and `generateObject`. They are not available for streaming calls like `streamText` and `streamObject`.
+
 #### Fallbacks
 
 If you don't need precise error matching with custom logic and just want to fallback to different models on any error, you can simply provide a list of models.
@@ -553,8 +605,6 @@ The retry's `providerOptions` will completely replace the original ones during r
 
 You can override various call options when retrying requests. This is useful for adjusting parameters like temperature, max tokens, or even the prompt itself for retry attempts. Call options are specified in the `options` field of the retry object.
 
-**Language Model Options:**
-
 ```typescript
 const retryableModel = createRetryable({
   model: openai('gpt-4'),
@@ -570,41 +620,6 @@ const retryableModel = createRetryable({
         seed: 42,
       },
     },
-    // Dynamic retry with prompt modification
-    (context) => {
-      if (isErrorAttempt(context.current)) {
-        return {
-          model: openai('gpt-3.5-turbo'),
-          options: {
-            // Modify the prompt for the retry
-            prompt: [
-              { role: 'system', content: [{ type: 'text', text: 'Be more concise.' }] },
-              ...context.current.options.prompt,
-            ],
-            temperature: 0.2,
-          },
-        };
-      }
-    },
-  ],
-});
-```
-
-**Embedding Model Options:**
-
-```typescript
-const retryableModel = createRetryable({
-  model: openai.embedding('text-embedding-3-large'),
-  retries: [
-    {
-      model: openai.embedding('text-embedding-ada-002'),
-      options: {
-        // Override the values to embed
-        values: ['modified input text'],
-        // Custom headers for the retry
-        headers: { 'x-retry-attempt': 'true' },
-      },
-    },
   ],
 });
 ```
@@ -613,25 +628,25 @@ The following options can be overridden for **language models** (in the `options
 
 | Option | Description |
 |--------|-------------|
-| `prompt` | Override the entire prompt for the retry |
-| `temperature` | Temperature setting for controlling randomness |
-| `topP` | Nucleus sampling parameter |
-| `topK` | Top-K sampling parameter |
-| `maxOutputTokens` | Maximum number of tokens to generate |
-| `seed` | Random seed for deterministic generation |
-| `stopSequences` | Stop sequences to end generation |
-| `presencePenalty` | Presence penalty for reducing repetition |
-| `frequencyPenalty` | Frequency penalty for reducing repetition |
-| `headers` | Additional HTTP headers |
-| `providerOptions` | Provider-specific options |
+| [`prompt`](https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-text#prompt) | Override the entire prompt for the retry |
+| [`temperature`](https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-text#temperature) | Temperature setting for controlling randomness |
+| [`topP`](https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-text#topp) | Nucleus sampling parameter |
+| [`topK`](https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-text#topk) | Top-K sampling parameter |
+| [`maxOutputTokens`](https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-text#max-output-tokens) | Maximum number of tokens to generate |
+| [`seed`](https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-text#seed) | Random seed for deterministic generation |
+| [`stopSequences`](https://ai-sdk.dev/docs/reference/ai-sdk-types/generate-text#stopsequences) | Stop sequences to end generation |
+| [`presencePenalty`](https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-text#presencepenalty) | Presence penalty for reducing repetition |
+| [`frequencyPenalty`](https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-text#frequencypenalty) | Frequency penalty for reducing repetition |
+| [`headers`](https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-text#headers) | Additional HTTP headers |
+| [`providerOptions`](https://ai-sdk.dev/docs/reference/ai-sdk-types/generate-text#provideroptions) | Provider-specific options |
 
 The following options can be overridden for **embedding models** (in the `options` field):
 
 | Option | Description |
 |--------|-------------|
-| `values` | Override the values to embed |
-| `headers` | Additional HTTP headers |
-| `providerOptions` | Provider-specific options |
+| [`values`](https://ai-sdk.dev/docs/reference/ai-sdk-core/embed#values) | Override the values to embed |
+| [`headers`](https://ai-sdk.dev/docs/reference/ai-sdk-core/embed#headers) | Additional HTTP headers |
+| [`providerOptions`](https://ai-sdk.dev/docs/reference/ai-sdk-core/embed#provideroptions) | Provider-specific options |
 
 > [!NOTE]
 > Override options completely replace the original values (they are not merged). If you don't specify an option, the original value from the request is used.
@@ -705,68 +720,16 @@ type Retryable = (
 A `Retry` specifies the model to retry and optional settings. The available options depend on the model type (language model or embedding model).
 
 ```typescript
-// Base options available for all model types
-interface RetryBase {
+interface Retry {
   model: LanguageModelV2 | EmbeddingModelV2;
   maxAttempts?: number;      // Maximum retry attempts per model (default: 1)
   delay?: number;            // Delay in milliseconds before retrying
   backoffFactor?: number;    // Multiplier for exponential backoff
   timeout?: number;          // Timeout in milliseconds for the retry attempt
   providerOptions?: ProviderOptions; // @deprecated - use options.providerOptions instead
-}
-
-// For Language Models - includes call options that can be overridden
-type Retry<LanguageModelV2> = RetryBase & {
-  options?: {
-    prompt?: LanguageModelV2Prompt;
-    maxOutputTokens?: number;
-    temperature?: number;
-    stopSequences?: string[];
-    topP?: number;
-    topK?: number;
-    presencePenalty?: number;
-    frequencyPenalty?: number;
-    seed?: number;
-    headers?: Record<string, string | undefined>;
-    providerOptions?: ProviderOptions;
-  };
-}
-
-// For Embedding Models - includes call options that can be overridden
-type Retry<EmbeddingModelV2> = RetryBase & {
-  options?: {
-    values?: Array<VALUE>;
-    headers?: Record<string, string | undefined>;
-    providerOptions?: ProviderOptions;
-  };
+  options?: LanguageModelV2CallOptions | EmbeddingModelV2CallOptions; // Call options to override for this retry
 }
 ```
-
-**Base Options (all models):**
-- `model`: The model to use for the retry attempt.
-- `maxAttempts`: Maximum number of times this model can be retried. Default is 1.
-- `delay`: Delay in milliseconds to wait before retrying. The delay respects abort signals from the request.
-- `backoffFactor`: Multiplier for exponential backoff (`delay × backoffFactor^attempt`). If not provided, uses fixed delay.
-- `timeout`: Timeout in milliseconds for creating a fresh `AbortSignal.timeout()` for the retry attempt. This replaces any existing abort signal.
-- `providerOptions`: **(Deprecated)** Use `options.providerOptions` instead. If both are set, `options.providerOptions` takes precedence.
-
-**Language Model Options (in `options` field):**
-- `prompt`: Override the prompt for the retry attempt.
-- `maxOutputTokens`: Maximum number of tokens to generate.
-- `temperature`: Temperature setting for controlling randomness.
-- `stopSequences`: Stop sequences to end generation.
-- `topP`: Nucleus sampling parameter.
-- `topK`: Top-K sampling parameter.
-- `presencePenalty`: Presence penalty for reducing repetition.
-- `frequencyPenalty`: Frequency penalty for reducing repetition.
-- `seed`: Random seed for deterministic generation.
-- `headers`: Additional HTTP headers for the request.
-- `providerOptions`: Provider-specific options that override the original request's provider options.
-
-**Embedding Model Options (in `options` field):**
-- `values`: Override the values to embed for the retry attempt.
-- `headers`: Additional HTTP headers for the request.
-- `providerOptions`: Provider-specific options that override the original request's provider options.
 
 #### `RetryContext`
 
@@ -781,7 +744,7 @@ interface RetryContext {
 
 #### `RetryAttempt`
 
-A `RetryAttempt` represents a single attempt with a specific model, which can be either an error or a successful result that triggered a retry. Each attempt includes the call options that were used.
+A `RetryAttempt` represents a single attempt with a specific model, which can be either an error or a successful result that triggered a retry. Each attempt includes the call options that were used for that specific attempt. For retry attempts, this will reflect any overridden options from the retry configuration.
 
 ```typescript
 // For both language and embedding models
@@ -790,13 +753,13 @@ type RetryAttempt =
       type: 'error'; 
       error: unknown; 
       model: LanguageModelV2 | EmbeddingModelV2;
-      options: LanguageModelRetryCallOptions | EmbeddingModelRetryCallOptions;
+      options: LanguageModelV2CallOptions | EmbeddingModelV2CallOptions;
     }
   | { 
       type: 'result'; 
       result: LanguageModelV2Generate; 
       model: LanguageModelV2;
-      options: LanguageModelRetryCallOptions;
+      options: LanguageModelV2CallOptions;
     };
 
 // Note: Result-based retries only apply to language models, not embedding models
@@ -805,8 +768,6 @@ type RetryAttempt =
 function isErrorAttempt(attempt: RetryAttempt): attempt is RetryErrorAttempt;
 function isResultAttempt(attempt: RetryAttempt): attempt is RetryResultAttempt;
 ```
-
-The `options` field contains the call options that were used for that specific attempt. This is useful for debugging or logging what parameters were actually used when an error occurred or a result was received. For retry attempts, this will reflect any overridden options from the retry configuration.
 
 ### License
 

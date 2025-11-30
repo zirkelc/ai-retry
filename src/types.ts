@@ -31,8 +31,6 @@ export type EmbeddingModelEmbed<VALUE = any> = Awaited<
 
 /**
  * Call options that can be overridden during retry for language models.
- * Excludes `abortSignal` (handled via `timeout`), `includeRawChunks` (internal),
- * `responseFormat`, `tools`, and `toolChoice`.
  */
 export type LanguageModelRetryCallOptions = Partial<
   Pick<
@@ -53,7 +51,6 @@ export type LanguageModelRetryCallOptions = Partial<
 
 /**
  * Call options that can be overridden during retry for embedding models.
- * Excludes `abortSignal` (handled via `timeout`).
  */
 export type EmbeddingModelRetryCallOptions<VALUE = any> = Partial<
   Pick<
@@ -74,8 +71,8 @@ export type RetryErrorAttempt<MODEL extends LanguageModel | EmbeddingModel> = {
    * The call options used for this attempt.
    */
   options: MODEL extends LanguageModel
-    ? LanguageModelRetryCallOptions
-    : EmbeddingModelRetryCallOptions;
+    ? LanguageModelCallOptions
+    : EmbeddingModelCallOptions<any>;
 };
 
 /**
@@ -89,7 +86,7 @@ export type RetryResultAttempt = {
   /**
    * The call options used for this attempt.
    */
-  options: LanguageModelRetryCallOptions;
+  options: LanguageModelCallOptions;
 };
 
 /**

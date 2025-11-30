@@ -233,6 +233,100 @@ describe('embed', () => {
       expect(fallbackModel.doEmbed).toHaveBeenCalledTimes(1);
       expect(result.embedding).toEqual([0.1, 0.2, 0.3]);
     });
+
+    it('should not retry when disabled is a function returning true', async () => {
+      // Arrange
+      const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
+      const fallbackModel = new MockEmbeddingModel({
+        doEmbed: mockEmbeddings,
+      });
+
+      const fallbackRetryable: Retryable<EmbeddingModel> = () => {
+        return { model: fallbackModel, maxAttempts: 1 };
+      };
+
+      const disabledFn = vi.fn(() => true);
+
+      const retryableModel = createRetryable({
+        model: baseModel,
+        retries: [fallbackRetryable],
+        disabled: disabledFn,
+      });
+
+      // Act & Assert
+      await expect(
+        embed({
+          model: retryableModel,
+          value: 'Hello!',
+          maxRetries: 0, // Disable AI SDK's own retry mechanism
+        }),
+      ).rejects.toThrow('Rate limit exceeded');
+
+      expect(disabledFn).toHaveBeenCalled();
+      expect(baseModel.doEmbed).toHaveBeenCalledTimes(1);
+      expect(fallbackModel.doEmbed).toHaveBeenCalledTimes(0);
+    });
+
+    it('should retry when disabled is a function returning false', async () => {
+      // Arrange
+      const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
+      const fallbackModel = new MockEmbeddingModel({
+        doEmbed: mockEmbeddings,
+      });
+
+      const fallbackRetryable: Retryable<EmbeddingModel> = () => {
+        return { model: fallbackModel, maxAttempts: 1 };
+      };
+
+      const disabledFn = vi.fn(() => false);
+
+      const retryableModel = createRetryable({
+        model: baseModel,
+        retries: [fallbackRetryable],
+        disabled: disabledFn,
+      });
+
+      // Act
+      const result = await embed({
+        model: retryableModel,
+        value: 'Hello!',
+      });
+
+      // Assert
+      expect(disabledFn).toHaveBeenCalled();
+      expect(baseModel.doEmbed).toHaveBeenCalledTimes(1);
+      expect(fallbackModel.doEmbed).toHaveBeenCalledTimes(1);
+      expect(result.embedding).toEqual([0.1, 0.2, 0.3]);
+    });
+
+    it('should work normally when disabled is undefined (default)', async () => {
+      // Arrange
+      const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
+      const fallbackModel = new MockEmbeddingModel({
+        doEmbed: mockEmbeddings,
+      });
+
+      const fallbackRetryable: Retryable<EmbeddingModel> = () => {
+        return { model: fallbackModel, maxAttempts: 1 };
+      };
+
+      const retryableModel = createRetryable({
+        model: baseModel,
+        retries: [fallbackRetryable],
+        // disabled is undefined by default
+      });
+
+      // Act
+      const result = await embed({
+        model: retryableModel,
+        value: 'Hello!',
+      });
+
+      // Assert
+      expect(baseModel.doEmbed).toHaveBeenCalledTimes(1);
+      expect(fallbackModel.doEmbed).toHaveBeenCalledTimes(1);
+      expect(result.embedding).toEqual([0.1, 0.2, 0.3]);
+    });
   });
 
   describe('onError', () => {
@@ -333,6 +427,25 @@ describe('embed', () => {
       expect(firstErrorCall.attempts.length).toBe(1);
       expect(firstRetryCall.current.model).toBe(fallbackModel);
       expect(firstRetryCall.attempts.length).toBe(1);
+    });
+
+    it('should NOT call onError handler when embedding succeeds', async () => {
+      // Arrange
+      const baseModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
+      const onErrorSpy = vi.fn<OnError>();
+
+      // Act
+      await embed({
+        model: createRetryable({
+          model: baseModel,
+          retries: [],
+          onError: onErrorSpy,
+        }),
+        value: 'Hello!',
+      });
+
+      // Assert
+      expect(onErrorSpy).not.toHaveBeenCalled();
     });
   });
 
