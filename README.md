@@ -624,7 +624,12 @@ const retryableModel = createRetryable({
 });
 ```
 
-The following options can be overridden for **language models** (in the `options` field):
+The following options can be overridden:
+
+> [!NOTE]
+> Override options completely replace the original values (they are not merged). If you don't specify an option, the original value from the request is used.
+
+##### Language Model Options
 
 | Option | Description |
 |--------|-------------|
@@ -640,16 +645,13 @@ The following options can be overridden for **language models** (in the `options
 | [`headers`](https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-text#headers) | Additional HTTP headers |
 | [`providerOptions`](https://ai-sdk.dev/docs/reference/ai-sdk-types/generate-text#provideroptions) | Provider-specific options |
 
-The following options can be overridden for **embedding models** (in the `options` field):
+##### Embedding Model Options
 
 | Option | Description |
 |--------|-------------|
 | [`values`](https://ai-sdk.dev/docs/reference/ai-sdk-core/embed#values) | Override the values to embed |
 | [`headers`](https://ai-sdk.dev/docs/reference/ai-sdk-core/embed#headers) | Additional HTTP headers |
 | [`providerOptions`](https://ai-sdk.dev/docs/reference/ai-sdk-core/embed#provideroptions) | Provider-specific options |
-
-> [!NOTE]
-> Override options completely replace the original values (they are not merged). If you don't specify an option, the original value from the request is used.
 
 #### Logging
 
