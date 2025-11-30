@@ -3,14 +3,14 @@ import { countModelAttempts } from './count-model-attempts.js';
 import { MockLanguageModel } from './test-utils.js';
 import type {
   LanguageModel,
-  LanguageModelRetryCallOptions,
+  LanguageModelCallOptions,
   RetryAttempt,
 } from './types.js';
 
 describe('countModelAttempts', () => {
   const mockModel1 = new MockLanguageModel();
   const mockModel2 = new MockLanguageModel();
-  const mockOptions: LanguageModelRetryCallOptions = {
+  const mockOptions: LanguageModelCallOptions = {
     prompt: [],
   };
 
