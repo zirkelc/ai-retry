@@ -2,6 +2,7 @@ import type {
   EmbeddingModelV2,
   LanguageModelV2,
   LanguageModelV2CallOptions,
+  LanguageModelV2Prompt,
   LanguageModelV2StreamPart,
   SharedV2ProviderOptions,
 } from '@ai-sdk/provider';
@@ -36,17 +37,71 @@ export type ResolvedModel<
 > = MODEL extends ResolvableLanguageModel ? LanguageModel : EmbeddingModel;
 
 /**
- * Options for creating a retryable model.
+ * Call options that can be overridden during retry for language models.
  */
-export interface RetryableModelOptions<
-  MODEL extends LanguageModel | EmbeddingModel,
-> {
+export type LanguageModelRetryCallOptions = Partial<
+  Pick<
+    LanguageModelCallOptions,
+    | 'prompt'
+    | 'maxOutputTokens'
+    | 'temperature'
+    | 'stopSequences'
+    | 'topP'
+    | 'topK'
+    | 'presencePenalty'
+    | 'frequencyPenalty'
+    | 'seed'
+    | 'headers'
+    | 'providerOptions'
+  >
+>;
+
+/**
+ * Call options that can be overridden during retry for embedding models.
+ */
+export type EmbeddingModelRetryCallOptions<VALUE = any> = Partial<
+  Pick<
+    EmbeddingModelCallOptions<VALUE>,
+    'values' | 'headers' | 'providerOptions'
+  >
+>;
+
+/**
+ * A retry attempt with an error
+ */
+export type RetryErrorAttempt<MODEL extends LanguageModel | EmbeddingModel> = {
+  type: 'error';
+  error: unknown;
+  result?: undefined;
   model: MODEL;
-  retries: Retries<MODEL>;
-  disabled?: boolean | (() => boolean);
-  onError?: (context: RetryContext<MODEL>) => void;
-  onRetry?: (context: RetryContext<MODEL>) => void;
-}
+  /**
+   * The call options used for this attempt.
+   */
+  options: MODEL extends LanguageModel
+    ? LanguageModelCallOptions
+    : EmbeddingModelCallOptions<any>;
+};
+
+/**
+ * A retry attempt with a successful result
+ */
+export type RetryResultAttempt = {
+  type: 'result';
+  result: LanguageModelGenerate;
+  error?: undefined;
+  model: LanguageModel;
+  /**
+   * The call options used for this attempt.
+   */
+  options: LanguageModelCallOptions;
+};
+
+/**
+ * A retry attempt with either an error or a result and the model used
+ */
+export type RetryAttempt<MODEL extends LanguageModel | EmbeddingModel> =
+  | RetryErrorAttempt<MODEL>
+  | RetryResultAttempt;
 
 /**
  * The context provided to Retryables with the current attempt and all previous attempts.
@@ -65,31 +120,17 @@ export type RetryContext<
 };
 
 /**
- * A retry attempt with an error
+ * Options for creating a retryable model.
  */
-export type RetryErrorAttempt<MODEL extends LanguageModel | EmbeddingModel> = {
-  type: 'error';
-  error: unknown;
-  result?: undefined;
+export interface RetryableModelOptions<
+  MODEL extends LanguageModel | EmbeddingModel,
+> {
   model: MODEL;
-};
-
-/**
- * A retry attempt with a successful result
- */
-export type RetryResultAttempt = {
-  type: 'result';
-  result: LanguageModelGenerate;
-  error?: undefined;
-  model: LanguageModel;
-};
-
-/**
- * A retry attempt with either an error or a result and the model used
- */
-export type RetryAttempt<MODEL extends LanguageModel | EmbeddingModel> =
-  | RetryErrorAttempt<MODEL>
-  | RetryResultAttempt;
+  retries: Retries<MODEL>;
+  disabled?: boolean | (() => boolean);
+  onError?: (context: RetryContext<MODEL>) => void;
+  onRetry?: (context: RetryContext<MODEL>) => void;
+}
 
 /**
  * A model to retry with and the maximum number of attempts for that model.
@@ -104,11 +145,36 @@ export type RetryAttempt<MODEL extends LanguageModel | EmbeddingModel> =
  */
 export type Retry<MODEL extends ResolvableLanguageModel | EmbeddingModel> = {
   model: MODEL;
+  /**
+   * Maximum number of attempts for this model.
+   */
   maxAttempts?: number;
+  /**
+   * Delay in milliseconds before retrying.
+   */
   delay?: number;
+  /**
+   * Factor to multiply the delay by for exponential backoff.
+   */
   backoffFactor?: number;
-  providerOptions?: ProviderOptions;
+  /**
+   * Timeout in milliseconds for the retry request.
+   * Creates a new AbortSignal with this timeout.
+   */
   timeout?: number;
+  /**
+   * Call options to override for this retry.
+   */
+  options?: MODEL extends LanguageModel
+    ? Partial<LanguageModelRetryCallOptions>
+    : Partial<EmbeddingModelRetryCallOptions>;
+  /**
+   * @deprecated Use `options.providerOptions` instead.
+   * Provider options to override for this retry.
+   * If both `providerOptions` and `options.providerOptions` are set,
+   * `options.providerOptions` takes precedence.
+   */
+  providerOptions?: SharedV2ProviderOptions;
 };
 
 /**
