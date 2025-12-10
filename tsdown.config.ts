@@ -6,7 +6,7 @@ export default defineConfig({
    * Requires @arethetypeswrong/core to be installed.
    */
   attw: {
-    profile: 'esmOnly',
+    profile: 'esm-only',
   },
   publint: true,
   exports: true,
