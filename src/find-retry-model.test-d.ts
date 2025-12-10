@@ -3,7 +3,9 @@ import { findRetryModel } from './find-retry-model.js';
 import { MockEmbeddingModel, MockLanguageModel } from './test-utils.js';
 import type {
   EmbeddingModel,
+  EmbeddingModelCallOptions,
   LanguageModel,
+  LanguageModelCallOptions,
   ResolvableLanguageModel,
   ResolvedModel,
   Retries,
@@ -12,12 +14,26 @@ import type {
   RetryContext,
 } from './types.js';
 
+const languageModelOptions: LanguageModelCallOptions = {
+  prompt: [
+    { role: 'user', content: [{ type: 'text', text: 'Hello, world!' }] },
+  ],
+};
+const embeddingModelOptions: EmbeddingModelCallOptions = {
+  values: ['Hello, world!'],
+};
+
 describe('findRetryModel', () => {
   it('should accept LanguageModel retries', async () => {
     const model = new MockLanguageModel();
     const retries: Retries<LanguageModel> = [model];
     const context: RetryContext<LanguageModel> = {
-      current: { type: 'error', error: new Error(), model },
+      current: {
+        type: 'error',
+        error: new Error(),
+        model,
+        options: languageModelOptions,
+      },
       attempts: [],
     };
 
@@ -32,7 +48,12 @@ describe('findRetryModel', () => {
     const model = new MockEmbeddingModel();
     const retries: Retries<EmbeddingModel> = [model];
     const context: RetryContext<EmbeddingModel> = {
-      current: { type: 'error', error: new Error(), model },
+      current: {
+        type: 'error',
+        error: new Error(),
+        model,
+        options: embeddingModelOptions,
+      },
       attempts: [],
     };
 
@@ -50,7 +71,12 @@ describe('findRetryModel', () => {
       'anthropic/claude-3.5-sonnet-20240620',
     ];
     const context: RetryContext<LanguageModel> = {
-      current: { type: 'error', error: new Error(), model },
+      current: {
+        type: 'error',
+        error: new Error(),
+        model,
+        options: languageModelOptions,
+      },
       attempts: [],
     };
 
@@ -69,7 +95,12 @@ describe('findRetryModel', () => {
     });
     const retries: Retries<LanguageModel> = [retryable];
     const context: RetryContext<LanguageModel> = {
-      current: { type: 'error', error: new Error(), model },
+      current: {
+        type: 'error',
+        error: new Error(),
+        model,
+        options: languageModelOptions,
+      },
       attempts: [],
     };
 
@@ -88,7 +119,12 @@ describe('findRetryModel', () => {
     });
     const retries: Retries<LanguageModel> = [retryable];
     const context: RetryContext<LanguageModel> = {
-      current: { type: 'error', error: new Error(), model },
+      current: {
+        type: 'error',
+        error: new Error(),
+        model,
+        options: languageModelOptions,
+      },
       attempts: [],
     };
 
@@ -108,7 +144,12 @@ describe('findRetryModel', () => {
     };
     const retries: Retries<LanguageModel> = [retry];
     const context: RetryContext<LanguageModel> = {
-      current: { type: 'error', error: new Error(), model },
+      current: {
+        type: 'error',
+        error: new Error(),
+        model,
+        options: languageModelOptions,
+      },
       attempts: [],
     };
 
@@ -127,7 +168,12 @@ describe('findRetryModel', () => {
     };
     const retries: Retries<LanguageModel> = [retry];
     const context: RetryContext<LanguageModel> = {
-      current: { type: 'error', error: new Error(), model },
+      current: {
+        type: 'error',
+        error: new Error(),
+        model,
+        options: languageModelOptions,
+      },
       attempts: [],
     };
 
@@ -156,7 +202,12 @@ describe('findRetryModel', () => {
       'anthropic/claude-3.5-haiku',
     ];
     const context: RetryContext<LanguageModel> = {
-      current: { type: 'error', error: new Error(), model },
+      current: {
+        type: 'error',
+        error: new Error(),
+        model,
+        options: languageModelOptions,
+      },
       attempts: [],
     };
 
@@ -171,7 +222,12 @@ describe('findRetryModel', () => {
     const model = new MockLanguageModel();
     const retries: Retries<LanguageModel> = ['openai/gpt-4o'];
     const context: RetryContext<LanguageModel> = {
-      current: { type: 'error', error: new Error(), model },
+      current: {
+        type: 'error',
+        error: new Error(),
+        model,
+        options: languageModelOptions,
+      },
       attempts: [],
     };
 

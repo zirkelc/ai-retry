@@ -21,7 +21,10 @@ const mockResultText = 'Hello, world!';
 
 const mockResult: LanguageModelGenerate = {
   finishReason: 'stop',
-  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+  usage: {
+    inputTokens: { total: 10, noCache: 0, cacheRead: 0, cacheWrite: 0 },
+    outputTokens: { total: 20, text: 0, reasoning: 0 },
+  },
   content: [{ type: 'text', text: mockResultText }],
   warnings: [],
 };
@@ -29,6 +32,7 @@ const mockResult: LanguageModelGenerate = {
 const mockEmbeddings: EmbeddingModelEmbed = {
   embeddings: [[0.1, 0.2, 0.3]],
   usage: { tokens: 5 },
+  warnings: [],
 };
 
 const nonRetryableError = new APICallError({
@@ -84,7 +88,10 @@ const mockStreamChunks: LanguageModelStreamPart[] = [
   {
     type: 'finish',
     finishReason: 'stop',
-    usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+    usage: {
+      inputTokens: { total: 10, noCache: 0, cacheRead: 0, cacheWrite: 0 },
+      outputTokens: { total: 20, text: 0, reasoning: 0 },
+    },
   },
 ];
 

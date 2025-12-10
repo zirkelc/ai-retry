@@ -7,18 +7,19 @@ import type {
   EmbeddingModel,
   EmbeddingModelCallOptions,
   EmbeddingModelEmbed,
+  EmbeddingModelRetryCallOptions,
   Retry,
   RetryableModelOptions,
   RetryContext,
   RetryErrorAttempt,
 } from './types.js';
 
-export class RetryableEmbeddingModel<VALUE> implements EmbeddingModel<VALUE> {
+export class RetryableEmbeddingModel implements EmbeddingModel {
   readonly specificationVersion = 'v3';
 
-  private baseModel: EmbeddingModel<VALUE>;
-  private currentModel: EmbeddingModel<VALUE>;
-  private options: RetryableModelOptions<EmbeddingModel<VALUE>>;
+  private baseModel: EmbeddingModel;
+  private currentModel: EmbeddingModel;
+  private options: RetryableModelOptions<EmbeddingModel>;
 
   get modelId() {
     return this.currentModel.modelId;
@@ -35,7 +36,7 @@ export class RetryableEmbeddingModel<VALUE> implements EmbeddingModel<VALUE> {
     return this.currentModel.supportsParallelCalls;
   }
 
-  constructor(options: RetryableModelOptions<EmbeddingModel<VALUE>>) {
+  constructor(options: RetryableModelOptions<EmbeddingModel>) {
     this.options = options;
     this.baseModel = options.model;
     this.currentModel = options.model;
@@ -55,26 +56,50 @@ export class RetryableEmbeddingModel<VALUE> implements EmbeddingModel<VALUE> {
   }
 
   /**
+   * Get the retry call options overrides from a retry configuration.
+   */
+  private getRetryCallOptions(
+    callOptions: EmbeddingModelCallOptions,
+    currentRetry?: Retry<EmbeddingModel>,
+  ): EmbeddingModelCallOptions {
+    const retryOptions = currentRetry?.options ?? {};
+
+    return {
+      ...callOptions,
+      values: retryOptions.values ?? callOptions.values,
+      headers: retryOptions.headers ?? callOptions.headers,
+      // Support deprecated providerOptions at top level for backward compatibility
+      providerOptions:
+        retryOptions.providerOptions ??
+        currentRetry?.providerOptions ??
+        callOptions.providerOptions,
+      abortSignal: currentRetry?.timeout
+        ? AbortSignal.timeout(currentRetry.timeout)
+        : callOptions.abortSignal,
+    };
+  }
+
+  /**
    * Execute a function with retry logic for handling errors
    */
-  private async withRetry<RESULT extends EmbeddingModelEmbed<VALUE>>(input: {
-    fn: (currentRetry?: Retry<EmbeddingModel<VALUE>>) => Promise<RESULT>;
-    attempts?: Array<RetryErrorAttempt<EmbeddingModel<VALUE>>>;
-    abortSignal?: AbortSignal;
+  private async withRetry<RESULT extends EmbeddingModelEmbed>(input: {
+    fn: (retryCallOptions: EmbeddingModelCallOptions) => Promise<RESULT>;
+    callOptions: EmbeddingModelCallOptions;
+    attempts?: Array<RetryErrorAttempt<EmbeddingModel>>;
   }): Promise<{
     result: RESULT;
-    attempts: Array<RetryErrorAttempt<EmbeddingModel<VALUE>>>;
+    attempts: Array<RetryErrorAttempt<EmbeddingModel>>;
   }> {
     /**
      * Track all attempts.
      */
-    const attempts: Array<RetryErrorAttempt<EmbeddingModel<VALUE>>> =
+    const attempts: Array<RetryErrorAttempt<EmbeddingModel>> =
       input.attempts ?? [];
 
     /**
      * Track current retry configuration.
      */
-    let currentRetry: Retry<EmbeddingModel<VALUE>> | undefined;
+    let currentRetry: Retry<EmbeddingModel> | undefined;
 
     while (true) {
       /**
@@ -87,7 +112,7 @@ export class RetryableEmbeddingModel<VALUE> implements EmbeddingModel<VALUE> {
        * Skip on the first attempt since no previous attempt exists yet.
        */
       if (previousAttempt) {
-        const currentAttempt: RetryErrorAttempt<EmbeddingModel<VALUE>> = {
+        const currentAttempt: RetryErrorAttempt<EmbeddingModel> = {
           ...previousAttempt,
           model: this.currentModel,
         };
@@ -97,7 +122,7 @@ export class RetryableEmbeddingModel<VALUE> implements EmbeddingModel<VALUE> {
          */
         const updatedAttempts = [...attempts];
 
-        const context: RetryContext<EmbeddingModel<VALUE>> = {
+        const context: RetryContext<EmbeddingModel> = {
           current: currentAttempt,
           attempts: updatedAttempts,
         };
@@ -105,15 +130,27 @@ export class RetryableEmbeddingModel<VALUE> implements EmbeddingModel<VALUE> {
         this.options.onRetry?.(context);
       }
 
+      /**
+       * Get the retry call options overrides for this attempt
+       */
+      const retryCallOptions = this.getRetryCallOptions(
+        input.callOptions,
+        currentRetry,
+      );
+
       try {
         /**
          * Call the function that may need to be retried
          */
-        const result = await input.fn(currentRetry);
+        const result = await input.fn(retryCallOptions);
 
         return { result, attempts };
       } catch (error) {
-        const { retryModel, attempt } = await this.handleError(error, attempts);
+        const { retryModel, attempt } = await this.handleError(
+          error,
+          attempts,
+          retryCallOptions,
+        );
 
         attempts.push(attempt);
 
@@ -135,7 +172,9 @@ export class RetryableEmbeddingModel<VALUE> implements EmbeddingModel<VALUE> {
             retryModel.backoffFactor,
             modelAttemptsCount,
           );
-          await delay(calculatedDelay, { abortSignal: input.abortSignal });
+          await delay(calculatedDelay, {
+            abortSignal: retryCallOptions.abortSignal,
+          });
         }
 
         this.currentModel = retryModel.model;
@@ -149,12 +188,14 @@ export class RetryableEmbeddingModel<VALUE> implements EmbeddingModel<VALUE> {
    */
   private async handleError(
     error: unknown,
-    attempts: ReadonlyArray<RetryErrorAttempt<EmbeddingModel<VALUE>>>,
+    attempts: ReadonlyArray<RetryErrorAttempt<EmbeddingModel>>,
+    callOptions: EmbeddingModelCallOptions,
   ) {
-    const errorAttempt: RetryErrorAttempt<EmbeddingModel<VALUE>> = {
+    const errorAttempt: RetryErrorAttempt<EmbeddingModel> = {
       type: 'error',
       error: error,
       model: this.currentModel,
+      options: callOptions,
     };
 
     /**
@@ -162,7 +203,7 @@ export class RetryableEmbeddingModel<VALUE> implements EmbeddingModel<VALUE> {
      */
     const updatedAttempts = [...attempts, errorAttempt];
 
-    const context: RetryContext<EmbeddingModel<VALUE>> = {
+    const context: RetryContext<EmbeddingModel> = {
       current: errorAttempt,
       attempts: updatedAttempts,
     };
@@ -187,8 +228,8 @@ export class RetryableEmbeddingModel<VALUE> implements EmbeddingModel<VALUE> {
   }
 
   async doEmbed(
-    options: EmbeddingModelCallOptions<VALUE>,
-  ): Promise<EmbeddingModelEmbed<VALUE>> {
+    callOptions: EmbeddingModelCallOptions,
+  ): Promise<EmbeddingModelEmbed> {
     /**
      * Always start with the original model
      */
@@ -198,23 +239,14 @@ export class RetryableEmbeddingModel<VALUE> implements EmbeddingModel<VALUE> {
      * If retries are disabled, bypass retry machinery entirely
      */
     if (this.isDisabled()) {
-      return this.currentModel.doEmbed(options);
+      return this.currentModel.doEmbed(callOptions);
     }
 
     const { result } = await this.withRetry({
-      fn: async (currentRetry) => {
-        // Apply retry configuration if available
-        const callOptions: EmbeddingModelCallOptions<VALUE> = {
-          ...options,
-          providerOptions:
-            currentRetry?.providerOptions ?? options.providerOptions,
-          abortSignal: currentRetry?.timeout
-            ? AbortSignal.timeout(currentRetry.timeout)
-            : options.abortSignal,
-        };
-        return this.currentModel.doEmbed(callOptions);
+      fn: async (retryCallOptions) => {
+        return this.currentModel.doEmbed(retryCallOptions);
       },
-      abortSignal: options.abortSignal,
+      callOptions: callOptions,
     });
 
     return result;

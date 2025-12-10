@@ -75,10 +75,13 @@ export async function findRetryModel<
        * Check if the model can still be retried based on maxAttempts
        */
       if (retryAttempts.length < maxAttempts) {
+        // Type assertion needed because TypeScript can't prove that
+        // `MODEL extends LanguageModel` implies `ResolvedModel<MODEL> extends LanguageModel`
+        // for the conditional `options` type, even though they are equivalent at runtime
         return {
           ...retryModel,
           model: resolvedModel,
-        };
+        } as Retry<ResolvedModel<MODEL>>;
       }
     }
   }

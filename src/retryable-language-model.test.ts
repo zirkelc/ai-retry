@@ -31,24 +31,27 @@ const mockResultText = 'Hello, world!';
 
 const mockResult: LanguageModelGenerate = {
   finishReason: 'stop',
-  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+  usage: {
+    inputTokens: { total: 10, noCache: 0, cacheRead: 0, cacheWrite: 0 },
+    outputTokens: { total: 20, text: 0, reasoning: 0 },
+  },
   content: [{ type: 'text', text: mockResultText }],
   warnings: [],
 };
 
 const contentFilterResult: LanguageModelGenerate = {
   finishReason: 'content-filter',
-  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+  usage: {
+    inputTokens: { total: 10, noCache: 0, cacheRead: 0, cacheWrite: 0 },
+    outputTokens: { total: 20, text: 0, reasoning: 0 },
+  },
   content: [],
   warnings: [],
 };
 
 const testUsage = {
-  inputTokens: 3,
-  outputTokens: 10,
-  totalTokens: 13,
-  reasoningTokens: undefined,
-  cachedInputTokens: undefined,
+  inputTokens: { total: 3, noCache: 0, cacheRead: 0, cacheWrite: 0 },
+  outputTokens: { total: 10, text: 0, reasoning: 0 },
 };
 
 const mockStreamChunks: LanguageModelStreamPart[] = [
@@ -117,7 +120,10 @@ describe('generateText', () => {
     const baseModel = new MockLanguageModel({
       doGenerate: {
         finishReason: 'stop',
-        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        usage: {
+          inputTokens: { total: 10, noCache: 0, cacheRead: 0, cacheWrite: 0 },
+          outputTokens: { total: 20, text: 0, reasoning: 0 },
+        },
         content: [{ type: 'text', text: 'Hello, world!' }],
         warnings: [],
       },
@@ -803,6 +809,145 @@ describe('generateText', () => {
     });
   });
 
+  describe('attempt options', () => {
+    it('should include call options in error attempts', async () => {
+      // Arrange
+      const baseModel = new MockLanguageModel({ doGenerate: retryableError });
+      const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
+      const onErrorSpy = vi.fn<OnError>();
+
+      // Act
+      await generateText({
+        model: createRetryable({
+          model: baseModel,
+          retries: [fallbackModel],
+          onError: onErrorSpy,
+        }),
+        prompt: 'Hello!',
+        temperature: 0.7,
+        maxOutputTokens: 1000,
+      });
+
+      // Assert
+      expect(onErrorSpy).toHaveBeenCalledTimes(1);
+
+      const errorContext = onErrorSpy.mock.calls[0]![0];
+      expect(errorContext.current.options).toBeDefined();
+      expect(errorContext.current.options.temperature).toBe(0.7);
+      expect(errorContext.current.options.maxOutputTokens).toBe(1000);
+    });
+
+    it('should include call options in result attempts', async () => {
+      // Arrange
+      const baseModel = new MockLanguageModel({
+        doGenerate: contentFilterResult,
+      });
+      const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
+      const onRetrySpy = vi.fn<OnRetry>();
+
+      // Act
+      await generateText({
+        model: createRetryable({
+          model: baseModel,
+          retries: [
+            (context) => {
+              if (
+                isResultAttempt(context.current) &&
+                context.current.result.finishReason === 'content-filter'
+              ) {
+                return { model: fallbackModel, maxAttempts: 1 };
+              }
+              return undefined;
+            },
+          ],
+          onRetry: onRetrySpy,
+        }),
+        prompt: 'Hello!',
+        temperature: 0.8,
+        seed: 42,
+      });
+
+      // Assert
+      expect(onRetrySpy).toHaveBeenCalledTimes(1);
+
+      const retryContext = onRetrySpy.mock.calls[0]![0];
+      expect(isResultAttempt(retryContext.current)).toBe(true);
+      if (isResultAttempt(retryContext.current)) {
+        expect(retryContext.current.options).toBeDefined();
+        expect(retryContext.current.options.temperature).toBe(0.8);
+        expect(retryContext.current.options.seed).toBe(42);
+      }
+    });
+
+    it('should reflect overridden options in retry attempts', async () => {
+      // Arrange
+      const baseModel = new MockLanguageModel({ doGenerate: retryableError });
+      const fallbackModel = new MockLanguageModel({
+        doGenerate: nonRetryableError,
+      });
+      const finalModel = new MockLanguageModel({ doGenerate: mockResult });
+      const onErrorSpy = vi.fn<OnError>();
+
+      // Act
+      await generateText({
+        model: createRetryable({
+          model: baseModel,
+          retries: [
+            { model: fallbackModel, options: { temperature: 0.5 } },
+            finalModel,
+          ],
+          onError: onErrorSpy,
+        }),
+        prompt: 'Hello!',
+        temperature: 1.0,
+      });
+
+      // Assert
+      expect(onErrorSpy).toHaveBeenCalledTimes(2);
+
+      // First attempt should have original temperature
+      const firstErrorContext = onErrorSpy.mock.calls[0]![0];
+      expect(firstErrorContext.current.options.temperature).toBe(1.0);
+
+      // Second attempt should have overridden temperature
+      const secondErrorContext = onErrorSpy.mock.calls[1]![0];
+      expect(secondErrorContext.current.options.temperature).toBe(0.5);
+    });
+
+    it('should include prompt in options', async () => {
+      // Arrange
+      const baseModel = new MockLanguageModel({ doGenerate: retryableError });
+      const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
+      const onErrorSpy = vi.fn<OnError>();
+
+      // Act
+      await generateText({
+        model: createRetryable({
+          model: baseModel,
+          retries: [fallbackModel],
+          onError: onErrorSpy,
+        }),
+        prompt: 'Test prompt',
+      });
+
+      // Assert
+      expect(onErrorSpy).toHaveBeenCalledTimes(1);
+
+      const errorContext = onErrorSpy.mock.calls[0]![0];
+      expect(errorContext.current.options.prompt).toBeDefined();
+      expect(errorContext.current.options.prompt).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            role: 'user',
+            content: expect.arrayContaining([
+              expect.objectContaining({ type: 'text', text: 'Test prompt' }),
+            ]),
+          }),
+        ]),
+      );
+    });
+  });
+
   describe('RetryableOptions', () => {
     describe('maxAttempts', () => {
       it('should try each model only once by default', async () => {
@@ -1097,6 +1242,285 @@ describe('generateText', () => {
         expect(fallbackModelSignal).toBeDefined();
         expect(fallbackModelSignal?.aborted).toBe(false);
         expect(baseModelSignal).not.toBe(fallbackModelSignal);
+      });
+    });
+
+    describe('prompt', () => {
+      it('should override prompt on retry', async () => {
+        // Arrange
+        const baseModel = new MockLanguageModel({ doGenerate: retryableError });
+        const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
+        const overridePrompt = [
+          {
+            role: 'user' as const,
+            content: [{ type: 'text' as const, text: 'Modified prompt' }],
+          },
+        ];
+
+        // Act
+        await generateText({
+          model: createRetryable({
+            model: baseModel,
+            retries: [
+              { model: fallbackModel, options: { prompt: overridePrompt } },
+            ],
+          }),
+          prompt: 'Original prompt',
+        });
+
+        // Assert
+        expect(fallbackModel.doGenerate).toHaveBeenCalledWith(
+          expect.objectContaining({ prompt: overridePrompt }),
+        );
+      });
+    });
+
+    describe('temperature', () => {
+      it('should override temperature on retry', async () => {
+        // Arrange
+        const baseModel = new MockLanguageModel({ doGenerate: retryableError });
+        const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
+
+        // Act
+        await generateText({
+          model: createRetryable({
+            model: baseModel,
+            retries: [{ model: fallbackModel, options: { temperature: 0.5 } }],
+          }),
+          prompt: 'Hello!',
+          temperature: 1.0,
+        });
+
+        // Assert
+        expect(baseModel.doGenerate).toHaveBeenCalledWith(
+          expect.objectContaining({ temperature: 1.0 }),
+        );
+        expect(fallbackModel.doGenerate).toHaveBeenCalledWith(
+          expect.objectContaining({ temperature: 0.5 }),
+        );
+      });
+    });
+
+    describe('topP', () => {
+      it('should override topP on retry', async () => {
+        // Arrange
+        const baseModel = new MockLanguageModel({ doGenerate: retryableError });
+        const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
+
+        // Act
+        await generateText({
+          model: createRetryable({
+            model: baseModel,
+            retries: [{ model: fallbackModel, options: { topP: 0.8 } }],
+          }),
+          prompt: 'Hello!',
+          topP: 1.0,
+        });
+
+        // Assert
+        expect(baseModel.doGenerate).toHaveBeenCalledWith(
+          expect.objectContaining({ topP: 1.0 }),
+        );
+        expect(fallbackModel.doGenerate).toHaveBeenCalledWith(
+          expect.objectContaining({ topP: 0.8 }),
+        );
+      });
+    });
+
+    describe('topK', () => {
+      it('should override topK on retry', async () => {
+        // Arrange
+        const baseModel = new MockLanguageModel({ doGenerate: retryableError });
+        const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
+
+        // Act
+        await generateText({
+          model: createRetryable({
+            model: baseModel,
+            retries: [{ model: fallbackModel, options: { topK: 10 } }],
+          }),
+          prompt: 'Hello!',
+          topK: 50,
+        });
+
+        // Assert
+        expect(baseModel.doGenerate).toHaveBeenCalledWith(
+          expect.objectContaining({ topK: 50 }),
+        );
+        expect(fallbackModel.doGenerate).toHaveBeenCalledWith(
+          expect.objectContaining({ topK: 10 }),
+        );
+      });
+    });
+
+    describe('maxOutputTokens', () => {
+      it('should override maxOutputTokens on retry', async () => {
+        // Arrange
+        const baseModel = new MockLanguageModel({ doGenerate: retryableError });
+        const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
+
+        // Act
+        await generateText({
+          model: createRetryable({
+            model: baseModel,
+            retries: [
+              { model: fallbackModel, options: { maxOutputTokens: 500 } },
+            ],
+          }),
+          prompt: 'Hello!',
+          maxOutputTokens: 1000,
+        });
+
+        // Assert
+        expect(baseModel.doGenerate).toHaveBeenCalledWith(
+          expect.objectContaining({ maxOutputTokens: 1000 }),
+        );
+        expect(fallbackModel.doGenerate).toHaveBeenCalledWith(
+          expect.objectContaining({ maxOutputTokens: 500 }),
+        );
+      });
+    });
+
+    describe('seed', () => {
+      it('should override seed on retry', async () => {
+        // Arrange
+        const baseModel = new MockLanguageModel({ doGenerate: retryableError });
+        const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
+
+        // Act
+        await generateText({
+          model: createRetryable({
+            model: baseModel,
+            retries: [{ model: fallbackModel, options: { seed: 42 } }],
+          }),
+          prompt: 'Hello!',
+          seed: 123,
+        });
+
+        // Assert
+        expect(baseModel.doGenerate).toHaveBeenCalledWith(
+          expect.objectContaining({ seed: 123 }),
+        );
+        expect(fallbackModel.doGenerate).toHaveBeenCalledWith(
+          expect.objectContaining({ seed: 42 }),
+        );
+      });
+    });
+
+    describe('stopSequences', () => {
+      it('should override stopSequences on retry', async () => {
+        // Arrange
+        const baseModel = new MockLanguageModel({ doGenerate: retryableError });
+        const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
+
+        // Act
+        await generateText({
+          model: createRetryable({
+            model: baseModel,
+            retries: [
+              {
+                model: fallbackModel,
+                options: { stopSequences: ['RETRY_STOP'] },
+              },
+            ],
+          }),
+          prompt: 'Hello!',
+          stopSequences: ['ORIGINAL_STOP'],
+        });
+
+        // Assert
+        expect(baseModel.doGenerate).toHaveBeenCalledWith(
+          expect.objectContaining({ stopSequences: ['ORIGINAL_STOP'] }),
+        );
+        expect(fallbackModel.doGenerate).toHaveBeenCalledWith(
+          expect.objectContaining({ stopSequences: ['RETRY_STOP'] }),
+        );
+      });
+    });
+
+    describe('presencePenalty', () => {
+      it('should override presencePenalty on retry', async () => {
+        // Arrange
+        const baseModel = new MockLanguageModel({ doGenerate: retryableError });
+        const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
+
+        // Act
+        await generateText({
+          model: createRetryable({
+            model: baseModel,
+            retries: [
+              { model: fallbackModel, options: { presencePenalty: 0.5 } },
+            ],
+          }),
+          prompt: 'Hello!',
+          presencePenalty: 0.0,
+        });
+
+        // Assert
+        expect(baseModel.doGenerate).toHaveBeenCalledWith(
+          expect.objectContaining({ presencePenalty: 0.0 }),
+        );
+        expect(fallbackModel.doGenerate).toHaveBeenCalledWith(
+          expect.objectContaining({ presencePenalty: 0.5 }),
+        );
+      });
+    });
+
+    describe('frequencyPenalty', () => {
+      it('should override frequencyPenalty on retry', async () => {
+        // Arrange
+        const baseModel = new MockLanguageModel({ doGenerate: retryableError });
+        const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
+
+        // Act
+        await generateText({
+          model: createRetryable({
+            model: baseModel,
+            retries: [
+              { model: fallbackModel, options: { frequencyPenalty: 0.8 } },
+            ],
+          }),
+          prompt: 'Hello!',
+          frequencyPenalty: 0.2,
+        });
+
+        // Assert
+        expect(baseModel.doGenerate).toHaveBeenCalledWith(
+          expect.objectContaining({ frequencyPenalty: 0.2 }),
+        );
+        expect(fallbackModel.doGenerate).toHaveBeenCalledWith(
+          expect.objectContaining({ frequencyPenalty: 0.8 }),
+        );
+      });
+    });
+
+    describe('headers', () => {
+      it('should override headers on retry', async () => {
+        // Arrange
+        const baseModel = new MockLanguageModel({ doGenerate: retryableError });
+        const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
+        // Use lowercase headers to match what AI SDK expects
+        const retryHeaders = { 'x-retry': 'retry' };
+
+        // Act
+        await generateText({
+          model: createRetryable({
+            model: baseModel,
+            retries: [
+              { model: fallbackModel, options: { headers: retryHeaders } },
+            ],
+          }),
+          prompt: 'Hello!',
+        });
+
+        // Assert - check that retry headers are passed to fallback model
+        expect(fallbackModel.doGenerate).toHaveBeenCalledWith(
+          expect.objectContaining({
+            headers: expect.objectContaining({
+              'x-retry': 'retry',
+            }),
+          }),
+        );
       });
     });
   });
@@ -1586,7 +2010,7 @@ describe('streamText', () => {
             "response": {
               "headers": undefined,
               "id": "aitxt-mock-id",
-              "modelId": "mock-model-83",
+              "modelId": "mock-model-112",
               "timestamp": 1970-01-01T00:00:00.000Z,
             },
             "type": "finish-step",
@@ -2200,6 +2624,403 @@ describe('streamText', () => {
         expect(fallbackModelSignal).toBeDefined();
         expect(fallbackModelSignal?.aborted).toBe(false);
         expect(baseModelSignal).not.toBe(fallbackModelSignal);
+      });
+    });
+
+    describe('temperature', () => {
+      it('should override temperature on retry after stream error', async () => {
+        // Arrange
+        // Base model returns a stream that errors before content starts
+        const baseModel = new MockLanguageModel({
+          doStream: {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'error', error: new Error('Stream error') },
+            ]),
+          },
+        });
+
+        const fallbackModel = new MockLanguageModel({
+          doStream: {
+            stream: convertArrayToReadableStream(mockStreamChunks),
+          },
+        });
+
+        const retryableModel = createRetryable({
+          model: baseModel,
+          retries: [{ model: fallbackModel, options: { temperature: 0.5 } }],
+        });
+
+        // Act
+        const result = streamText({
+          model: retryableModel,
+          prompt: 'Hello!',
+          temperature: 1.0,
+        });
+
+        await convertAsyncIterableToArray(result.fullStream);
+
+        // Assert
+        // Base model should be called with original temperature
+        expect(baseModel.doStream).toHaveBeenCalledWith(
+          expect.objectContaining({ temperature: 1.0 }),
+        );
+
+        // Fallback model should be called with overridden temperature
+        expect(fallbackModel.doStream).toHaveBeenCalledWith(
+          expect.objectContaining({ temperature: 0.5 }),
+        );
+      });
+    });
+
+    describe('topP', () => {
+      it('should override topP on retry after stream error', async () => {
+        // Arrange
+        const baseModel = new MockLanguageModel({
+          doStream: {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'error', error: new Error('Stream error') },
+            ]),
+          },
+        });
+
+        const fallbackModel = new MockLanguageModel({
+          doStream: {
+            stream: convertArrayToReadableStream(mockStreamChunks),
+          },
+        });
+
+        const retryableModel = createRetryable({
+          model: baseModel,
+          retries: [{ model: fallbackModel, options: { topP: 0.8 } }],
+        });
+
+        // Act
+        const result = streamText({
+          model: retryableModel,
+          prompt: 'Hello!',
+          topP: 1.0,
+        });
+
+        await convertAsyncIterableToArray(result.fullStream);
+
+        // Assert
+        expect(baseModel.doStream).toHaveBeenCalledWith(
+          expect.objectContaining({ topP: 1.0 }),
+        );
+        expect(fallbackModel.doStream).toHaveBeenCalledWith(
+          expect.objectContaining({ topP: 0.8 }),
+        );
+      });
+    });
+
+    describe('topK', () => {
+      it('should override topK on retry after stream error', async () => {
+        // Arrange
+        const baseModel = new MockLanguageModel({
+          doStream: {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'error', error: new Error('Stream error') },
+            ]),
+          },
+        });
+
+        const fallbackModel = new MockLanguageModel({
+          doStream: {
+            stream: convertArrayToReadableStream(mockStreamChunks),
+          },
+        });
+
+        const retryableModel = createRetryable({
+          model: baseModel,
+          retries: [{ model: fallbackModel, options: { topK: 10 } }],
+        });
+
+        // Act
+        const result = streamText({
+          model: retryableModel,
+          prompt: 'Hello!',
+          topK: 50,
+        });
+
+        await convertAsyncIterableToArray(result.fullStream);
+
+        // Assert
+        expect(baseModel.doStream).toHaveBeenCalledWith(
+          expect.objectContaining({ topK: 50 }),
+        );
+        expect(fallbackModel.doStream).toHaveBeenCalledWith(
+          expect.objectContaining({ topK: 10 }),
+        );
+      });
+    });
+
+    describe('maxOutputTokens', () => {
+      it('should override maxOutputTokens on retry after stream error', async () => {
+        // Arrange
+        const baseModel = new MockLanguageModel({
+          doStream: {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'error', error: new Error('Stream error') },
+            ]),
+          },
+        });
+
+        const fallbackModel = new MockLanguageModel({
+          doStream: {
+            stream: convertArrayToReadableStream(mockStreamChunks),
+          },
+        });
+
+        const retryableModel = createRetryable({
+          model: baseModel,
+          retries: [
+            { model: fallbackModel, options: { maxOutputTokens: 500 } },
+          ],
+        });
+
+        // Act
+        const result = streamText({
+          model: retryableModel,
+          prompt: 'Hello!',
+          maxOutputTokens: 1000,
+        });
+
+        await convertAsyncIterableToArray(result.fullStream);
+
+        // Assert
+        expect(baseModel.doStream).toHaveBeenCalledWith(
+          expect.objectContaining({ maxOutputTokens: 1000 }),
+        );
+        expect(fallbackModel.doStream).toHaveBeenCalledWith(
+          expect.objectContaining({ maxOutputTokens: 500 }),
+        );
+      });
+    });
+
+    describe('seed', () => {
+      it('should override seed on retry after stream error', async () => {
+        // Arrange
+        const baseModel = new MockLanguageModel({
+          doStream: {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'error', error: new Error('Stream error') },
+            ]),
+          },
+        });
+
+        const fallbackModel = new MockLanguageModel({
+          doStream: {
+            stream: convertArrayToReadableStream(mockStreamChunks),
+          },
+        });
+
+        const retryableModel = createRetryable({
+          model: baseModel,
+          retries: [{ model: fallbackModel, options: { seed: 42 } }],
+        });
+
+        // Act
+        const result = streamText({
+          model: retryableModel,
+          prompt: 'Hello!',
+          seed: 123,
+        });
+
+        await convertAsyncIterableToArray(result.fullStream);
+
+        // Assert
+        expect(baseModel.doStream).toHaveBeenCalledWith(
+          expect.objectContaining({ seed: 123 }),
+        );
+        expect(fallbackModel.doStream).toHaveBeenCalledWith(
+          expect.objectContaining({ seed: 42 }),
+        );
+      });
+    });
+
+    describe('stopSequences', () => {
+      it('should override stopSequences on retry after stream error', async () => {
+        // Arrange
+        const baseModel = new MockLanguageModel({
+          doStream: {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'error', error: new Error('Stream error') },
+            ]),
+          },
+        });
+
+        const fallbackModel = new MockLanguageModel({
+          doStream: {
+            stream: convertArrayToReadableStream(mockStreamChunks),
+          },
+        });
+
+        const retryableModel = createRetryable({
+          model: baseModel,
+          retries: [
+            {
+              model: fallbackModel,
+              options: { stopSequences: ['RETRY_STOP'] },
+            },
+          ],
+        });
+
+        // Act
+        const result = streamText({
+          model: retryableModel,
+          prompt: 'Hello!',
+          stopSequences: ['ORIGINAL_STOP'],
+        });
+
+        await convertAsyncIterableToArray(result.fullStream);
+
+        // Assert
+        expect(baseModel.doStream).toHaveBeenCalledWith(
+          expect.objectContaining({ stopSequences: ['ORIGINAL_STOP'] }),
+        );
+        expect(fallbackModel.doStream).toHaveBeenCalledWith(
+          expect.objectContaining({ stopSequences: ['RETRY_STOP'] }),
+        );
+      });
+    });
+
+    describe('presencePenalty', () => {
+      it('should override presencePenalty on retry after stream error', async () => {
+        // Arrange
+        const baseModel = new MockLanguageModel({
+          doStream: {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'error', error: new Error('Stream error') },
+            ]),
+          },
+        });
+
+        const fallbackModel = new MockLanguageModel({
+          doStream: {
+            stream: convertArrayToReadableStream(mockStreamChunks),
+          },
+        });
+
+        const retryableModel = createRetryable({
+          model: baseModel,
+          retries: [
+            { model: fallbackModel, options: { presencePenalty: 0.5 } },
+          ],
+        });
+
+        // Act
+        const result = streamText({
+          model: retryableModel,
+          prompt: 'Hello!',
+          presencePenalty: 0.0,
+        });
+
+        await convertAsyncIterableToArray(result.fullStream);
+
+        // Assert
+        expect(baseModel.doStream).toHaveBeenCalledWith(
+          expect.objectContaining({ presencePenalty: 0.0 }),
+        );
+        expect(fallbackModel.doStream).toHaveBeenCalledWith(
+          expect.objectContaining({ presencePenalty: 0.5 }),
+        );
+      });
+    });
+
+    describe('frequencyPenalty', () => {
+      it('should override frequencyPenalty on retry after stream error', async () => {
+        // Arrange
+        const baseModel = new MockLanguageModel({
+          doStream: {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'error', error: new Error('Stream error') },
+            ]),
+          },
+        });
+
+        const fallbackModel = new MockLanguageModel({
+          doStream: {
+            stream: convertArrayToReadableStream(mockStreamChunks),
+          },
+        });
+
+        const retryableModel = createRetryable({
+          model: baseModel,
+          retries: [
+            { model: fallbackModel, options: { frequencyPenalty: 0.8 } },
+          ],
+        });
+
+        // Act
+        const result = streamText({
+          model: retryableModel,
+          prompt: 'Hello!',
+          frequencyPenalty: 0.2,
+        });
+
+        await convertAsyncIterableToArray(result.fullStream);
+
+        // Assert
+        expect(baseModel.doStream).toHaveBeenCalledWith(
+          expect.objectContaining({ frequencyPenalty: 0.2 }),
+        );
+        expect(fallbackModel.doStream).toHaveBeenCalledWith(
+          expect.objectContaining({ frequencyPenalty: 0.8 }),
+        );
+      });
+    });
+
+    describe('headers', () => {
+      it('should override headers on retry after stream error', async () => {
+        // Arrange
+        const baseModel = new MockLanguageModel({
+          doStream: {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'error', error: new Error('Stream error') },
+            ]),
+          },
+        });
+
+        const fallbackModel = new MockLanguageModel({
+          doStream: {
+            stream: convertArrayToReadableStream(mockStreamChunks),
+          },
+        });
+
+        const retryHeaders = { 'x-retry': 'retry' };
+
+        const retryableModel = createRetryable({
+          model: baseModel,
+          retries: [
+            { model: fallbackModel, options: { headers: retryHeaders } },
+          ],
+        });
+
+        // Act
+        const result = streamText({
+          model: retryableModel,
+          prompt: 'Hello!',
+        });
+
+        await convertAsyncIterableToArray(result.fullStream);
+
+        // Assert
+        expect(fallbackModel.doStream).toHaveBeenCalledWith(
+          expect.objectContaining({
+            headers: expect.objectContaining({
+              'x-retry': 'retry',
+            }),
+          }),
+        );
       });
     });
   });

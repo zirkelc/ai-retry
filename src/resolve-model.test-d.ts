@@ -17,7 +17,7 @@ describe('resolveModel', () => {
   });
 
   it('should return an embedding model instance', () => {
-    const openaiModel = openai.textEmbedding('text-embedding-3-large');
+    const openaiModel = openai.embedding('text-embedding-3-large');
     const model = resolveModel(openaiModel);
 
     expectTypeOf(model).toEqualTypeOf<EmbeddingModel>();

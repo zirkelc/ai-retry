@@ -4,11 +4,18 @@ import { findRetryModel } from './find-retry-model.js';
 import { MockLanguageModel } from './test-utils.js';
 import type {
   LanguageModel,
+  LanguageModelCallOptions,
   ResolvableLanguageModel,
   Retry,
   Retryable,
   RetryContext,
 } from './types.js';
+
+const options: LanguageModelCallOptions = {
+  prompt: [
+    { role: 'user', content: [{ type: 'text', text: 'Hello, world!' }] },
+  ],
+};
 
 describe('findRetryModel', () => {
   describe('with function retryables', () => {
@@ -30,8 +37,8 @@ describe('findRetryModel', () => {
       };
 
       const context: RetryContext<LanguageModel> = {
-        current: { type: 'error', error, model: primaryModel },
-        attempts: [{ type: 'error', error, model: primaryModel }],
+        current: { type: 'error', error, model: primaryModel, options },
+        attempts: [{ type: 'error', error, model: primaryModel, options }],
       };
 
       const result = await findRetryModel([retryable], context);
@@ -49,8 +56,8 @@ describe('findRetryModel', () => {
       const retryable: Retryable<LanguageModel> = () => undefined;
 
       const context: RetryContext<LanguageModel> = {
-        current: { type: 'error', error, model: primaryModel },
-        attempts: [{ type: 'error', error, model: primaryModel }],
+        current: { type: 'error', error, model: primaryModel, options },
+        attempts: [{ type: 'error', error, model: primaryModel, options }],
       };
 
       const result = await findRetryModel([retryable], context);
@@ -69,8 +76,8 @@ describe('findRetryModel', () => {
       };
 
       const context: RetryContext<LanguageModel> = {
-        current: { type: 'error', error, model: primaryModel },
-        attempts: [{ type: 'error', error, model: primaryModel }],
+        current: { type: 'error', error, model: primaryModel, options },
+        attempts: [{ type: 'error', error, model: primaryModel, options }],
       };
 
       const result = await findRetryModel([retryable], context);
@@ -95,8 +102,8 @@ describe('findRetryModel', () => {
       };
 
       const context: RetryContext<LanguageModel> = {
-        current: { type: 'error', error, model: primaryModel },
-        attempts: [{ type: 'error', error, model: primaryModel }],
+        current: { type: 'error', error, model: primaryModel, options },
+        attempts: [{ type: 'error', error, model: primaryModel, options }],
       };
 
       const result = await findRetryModel([retry], context);
@@ -123,10 +130,19 @@ describe('findRetryModel', () => {
           result: {
             content: [],
             finishReason: 'content-filter',
-            usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+            usage: {
+              inputTokens: {
+                total: 0,
+                noCache: 0,
+                cacheRead: 0,
+                cacheWrite: 0,
+              },
+              outputTokens: { total: 0, text: 0, reasoning: 0 },
+            },
             warnings: [],
           },
           model: primaryModel,
+          options: options,
         },
         attempts: [],
       };
@@ -144,8 +160,8 @@ describe('findRetryModel', () => {
       const error = new Error('Test error');
 
       const context: RetryContext<LanguageModel> = {
-        current: { type: 'error', error, model: primaryModel },
-        attempts: [{ type: 'error', error, model: primaryModel }],
+        current: { type: 'error', error, model: primaryModel, options },
+        attempts: [{ type: 'error', error, model: primaryModel, options }],
       };
 
       const result = await findRetryModel([fallbackModel], context);
@@ -165,10 +181,19 @@ describe('findRetryModel', () => {
           result: {
             content: [],
             finishReason: 'content-filter',
-            usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+            usage: {
+              inputTokens: {
+                total: 0,
+                noCache: 0,
+                cacheRead: 0,
+                cacheWrite: 0,
+              },
+              outputTokens: { total: 0, text: 0, reasoning: 0 },
+            },
             warnings: [],
           },
           model: primaryModel,
+          options: options,
         },
         attempts: [],
       };
@@ -191,10 +216,10 @@ describe('findRetryModel', () => {
       };
 
       const context: RetryContext<LanguageModel> = {
-        current: { type: 'error', error, model: primaryModel },
+        current: { type: 'error', error, model: primaryModel, options },
         attempts: [
-          { type: 'error', error, model: fallbackModel },
-          { type: 'error', error, model: fallbackModel },
+          { type: 'error', error, model: fallbackModel, options: options },
+          { type: 'error', error, model: fallbackModel, options: options },
         ],
       };
 
@@ -214,10 +239,15 @@ describe('findRetryModel', () => {
       };
 
       const context: RetryContext<LanguageModel> = {
-        current: { type: 'error', error, model: primaryModel },
+        current: {
+          type: 'error',
+          error,
+          model: primaryModel,
+          options: options,
+        },
         attempts: [
-          { type: 'error', error, model: primaryModel },
-          { type: 'error', error, model: fallbackModel },
+          { type: 'error', error, model: primaryModel, options: options },
+          { type: 'error', error, model: fallbackModel, options: options },
         ],
       };
 
@@ -239,8 +269,8 @@ describe('findRetryModel', () => {
       };
 
       const context: RetryContext<LanguageModel> = {
-        current: { type: 'error', error, model: primaryModel },
-        attempts: [{ type: 'error', error, model: fallbackModel }],
+        current: { type: 'error', error, model: primaryModel, options },
+        attempts: [{ type: 'error', error, model: fallbackModel, options }],
       };
 
       const result = await findRetryModel([retry], context);
@@ -272,8 +302,15 @@ describe('findRetryModel', () => {
       });
 
       const context: RetryContext<LanguageModel> = {
-        current: { type: 'error', error, model: primaryModel },
-        attempts: [{ type: 'error', error, model: primaryModel }],
+        current: {
+          type: 'error',
+          error,
+          model: primaryModel,
+          options: options,
+        },
+        attempts: [
+          { type: 'error', error, model: primaryModel, options: options },
+        ],
       };
 
       const result = await findRetryModel(
@@ -300,10 +337,15 @@ describe('findRetryModel', () => {
       };
 
       const context: RetryContext<LanguageModel> = {
-        current: { type: 'error', error, model: primaryModel },
+        current: {
+          type: 'error',
+          error,
+          model: primaryModel,
+          options: options,
+        },
         attempts: [
-          { type: 'error', error, model: primaryModel },
-          { type: 'error', error, model: fallback1 },
+          { type: 'error', error, model: primaryModel, options: options },
+          { type: 'error', error, model: fallback1, options: options },
         ],
       };
 
@@ -319,8 +361,15 @@ describe('findRetryModel', () => {
       const error = new Error('Test error');
 
       const context: RetryContext<LanguageModel> = {
-        current: { type: 'error', error, model: primaryModel },
-        attempts: [{ type: 'error', error, model: primaryModel }],
+        current: {
+          type: 'error',
+          error,
+          model: primaryModel,
+          options: options,
+        },
+        attempts: [
+          { type: 'error', error, model: primaryModel, options: options },
+        ],
       };
 
       const result = await findRetryModel(['openai/gpt-4o'], context);
@@ -343,8 +392,15 @@ describe('findRetryModel', () => {
       };
 
       const context: RetryContext<LanguageModel> = {
-        current: { type: 'error', error, model: primaryModel },
-        attempts: [{ type: 'error', error, model: primaryModel }],
+        current: {
+          type: 'error',
+          error,
+          model: primaryModel,
+          options: options,
+        },
+        attempts: [
+          { type: 'error', error, model: primaryModel, options: options },
+        ],
       };
 
       const result = await findRetryModel([retry], context);

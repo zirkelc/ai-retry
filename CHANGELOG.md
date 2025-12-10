@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.12.0](https://github.com/zirkelc/ai-retry/compare/v0.11.0...v0.12.0) (2025-12-10)
+
+
+### Features
+
+* support ai gateway model strings ([a6ad6a9](https://github.com/zirkelc/ai-retry/commit/a6ad6a9dabfc6ad1ba325a2782a8b12c35924af9))
+
+## [0.11.0](https://github.com/zirkelc/ai-retry/compare/v0.10.3...v0.11.0) (2025-11-30)
+
+
+### Features
+
+* override call options ([7074aee](https://github.com/zirkelc/ai-retry/commit/7074aee14c3e738bbc6e0461436447bd80016589))
+
 ## [0.10.3](https://github.com/zirkelc/ai-retry/compare/v0.10.2...v0.10.3) (2025-11-26)
 
 
