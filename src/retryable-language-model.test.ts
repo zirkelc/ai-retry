@@ -30,7 +30,7 @@ const prompt = 'Hello!';
 const mockResultText = 'Hello, world!';
 
 const mockResult: LanguageModelGenerate = {
-  finishReason: 'stop',
+  finishReason: { unified: 'stop', raw: undefined },
   usage: {
     inputTokens: { total: 10, noCache: 0, cacheRead: 0, cacheWrite: 0 },
     outputTokens: { total: 20, text: 0, reasoning: 0 },
@@ -40,7 +40,7 @@ const mockResult: LanguageModelGenerate = {
 };
 
 const contentFilterResult: LanguageModelGenerate = {
-  finishReason: 'content-filter',
+  finishReason: { unified: 'content-filter', raw: undefined },
   usage: {
     inputTokens: { total: 10, noCache: 0, cacheRead: 0, cacheWrite: 0 },
     outputTokens: { total: 20, text: 0, reasoning: 0 },
@@ -72,7 +72,7 @@ const mockStreamChunks: LanguageModelStreamPart[] = [
   { type: 'text-end', id: '1' },
   {
     type: 'finish',
-    finishReason: 'stop',
+    finishReason: { unified: 'stop', raw: undefined },
     usage: testUsage,
     providerMetadata: {
       testProvider: { testKey: 'testValue' },
@@ -119,7 +119,7 @@ describe('generateText', () => {
     // Arrange
     const baseModel = new MockLanguageModel({
       doGenerate: {
-        finishReason: 'stop',
+        finishReason: { unified: 'stop', raw: undefined },
         usage: {
           inputTokens: { total: 10, noCache: 0, cacheRead: 0, cacheWrite: 0 },
           outputTokens: { total: 20, text: 0, reasoning: 0 },
@@ -288,7 +288,7 @@ describe('generateText', () => {
         const fallbackRetryable: Retryable<LanguageModel> = (context) => {
           if (
             isResultAttempt(context.current) &&
-            context.current.result.finishReason === 'content-filter'
+            context.current.result.finishReason.unified === 'content-filter'
           ) {
             return { model: fallbackModel, maxAttempts: 1 };
           }
@@ -325,7 +325,7 @@ describe('generateText', () => {
         const fallbackRetryable: Retryable<LanguageModel> = (context) => {
           if (
             isResultAttempt(context.current) &&
-            context.current.result.finishReason === 'content-filter'
+            context.current.result.finishReason.unified === 'content-filter'
           ) {
             return { model: fallbackModel2, maxAttempts: 1 };
           }
@@ -366,7 +366,7 @@ describe('generateText', () => {
         const fallbackRetryable: Retryable<LanguageModel> = (context) => {
           if (
             isResultAttempt(context.current) &&
-            context.current.result.finishReason === 'content-filter'
+            context.current.result.finishReason.unified === 'content-filter'
           ) {
             return { model: fallbackModel2, maxAttempts: 1 };
           }
@@ -620,7 +620,7 @@ describe('generateText', () => {
             (context: RetryContext<LanguageModel>) => {
               if (
                 isResultAttempt(context.current) &&
-                context.current.result.finishReason === 'content-filter'
+                context.current.result.finishReason.unified === 'content-filter'
               ) {
                 return { model: fallbackModel, maxAttempts: 1 };
               }
@@ -721,7 +721,7 @@ describe('generateText', () => {
             (context: RetryContext<LanguageModel>) => {
               if (
                 isResultAttempt(context.current) &&
-                context.current.result.finishReason === 'content-filter'
+                context.current.result.finishReason.unified === 'content-filter'
               ) {
                 return { model: fallbackModel, maxAttempts: 1 };
               }
@@ -739,7 +739,9 @@ describe('generateText', () => {
       const retryCall = onRetrySpy.mock.calls[0]![0];
       expect(isResultAttempt(retryCall.current)).toBe(true);
       if (isResultAttempt(retryCall.current)) {
-        expect(retryCall.current.result.finishReason).toBe('content-filter');
+        expect(retryCall.current.result.finishReason.unified).toBe(
+          'content-filter',
+        );
       }
       expect(retryCall.current.model).toBe(fallbackModel);
       expect(retryCall.attempts.length).toBe(1);
@@ -853,7 +855,7 @@ describe('generateText', () => {
             (context) => {
               if (
                 isResultAttempt(context.current) &&
-                context.current.result.finishReason === 'content-filter'
+                context.current.result.finishReason.unified === 'content-filter'
               ) {
                 return { model: fallbackModel, maxAttempts: 1 };
               }
@@ -1701,6 +1703,7 @@ describe('streamText', () => {
                 "testKey": "testValue",
               },
             },
+            "rawFinishReason": undefined,
             "response": {
               "headers": undefined,
               "id": "id-0",
@@ -1728,6 +1731,7 @@ describe('streamText', () => {
           },
           {
             "finishReason": "stop",
+            "rawFinishReason": undefined,
             "totalUsage": {
               "cachedInputTokens": 0,
               "inputTokenDetails": {
@@ -1826,6 +1830,7 @@ describe('streamText', () => {
                 "testKey": "testValue",
               },
             },
+            "rawFinishReason": undefined,
             "response": {
               "headers": undefined,
               "id": "id-0",
@@ -1853,6 +1858,7 @@ describe('streamText', () => {
           },
           {
             "finishReason": "stop",
+            "rawFinishReason": undefined,
             "totalUsage": {
               "cachedInputTokens": 0,
               "inputTokenDetails": {
@@ -1955,6 +1961,7 @@ describe('streamText', () => {
                 "testKey": "testValue",
               },
             },
+            "rawFinishReason": undefined,
             "response": {
               "headers": undefined,
               "id": "id-0",
@@ -1982,6 +1989,7 @@ describe('streamText', () => {
           },
           {
             "finishReason": "stop",
+            "rawFinishReason": undefined,
             "totalUsage": {
               "cachedInputTokens": 0,
               "inputTokenDetails": {
@@ -2064,6 +2072,7 @@ describe('streamText', () => {
           {
             "finishReason": "error",
             "providerMetadata": undefined,
+            "rawFinishReason": undefined,
             "response": {
               "headers": undefined,
               "id": "aitxt-mock-id",
@@ -2089,6 +2098,7 @@ describe('streamText', () => {
           },
           {
             "finishReason": "error",
+            "rawFinishReason": undefined,
             "totalUsage": {
               "cachedInputTokens": undefined,
               "inputTokenDetails": {

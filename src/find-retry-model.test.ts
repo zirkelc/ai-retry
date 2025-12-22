@@ -129,7 +129,7 @@ describe('findRetryModel', () => {
           type: 'result',
           result: {
             content: [],
-            finishReason: 'content-filter',
+            finishReason: { unified: 'content-filter', raw: undefined },
             usage: {
               inputTokens: {
                 total: 0,
@@ -180,7 +180,7 @@ describe('findRetryModel', () => {
           type: 'result',
           result: {
             content: [],
-            finishReason: 'content-filter',
+            finishReason: { unified: 'content-filter', raw: undefined },
             usage: {
               inputTokens: {
                 total: 0,

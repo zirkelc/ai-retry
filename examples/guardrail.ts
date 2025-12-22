@@ -16,7 +16,7 @@ const guardrail: Retryable<LanguageModel> = async (context) => {
     const { result } = current;
 
     // If the model finished the generation, we can check the content
-    if (result.finishReason === 'stop') {
+    if (result.finishReason.unified === 'stop') {
       const content = result.content
         .filter((c) => c.type === 'text')
         .map((c) => c.text)

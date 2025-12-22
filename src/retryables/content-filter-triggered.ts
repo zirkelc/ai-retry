@@ -40,7 +40,7 @@ export function contentFilterTriggered<MODEL extends ResolvableLanguageModel>(
     if (isResultAttempt(current)) {
       const { result } = current;
 
-      if (result.finishReason === 'content-filter') {
+      if (result.finishReason.unified === 'content-filter') {
         return { model, maxAttempts: 1, ...options };
       }
     }

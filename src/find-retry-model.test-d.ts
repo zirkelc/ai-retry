@@ -68,7 +68,7 @@ describe('findRetryModel', () => {
     const model = new MockLanguageModel();
     const retries: Retries<LanguageModel> = [
       'openai/gpt-4o',
-      'anthropic/claude-3.5-sonnet-20240620',
+      'anthropic/claude-3.5-sonnet',
     ];
     const context: RetryContext<LanguageModel> = {
       current: {
@@ -163,7 +163,7 @@ describe('findRetryModel', () => {
   it('should accept Retry objects with string models', async () => {
     const model = new MockLanguageModel();
     const retry: Retry<ResolvableLanguageModel> = {
-      model: 'anthropic/claude-3.5-sonnet-20240620',
+      model: 'anthropic/claude-3.5-sonnet',
       maxAttempts: 2,
     };
     const retries: Retries<LanguageModel> = [retry];

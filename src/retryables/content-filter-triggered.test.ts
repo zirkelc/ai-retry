@@ -20,7 +20,7 @@ import { contentFilterTriggered } from './content-filter-triggered.js';
 const mockResultText = 'Hello, world!';
 
 const mockResult: LanguageModelGenerate = {
-  finishReason: 'stop',
+  finishReason: { unified: 'stop', raw: undefined },
   usage: {
     inputTokens: { total: 10, noCache: 0, cacheRead: 0, cacheWrite: 0 },
     outputTokens: { total: 20, text: 0, reasoning: 0 },
@@ -30,7 +30,7 @@ const mockResult: LanguageModelGenerate = {
 };
 
 const contentFilterResult: LanguageModelGenerate = {
-  finishReason: 'content-filter',
+  finishReason: { unified: 'content-filter', raw: undefined },
   usage: {
     inputTokens: { total: 10, noCache: 0, cacheRead: 0, cacheWrite: 0 },
     outputTokens: { total: 20, text: 0, reasoning: 0 },
@@ -54,7 +54,7 @@ const contentFilterChunks: LanguageModelStreamPart[] = [
   },
   {
     type: 'finish',
-    finishReason: 'content-filter',
+    finishReason: { unified: 'content-filter', raw: undefined },
     usage: {
       inputTokens: { total: 10, noCache: 0, cacheRead: 0, cacheWrite: 0 },
       outputTokens: { total: 20, text: 0, reasoning: 0 },
@@ -101,7 +101,7 @@ const mockStreamChunks: LanguageModelStreamPart[] = [
   { type: 'text-end', id: '1' },
   {
     type: 'finish',
-    finishReason: 'stop',
+    finishReason: { unified: 'stop', raw: undefined },
     usage: {
       inputTokens: { total: 10, noCache: 0, cacheRead: 0, cacheWrite: 0 },
       outputTokens: { total: 20, text: 0, reasoning: 0 },
