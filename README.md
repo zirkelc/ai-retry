@@ -19,18 +19,8 @@ It supports two types of retries:
 
 ### Installation
 
-> [!WARNING]
-> Version compatibility:
->
-> - Use `ai-retry` version 0.x for AI SDK v5.
-> - Use `ai-retry` version 1.x for AI SDK v6.
-
 ```bash
-# AI SDK v5
-npm install ai-retry@0
-
-# AI SDK v6
-npm install ai-retry@1
+npm install ai-retry
 ```
 
 ### Usage
