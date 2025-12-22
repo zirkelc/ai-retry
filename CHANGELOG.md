@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.0.0](https://github.com/zirkelc/ai-retry/compare/v0.12.0...v1.0.0) (2025-12-22)
+
+
+### ⚠ BREAKING CHANGES
+
+* AI SDK v6 upgrade
+
+### Features
+
+* AI SDK v6 upgrade ([01b9c62](https://github.com/zirkelc/ai-retry/commit/01b9c6247439459d44068b1124c2239dd8ebd66d))
+
+
+### Bug Fixes
+
+* esm only ([8543a89](https://github.com/zirkelc/ai-retry/commit/8543a89b31807b57ef467b773c645f5e1a71fe02))
+
 ## [0.12.0](https://github.com/zirkelc/ai-retry/compare/v0.11.0...v0.12.0) (2025-12-10)
 
 
