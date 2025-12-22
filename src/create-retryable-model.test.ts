@@ -20,7 +20,7 @@ describe('createRetryable', () => {
       expect(retryable).toBeInstanceOf(RetryableLanguageModel);
       expect(retryable.provider).toBe(model.provider);
       expect(retryable.modelId).toBe(model.modelId);
-      expect(retryable.specificationVersion).toBe('v2');
+      expect(retryable.specificationVersion).toBe('v3');
     });
 
     it('should create retryable model from gateway string', () => {
@@ -35,7 +35,7 @@ describe('createRetryable', () => {
       expect(retryable).toBeInstanceOf(RetryableLanguageModel);
       expect(retryable.provider).toBe('gateway');
       expect(retryable.modelId).toBe('openai/gpt-4.1');
-      expect(retryable.specificationVersion).toBe('v2');
+      expect(retryable.specificationVersion).toBe('v3');
     });
   });
 
@@ -53,7 +53,7 @@ describe('createRetryable', () => {
       expect(retryable).toBeInstanceOf(RetryableEmbeddingModel);
       expect(retryable.provider).toBe(model.provider);
       expect(retryable.modelId).toBe(model.modelId);
-      expect(retryable.specificationVersion).toBe('v2');
+      expect(retryable.specificationVersion).toBe('v3');
     });
   });
 });

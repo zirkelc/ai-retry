@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - v6
   pull_request:
 
 concurrency:
@@ -70,7 +71,7 @@ jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/v6'
     outputs:
       releases_created: ${{ steps.release.outputs.releases_created }}
       release_created: ${{ steps.release.outputs.release_created }}

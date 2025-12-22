@@ -1,10 +1,10 @@
 import { APICallError, embed, RetryError } from 'ai';
 import { describe, expect, it, vi } from 'vitest';
 import { createRetryable } from './create-retryable-model.js';
-import { type EmbeddingModelEmbed, MockEmbeddingModel } from './test-utils.js';
+import { MockEmbeddingModel } from './test-utils.js';
 import type {
   EmbeddingModel,
-  LanguageModel,
+  EmbeddingModelEmbed,
   Retryable,
   RetryableModelOptions,
   RetryContext,
@@ -14,9 +14,10 @@ import { isErrorAttempt } from './utils.js';
 type OnError = Required<RetryableModelOptions<EmbeddingModel>>['onError'];
 type OnRetry = Required<RetryableModelOptions<EmbeddingModel>>['onRetry'];
 
-const mockEmbeddings: EmbeddingModelEmbed<number> = {
+const mockEmbeddings: EmbeddingModelEmbed = {
   embeddings: [[0.1, 0.2, 0.3]],
   usage: { tokens: 5 },
+  warnings: [],
 };
 
 const retryableError = new APICallError({

@@ -13,11 +13,7 @@ type GenerateText = Parameters<typeof generateText>[0];
 
 export type LanguageModelGenerateFn = LanguageModel['doGenerate'];
 export type LanguageModelStreamFn = LanguageModel['doStream'];
-
-export type EmbeddingModelEmbedFn = EmbeddingModel<number>['doEmbed'];
-
-// Re-export the types for convenience in tests
-export type { EmbeddingModelEmbed, LanguageModelGenerate, LanguageModelStream };
+export type EmbeddingModelEmbedFn = EmbeddingModel['doEmbed'];
 
 const mockGenerateId = () => 'aitxt-mock-id';
 const mockCurrentDate = () => new Date(0);
@@ -43,7 +39,7 @@ const generateMockModelId = () => {
 };
 
 export class MockLanguageModel implements LanguageModel {
-  readonly specificationVersion = 'v2';
+  readonly specificationVersion = 'v3';
 
   readonly supportedUrls: LanguageModel['supportedUrls'];
   readonly provider: LanguageModel['provider'];
@@ -79,8 +75,8 @@ export class MockLanguageModel implements LanguageModel {
   }
 }
 
-export class MockEmbeddingModel implements EmbeddingModel<number> {
-  readonly specificationVersion = 'v2';
+export class MockEmbeddingModel implements EmbeddingModel {
+  readonly specificationVersion = 'v3';
 
   readonly provider: EmbeddingModel['provider'];
   readonly modelId: EmbeddingModel['modelId'];

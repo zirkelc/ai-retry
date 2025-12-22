@@ -20,7 +20,7 @@ import type {
 import { isGenerateResult, isStreamContentPart } from './utils.js';
 
 export class RetryableLanguageModel implements LanguageModel {
-  readonly specificationVersion = 'v2';
+  readonly specificationVersion = 'v3';
 
   private baseModel: LanguageModel;
   private currentModel: LanguageModel;

@@ -20,15 +20,21 @@ import { contentFilterTriggered } from './content-filter-triggered.js';
 const mockResultText = 'Hello, world!';
 
 const mockResult: LanguageModelGenerate = {
-  finishReason: 'stop',
-  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+  finishReason: { unified: 'stop', raw: undefined },
+  usage: {
+    inputTokens: { total: 10, noCache: 0, cacheRead: 0, cacheWrite: 0 },
+    outputTokens: { total: 20, text: 0, reasoning: 0 },
+  },
   content: [{ type: 'text', text: mockResultText }],
   warnings: [],
 };
 
 const contentFilterResult: LanguageModelGenerate = {
-  finishReason: 'content-filter',
-  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+  finishReason: { unified: 'content-filter', raw: undefined },
+  usage: {
+    inputTokens: { total: 10, noCache: 0, cacheRead: 0, cacheWrite: 0 },
+    outputTokens: { total: 20, text: 0, reasoning: 0 },
+  },
   content: [],
   warnings: [],
 };
@@ -48,8 +54,11 @@ const contentFilterChunks: LanguageModelStreamPart[] = [
   },
   {
     type: 'finish',
-    finishReason: 'content-filter',
-    usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+    finishReason: { unified: 'content-filter', raw: undefined },
+    usage: {
+      inputTokens: { total: 10, noCache: 0, cacheRead: 0, cacheWrite: 0 },
+      outputTokens: { total: 20, text: 0, reasoning: 0 },
+    },
   },
 ];
 
@@ -92,8 +101,11 @@ const mockStreamChunks: LanguageModelStreamPart[] = [
   { type: 'text-end', id: '1' },
   {
     type: 'finish',
-    finishReason: 'stop',
-    usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+    finishReason: { unified: 'stop', raw: undefined },
+    usage: {
+      inputTokens: { total: 10, noCache: 0, cacheRead: 0, cacheWrite: 0 },
+      outputTokens: { total: 20, text: 0, reasoning: 0 },
+    },
   },
 ];
 

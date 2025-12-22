@@ -1,10 +1,10 @@
 import type {
-  EmbeddingModelV2,
-  LanguageModelV2,
-  LanguageModelV2CallOptions,
-  LanguageModelV2Prompt,
-  LanguageModelV2StreamPart,
-  SharedV2ProviderOptions,
+  EmbeddingModelV3,
+  LanguageModelV3,
+  LanguageModelV3CallOptions,
+  LanguageModelV3Prompt,
+  LanguageModelV3StreamPart,
+  SharedV3ProviderOptions,
 } from '@ai-sdk/provider';
 import type { gateway } from 'ai';
 
@@ -14,11 +14,11 @@ type Literals<T> = T extends string
     : T // It's a literal, keep it
   : never;
 
-export type LanguageModel = LanguageModelV2;
-export type EmbeddingModel<VALUE = any> = EmbeddingModelV2<VALUE>;
-export type LanguageModelCallOptions = LanguageModelV2CallOptions;
-export type LanguageModelStreamPart = LanguageModelV2StreamPart;
-export type ProviderOptions = SharedV2ProviderOptions;
+export type LanguageModel = LanguageModelV3;
+export type EmbeddingModel = EmbeddingModelV3;
+export type LanguageModelCallOptions = LanguageModelV3CallOptions;
+export type LanguageModelStreamPart = LanguageModelV3StreamPart;
+export type ProviderOptions = SharedV3ProviderOptions;
 
 // export  type GatewayEmbeddingModelId = Parameters<typeof gateway['textEmbeddingModel']>[0];
 export type GatewayLanguageModelId = Parameters<
@@ -59,11 +59,8 @@ export type LanguageModelRetryCallOptions = Partial<
 /**
  * Call options that can be overridden during retry for embedding models.
  */
-export type EmbeddingModelRetryCallOptions<VALUE = any> = Partial<
-  Pick<
-    EmbeddingModelCallOptions<VALUE>,
-    'values' | 'headers' | 'providerOptions'
-  >
+export type EmbeddingModelRetryCallOptions = Partial<
+  Pick<EmbeddingModelCallOptions, 'values' | 'headers' | 'providerOptions'>
 >;
 
 /**
@@ -79,7 +76,7 @@ export type RetryErrorAttempt<MODEL extends LanguageModel | EmbeddingModel> = {
    */
   options: MODEL extends LanguageModel
     ? LanguageModelCallOptions
-    : EmbeddingModelCallOptions<any>;
+    : EmbeddingModelCallOptions;
 };
 
 /**
@@ -174,7 +171,7 @@ export type Retry<MODEL extends ResolvableLanguageModel | EmbeddingModel> = {
    * If both `providerOptions` and `options.providerOptions` are set,
    * `options.providerOptions` takes precedence.
    */
-  providerOptions?: SharedV2ProviderOptions;
+  providerOptions?: SharedV3ProviderOptions;
 };
 
 /**
@@ -203,10 +200,10 @@ export type LanguageModelStream = Awaited<
   ReturnType<LanguageModel['doStream']>
 >;
 
-export type EmbeddingModelCallOptions<VALUE> = Parameters<
-  EmbeddingModel<VALUE>['doEmbed']
+export type EmbeddingModelCallOptions = Parameters<
+  EmbeddingModel['doEmbed']
 >[0];
 
-export type EmbeddingModelEmbed<VALUE = any> = Awaited<
-  ReturnType<EmbeddingModel<VALUE>['doEmbed']>
+export type EmbeddingModelEmbed = Awaited<
+  ReturnType<EmbeddingModel['doEmbed']>
 >;

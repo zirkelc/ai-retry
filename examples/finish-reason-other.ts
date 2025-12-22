@@ -3,7 +3,7 @@ import { generateText } from 'ai';
 import type { LanguageModel, Retryable } from 'ai-retry';
 import { createRetryable, isResultAttempt } from 'ai-retry';
 
-const finishReasonUnknown: Retryable<LanguageModel> = async (context) => {
+const finishReasonOther: Retryable<LanguageModel> = async (context) => {
   // Current attempt: error or result
   const { current } = context;
 
@@ -13,8 +13,8 @@ const finishReasonUnknown: Retryable<LanguageModel> = async (context) => {
     // Result comes from generateText or generateObject
     const { result, model } = current;
 
-    // The model finished with an unknown reason
-    if (result.finishReason === 'unknown') {
+    // The model finished with an other reason
+    if (result.finishReason.unified === 'other') {
       // Retry with the base model 3 times
       return { model, maxAttempts: 3 };
     }
@@ -27,7 +27,7 @@ const finishReasonUnknown: Retryable<LanguageModel> = async (context) => {
 // Create a retryable model with the guardrail
 const retryableModel = createRetryable({
   model: openai('gpt-4'), // Base model
-  retries: [finishReasonUnknown],
+  retries: [finishReasonOther],
 });
 
 // Use like any other AI SDK model

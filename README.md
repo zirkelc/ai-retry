@@ -19,13 +19,18 @@ It supports two types of retries:
 
 ### Installation
 
-This library only supports AI SDK v5.
-
-> [!NOTE]
-> AI SDK v6 support is available in the [v6 branch](https://github.com/zirkelc/ai-retry/tree/v6).
+> [!WARNING]
+> Version compatibility:
+>
+> - Use `ai-retry` version 0.x for AI SDK v5.
+> - Use `ai-retry` version 1.x for AI SDK v6.
 
 ```bash
-npm install ai-retry
+# AI SDK v5
+npm install ai-retry@0
+
+# AI SDK v6
+npm install ai-retry@1
 ```
 
 ### Usage
@@ -203,7 +208,7 @@ const resultBasedRetry: Retryable = (context) => {
   if (isResultAttempt(context.current)) {
     const { result } = context.current;
     // The request succeeded, but the response indicates a problem
-    if (result.finishReason === 'content-filter') {
+    if (result.finishReason.unified === 'content-filter') {
       console.log('Content was filtered, trying different model');
       return { model: openai('gpt-4') };
     }

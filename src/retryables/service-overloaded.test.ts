@@ -3,18 +3,18 @@ import { openai } from '@ai-sdk/openai';
 import {
   convertArrayToReadableStream,
   convertAsyncIterableToArray,
-  createTestServer,
 } from '@ai-sdk/provider-utils/test';
+import { createTestServer } from '@ai-sdk/test-server';
 import { APICallError, embed, generateText, streamText } from 'ai';
 import { describe, expect, it, vi } from 'vitest';
 import { createRetryable } from '../create-retryable-model.js';
 import {
   chunksToText,
-  type EmbeddingModelEmbed,
   MockEmbeddingModel,
   MockLanguageModel,
 } from '../test-utils.js';
 import type {
+  EmbeddingModelEmbed,
   LanguageModelGenerate,
   LanguageModelStreamPart,
 } from '../types.js';
@@ -23,8 +23,11 @@ import { serviceOverloaded } from './service-overloaded.js';
 const mockResultText = 'Hello, world!';
 
 const mockResult: LanguageModelGenerate = {
-  finishReason: 'stop',
-  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+  finishReason: { unified: 'stop', raw: undefined },
+  usage: {
+    inputTokens: { total: 10, noCache: 0, cacheRead: 0, cacheWrite: 0 },
+    outputTokens: { total: 20, text: 0, reasoning: 0 },
+  },
   content: [{ type: 'text', text: mockResultText }],
   warnings: [],
 };
@@ -58,8 +61,11 @@ const mockStreamChunks: LanguageModelStreamPart[] = [
   { type: 'text-end', id: '1' },
   {
     type: 'finish',
-    finishReason: 'stop',
-    usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+    finishReason: { unified: 'stop', raw: undefined },
+    usage: {
+      inputTokens: { total: 10, noCache: 0, cacheRead: 0, cacheWrite: 0 },
+      outputTokens: { total: 20, text: 0, reasoning: 0 },
+    },
   },
 ];
 
@@ -84,6 +90,7 @@ const textChunks = {
 
 const mockEmbeddings: EmbeddingModelEmbed = {
   embeddings: [[0.1, 0.2, 0.3]],
+  warnings: [],
 };
 
 describe('serviceOverloaded', () => {
@@ -316,7 +323,8 @@ describe('serviceOverloaded', () => {
       `);
     });
 
-    describe('anthropic', () => {
+    // overloaded error has been integrated into AI SDK, so we don't need to test it here
+    describe.skip('anthropic', () => {
       process.env.ANTHROPIC_API_KEY = 'test-anthropic-key';
       process.env.OPENAI_API_KEY = 'test-openai-key';
 

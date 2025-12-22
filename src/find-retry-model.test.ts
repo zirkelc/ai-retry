@@ -129,8 +129,16 @@ describe('findRetryModel', () => {
           type: 'result',
           result: {
             content: [],
-            finishReason: 'content-filter',
-            usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+            finishReason: { unified: 'content-filter', raw: undefined },
+            usage: {
+              inputTokens: {
+                total: 0,
+                noCache: 0,
+                cacheRead: 0,
+                cacheWrite: 0,
+              },
+              outputTokens: { total: 0, text: 0, reasoning: 0 },
+            },
             warnings: [],
           },
           model: primaryModel,
@@ -172,8 +180,16 @@ describe('findRetryModel', () => {
           type: 'result',
           result: {
             content: [],
-            finishReason: 'content-filter',
-            usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+            finishReason: { unified: 'content-filter', raw: undefined },
+            usage: {
+              inputTokens: {
+                total: 0,
+                noCache: 0,
+                cacheRead: 0,
+                cacheWrite: 0,
+              },
+              outputTokens: { total: 0, text: 0, reasoning: 0 },
+            },
             warnings: [],
           },
           model: primaryModel,

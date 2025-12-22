@@ -26,7 +26,7 @@ export const isLanguageModel = (model: unknown): model is LanguageModel =>
   'modelId' in model &&
   'specificationVersion' in model &&
   'doGenerate' in model &&
-  model.specificationVersion === 'v2';
+  model.specificationVersion === 'v3';
 
 export const isEmbeddingModel = (model: unknown): model is EmbeddingModel =>
   isObject(model) &&
@@ -34,7 +34,7 @@ export const isEmbeddingModel = (model: unknown): model is EmbeddingModel =>
   'modelId' in model &&
   'specificationVersion' in model &&
   'doEmbed' in model &&
-  model.specificationVersion === 'v2';
+  model.specificationVersion === 'v3';
 
 export const isStreamResult = (
   result: LanguageModelGenerate | LanguageModelStream,

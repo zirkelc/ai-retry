@@ -7,12 +7,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRetryable } from '../create-retryable-model.js';
 import {
   chunksToText,
-  type EmbeddingModelEmbed,
   MockEmbeddingModel,
   MockLanguageModel,
 } from '../test-utils.js';
 import type {
   EmbeddingModel,
+  EmbeddingModelEmbed,
   LanguageModel,
   LanguageModelGenerate,
   LanguageModelStreamPart,
@@ -24,8 +24,11 @@ import { retryAfterDelay } from './retry-after-delay.js';
 const mockResultText = 'Hello, world!';
 
 const mockResult: LanguageModelGenerate = {
-  finishReason: 'stop',
-  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+  finishReason: { unified: 'stop', raw: undefined },
+  usage: {
+    inputTokens: { total: 10, noCache: 0, cacheRead: 0, cacheWrite: 0 },
+    outputTokens: { total: 20, text: 0, reasoning: 0 },
+  },
   content: [{ type: 'text', text: mockResultText }],
   warnings: [],
 };
@@ -33,6 +36,7 @@ const mockResult: LanguageModelGenerate = {
 const mockEmbeddings: EmbeddingModelEmbed = {
   embeddings: [[0.1, 0.2, 0.3]],
   usage: { tokens: 5 },
+  warnings: [],
 };
 
 const rateLimitError = new APICallError({
@@ -149,8 +153,11 @@ const mockStreamChunks: LanguageModelStreamPart[] = [
   { type: 'text-end', id: '1' },
   {
     type: 'finish',
-    finishReason: 'stop',
-    usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+    finishReason: { unified: 'stop', raw: undefined },
+    usage: {
+      inputTokens: { total: 10, noCache: 0, cacheRead: 0, cacheWrite: 0 },
+      outputTokens: { total: 20, text: 0, reasoning: 0 },
+    },
   },
 ];
 
