@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/zirkelc/ai-retry/compare/v1.0.0...v1.0.1) (2025-12-23)
+
+
+### Bug Fixes
+
+* update readme ([23951c8](https://github.com/zirkelc/ai-retry/commit/23951c8d40ed5210618f81e5bd92ae11b4ba14e7))
+
 ## [1.0.0](https://github.com/zirkelc/ai-retry/compare/v0.12.0...v1.0.0) (2025-12-22)
 
 
