@@ -22,7 +22,7 @@ It supports two types of retries:
 > [!WARNING]
 > Version compatibility:
 >
-> - Use `ai-retry` version 0.x for AI SDK v5.
+> - Use `ai-retry` version 0.x for AI SDK v5. See the [v0 branch](https://github.com/zirkelc/ai-retry/tree/v0) for documentation.
 > - Use `ai-retry` version 1.x for AI SDK v6.
 
 ```bash
