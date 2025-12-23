@@ -19,7 +19,7 @@ It supports two types of retries:
 
 ### Installation
 
-This library supports both AI SDK v5 and v6. The main branch reflects the latest stable version for AI SDK v6. See the [v0 branch](https://github.com/zirkelc/ai-retry/tree/v0) for documentation.
+This library supports both AI SDK v5 and v6. The main branch reflects the latest stable version for AI SDK v6. See the [v0 branch](https://github.com/zirkelc/ai-retry/tree/v0) for the AI SDK v5 documentation.
 
 > [!WARNING]
 > Version compatibility:
