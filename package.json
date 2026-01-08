@@ -42,17 +42,17 @@
     "ai": "6.x"
   },
   "devDependencies": {
-    "@ai-sdk/anthropic": "3.0.0",
-    "@ai-sdk/azure": "3.0.0",
-    "@ai-sdk/gateway": "2.0.23",
-    "@ai-sdk/groq": "3.0.0",
-    "@ai-sdk/openai": "3.0.0",
-    "@ai-sdk/test-server": "1.0.0",
+    "@ai-sdk/anthropic": "3.0.9",
+    "@ai-sdk/azure": "3.0.7",
+    "@ai-sdk/gateway": "3.0.10",
+    "@ai-sdk/groq": "3.0.4",
+    "@ai-sdk/openai": "3.0.7",
+    "@ai-sdk/test-server": "1.0.1",
     "@arethetypeswrong/cli": "^0.18.2",
     "@biomejs/biome": "^2.3.10",
     "@total-typescript/tsconfig": "^1.0.4",
     "@types/node": "^25.0.3",
-    "ai": "6.0.0",
+    "ai": "6.0.20",
     "husky": "^9.1.7",
     "msw": "^2.12.4",
     "pkg-pr-new": "^0.0.62",
@@ -64,7 +64,7 @@
     "zod": "^4.2.1"
   },
   "dependencies": {
-    "@ai-sdk/provider": "3.0.0",
-    "@ai-sdk/provider-utils": "4.0.0"
+    "@ai-sdk/provider": "3.0.2",
+    "@ai-sdk/provider-utils": "4.0.4"
   }
 }

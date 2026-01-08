@@ -21,7 +21,6 @@ const mockCurrentDate = () => new Date(0);
 export const mockGenerateOptions: Partial<GenerateText> = {
   _internal: {
     generateId: mockGenerateId,
-    currentDate: mockCurrentDate,
   },
 };
 

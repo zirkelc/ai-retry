@@ -69,7 +69,7 @@ const creativityChecker: Retryable<LanguageModel> = async (context) => {
 
 // Create a retryable model with the creativity checker
 const retryableModel = createRetryable({
-  model: anthropic('claude-sonnet-4-20250514'), // Base model
+  model: openai('gpt-4.1'), // Base model
   retries: [creativityChecker],
 });
 
