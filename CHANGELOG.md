@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.2](https://github.com/zirkelc/ai-retry/compare/v1.0.1...v1.0.2) (2026-01-12)
+
+
+### Bug Fixes
+
+* do not retry user aborted requests ([02cf1e5](https://github.com/zirkelc/ai-retry/commit/02cf1e558a4cda9a3778110009bcb4a710fd08e9)), closes [#21](https://github.com/zirkelc/ai-retry/issues/21)
+
 ## [1.0.1](https://github.com/zirkelc/ai-retry/compare/v1.0.0...v1.0.1) (2025-12-23)
 
 
