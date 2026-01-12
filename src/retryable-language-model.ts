@@ -17,7 +17,11 @@ import type {
   RetryErrorAttempt,
   RetryResultAttempt,
 } from './types.js';
-import { isGenerateResult, isStreamContentPart } from './utils.js';
+import {
+  isAbortError,
+  isGenerateResult,
+  isStreamContentPart,
+} from './utils.js';
 
 export class RetryableLanguageModel implements LanguageModel {
   readonly specificationVersion = 'v3';
@@ -206,6 +210,12 @@ export class RetryableLanguageModel implements LanguageModel {
 
         return { result, attempts };
       } catch (error) {
+        // Don't retry if user manually aborted the request.
+        // TimeoutError from AbortSignal.timeout() will still be handled by retry handlers.
+        if (isAbortError(error)) {
+          throw error;
+        }
+
         const { retryModel, attempt } = await this.handleError(
           error,
           attempts,

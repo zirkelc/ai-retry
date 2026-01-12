@@ -41,8 +41,9 @@ const mockEmbeddings: EmbeddingModelEmbed = {
 
 const embeddingTimeoutError = async (opts: EmbeddingModelCallOptions) => {
   // Check if abortSignal is aborted and throw appropriate error
+  // AbortSignal.timeout() throws TimeoutError, not AbortError
   if (opts.abortSignal?.aborted) {
-    throw new DOMException('The operation was aborted', 'AbortError');
+    throw new DOMException('The operation timed out', 'TimeoutError');
   }
 
   // Listen for abort event during the async operation
@@ -53,15 +54,17 @@ const embeddingTimeoutError = async (opts: EmbeddingModelCallOptions) => {
 
     opts.abortSignal?.addEventListener('abort', () => {
       clearTimeout(timeout);
-      reject(new DOMException('The operation was aborted', 'AbortError'));
+      // AbortSignal.timeout() throws TimeoutError when it fires
+      reject(new DOMException('The operation timed out', 'TimeoutError'));
     });
   });
 };
 
 const timeoutError = async (opts: LanguageModelCallOptions) => {
   // Check if abortSignal is aborted and throw appropriate error
+  // AbortSignal.timeout() throws TimeoutError, not AbortError
   if (opts.abortSignal?.aborted) {
-    throw new DOMException('The operation was aborted', 'AbortError');
+    throw new DOMException('The operation timed out', 'TimeoutError');
   }
 
   // Listen for abort event during the async operation
@@ -72,7 +75,8 @@ const timeoutError = async (opts: LanguageModelCallOptions) => {
 
     opts.abortSignal?.addEventListener('abort', () => {
       clearTimeout(timeout);
-      reject(new DOMException('The operation was aborted', 'AbortError'));
+      // AbortSignal.timeout() throws TimeoutError when it fires
+      reject(new DOMException('The operation timed out', 'TimeoutError'));
     });
   });
 };
@@ -195,15 +199,16 @@ describe('requestTimeout', () => {
       const baseModel = new MockLanguageModel({
         doGenerate: (async (opts: LanguageModelCallOptions) => {
           baseModelSignal = opts.abortSignal;
+          // AbortSignal.timeout() throws TimeoutError, not AbortError
           if (opts.abortSignal?.aborted) {
-            throw new DOMException('The operation was aborted', 'AbortError');
+            throw new DOMException('The operation timed out', 'TimeoutError');
           }
           return new Promise((resolve, reject) => {
             const timeout = setTimeout(() => resolve(mockResult), 5000);
             opts.abortSignal?.addEventListener('abort', () => {
               clearTimeout(timeout);
               reject(
-                new DOMException('The operation was aborted', 'AbortError'),
+                new DOMException('The operation timed out', 'TimeoutError'),
               );
             });
           });
@@ -218,7 +223,7 @@ describe('requestTimeout', () => {
           if (opts.abortSignal?.aborted) {
             throw new DOMException(
               'Retry failed: signal already aborted',
-              'AbortError',
+              'TimeoutError',
             );
           }
           return mockResult;
@@ -267,7 +272,7 @@ describe('requestTimeout', () => {
           if (opts.abortSignal?.aborted) {
             throw new DOMException(
               'Should not be aborted initially',
-              'AbortError',
+              'TimeoutError',
             );
           }
           return mockResult;

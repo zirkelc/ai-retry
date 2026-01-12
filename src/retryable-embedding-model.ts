@@ -13,6 +13,7 @@ import type {
   RetryContext,
   RetryErrorAttempt,
 } from './types.js';
+import { isAbortError } from './utils.js';
 
 export class RetryableEmbeddingModel implements EmbeddingModel {
   readonly specificationVersion = 'v3';
@@ -146,6 +147,12 @@ export class RetryableEmbeddingModel implements EmbeddingModel {
 
         return { result, attempts };
       } catch (error) {
+        // Don't retry if user manually aborted the request.
+        // TimeoutError from AbortSignal.timeout() will still be handled by retry handlers.
+        if (isAbortError(error)) {
+          throw error;
+        }
+
         const { retryModel, attempt } = await this.handleError(
           error,
           attempts,

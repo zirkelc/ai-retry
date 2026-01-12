@@ -1,11 +1,10 @@
-import { isAbortError } from '@ai-sdk/provider-utils';
 import type {
   EmbeddingModel,
   ResolvableLanguageModel,
   Retryable,
   RetryableOptions,
 } from '../types.js';
-import { isErrorAttempt } from '../utils.js';
+import { isErrorAttempt, isTimeoutError } from '../utils.js';
 
 /**
  * Fallback to a different model after a timeout/abort error.
@@ -23,7 +22,7 @@ export function requestTimeout<
        * Fallback to the specified model after a timeout/abort error.
        * Provides a fresh timeout signal for the retry attempt.
        */
-      if (isAbortError(current.error)) {
+      if (isTimeoutError(current.error)) {
         return {
           model,
           maxAttempts: 1,

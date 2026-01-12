@@ -859,15 +859,17 @@ describe('embed', () => {
         // Arrange
         let baseModelSignal: AbortSignal | undefined;
         let fallbackModelSignal: AbortSignal | undefined;
-        const abortError = new DOMException(
-          'The operation was aborted',
-          'AbortError',
+        // Use TimeoutError (from AbortSignal.timeout()) which should be retried,
+        // as opposed to AbortError (from user cancellation) which should NOT be retried
+        const timeoutError = new DOMException(
+          'The operation timed out',
+          'TimeoutError',
         );
 
         const baseModel = new MockEmbeddingModel({
           doEmbed: async (opts: any) => {
             baseModelSignal = opts.abortSignal;
-            throw abortError;
+            throw timeoutError;
           },
         });
 
@@ -882,7 +884,7 @@ describe('embed', () => {
           },
         });
 
-        // Create an already-aborted signal
+        // Create an already-aborted signal (simulates timeout that already fired)
         const controller = new AbortController();
         controller.abort();
 
