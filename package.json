@@ -42,29 +42,29 @@
     "ai": "6.x"
   },
   "devDependencies": {
-    "@ai-sdk/anthropic": "3.0.9",
-    "@ai-sdk/azure": "3.0.7",
-    "@ai-sdk/gateway": "3.0.10",
-    "@ai-sdk/groq": "3.0.4",
-    "@ai-sdk/openai": "3.0.7",
-    "@ai-sdk/test-server": "1.0.1",
+    "@ai-sdk/anthropic": "3.0.23",
+    "@ai-sdk/azure": "3.0.19",
+    "@ai-sdk/gateway": "3.0.23",
+    "@ai-sdk/groq": "3.0.15",
+    "@ai-sdk/openai": "3.0.19",
+    "@ai-sdk/test-server": "1.0.3",
     "@arethetypeswrong/cli": "^0.18.2",
-    "@biomejs/biome": "^2.3.10",
+    "@biomejs/biome": "^2.3.13",
     "@total-typescript/tsconfig": "^1.0.4",
-    "@types/node": "^25.0.3",
-    "ai": "6.0.20",
+    "@types/node": "^25.0.10",
+    "ai": "6.0.50",
     "husky": "^9.1.7",
-    "msw": "^2.12.4",
+    "msw": "^2.12.7",
     "pkg-pr-new": "^0.0.62",
-    "publint": "^0.3.16",
-    "tsdown": "^0.18.2",
+    "publint": "^0.3.17",
+    "tsdown": "^0.20.1",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
-    "vitest": "^4.0.16"
+    "vitest": "^4.0.18"
   },
   "dependencies": {
-    "@ai-sdk/provider": "3.0.2",
-    "@ai-sdk/provider-utils": "4.0.4",
-    "zod": "^4.2.1"
+    "@ai-sdk/provider": "3.0.5",
+    "@ai-sdk/provider-utils": "4.0.9",
+    "zod": "^4.3.6"
   }
 }
