@@ -358,6 +358,7 @@ There are several built-in dynamic retryables available for common use cases:
 - [`serviceOverloaded`](./src/retryables/service-overloaded.ts): Response with status code 529 (service overloaded).
   - Use this retryable to handle Anthropic's overloaded errors.
 - [`serviceUnavailable`](./src/retryables/service-unavailable.ts): Response with status code 503 (service unavailable).
+- [`schemaMismatch`](./src/retryables/schema-mismatch.ts): Response JSON doesn't match the expected schema from structured output modes (`Output.object()`, `Output.array()`, `Output.choice()`).
 
 #### Content Filter
 
@@ -497,6 +498,46 @@ const retryableModel = createRetryable({
 ```
 
 By default, if a [`retry-after-ms`](https://learn.microsoft.com/en-us/azure/ai-foundry/openai/how-to/provisioned-get-started#what-should--i-do-when-i-receive-a-429-response) or [`retry-after`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Retry-After) header is present in the response, it will be prioritized over the configured delay. The delay from the header will be capped at 60 seconds for safety.
+
+#### Schema Mismatch
+
+Automatically retry with a different model when the response JSON doesn't match the expected schema.
+
+This is a result-based retryable that validates the model's JSON output against the schema set by structured output modes like `Output.object()`, `Output.array()`, and `Output.choice()`. 
+Normally, schema validation happens outside the model in `generateText`, so a schema validation error would not be seen by the retryable model. This retryable catches it early and retries with a fallback model.
+
+> [!NOTE]
+> This retryable works with `generateText` and any structured output mode that provides a schema: `Output.object()`, `Output.array()`, and `Output.choice()`.
+
+```typescript
+import { openai } from '@ai-sdk/openai';
+import { anthropic } from '@ai-sdk/anthropic';
+import { generateText, Output } from 'ai';
+import { createRetryable } from 'ai-retry';
+import { schemaMismatch } from 'ai-retry/retryables';
+import { z } from 'zod';
+
+const retryableModel = createRetryable({
+  model: openai('gpt-4-mini'), // Weak base model
+  retries: [
+    // Retry with stronger model on schema mismatch
+    schemaMismatch(openai('gpt-5')),
+  ],
+});
+
+const result = await generateText({
+  model: retryableModel,
+  output: Output.object({
+    schema: z.object({
+      name: z.string(),
+      age: z.number(),
+    }),
+  }),
+  prompt: 'Generate a person with name and age.',
+});
+
+console.log(result.object); // { name: "Alice", age: 30 }
+```
 
 ### Options
 

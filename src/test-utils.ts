@@ -102,6 +102,26 @@ export class MockEmbeddingModel implements EmbeddingModel {
   }
 }
 
+export const generateTextResult = (text: string): LanguageModelGenerate => ({
+  finishReason: { unified: 'stop', raw: undefined },
+  usage: {
+    inputTokens: { total: 10, noCache: 0, cacheRead: 0, cacheWrite: 0 },
+    outputTokens: { total: 20, text: 0, reasoning: 0 },
+  },
+  content: [{ type: 'text', text }],
+  warnings: [],
+});
+
+export const generateEmptyResult: LanguageModelGenerate = {
+  finishReason: { unified: 'stop', raw: undefined },
+  usage: {
+    inputTokens: { total: 10, noCache: 0, cacheRead: 0, cacheWrite: 0 },
+    outputTokens: { total: 20, text: 0, reasoning: 0 },
+  },
+  content: [],
+  warnings: [],
+};
+
 export const chunksToText = (chunks: TextStreamPart<any>[]): string => {
   return chunks
     .map((chunk) => (chunk.type === 'text-delta' ? chunk.text : ''))
