@@ -2015,6 +2015,9 @@ describe('streamText', () => {
     });
 
     it('should NOT retry when error occurs during streaming', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(0);
+
       const baseModel = new MockLanguageModel({
         doStream: {
           stream: convertArrayToReadableStream([
@@ -2121,6 +2124,8 @@ describe('streamText', () => {
           },
         ]
       `);
+
+      vi.useRealTimers();
     });
   });
 

@@ -16,7 +16,6 @@ export type LanguageModelStreamFn = LanguageModel['doStream'];
 export type EmbeddingModelEmbedFn = EmbeddingModel['doEmbed'];
 
 const mockGenerateId = () => 'aitxt-mock-id';
-const mockCurrentDate = () => new Date(0);
 
 export const mockGenerateOptions: Partial<GenerateText> = {
   _internal: {
@@ -24,10 +23,16 @@ export const mockGenerateOptions: Partial<GenerateText> = {
   },
 };
 
+/**
+ * Note: `_internal.now` controls most timestamps in `streamText`, but the AI SDK has a bug where
+ * the `finish-step` response timestamp uses `new Date()` directly instead of `new Date(now())` in
+ * the error streaming path. Tests that hit that path need `vi.useFakeTimers()` as a workaround.
+ * @see https://github.com/vercel/ai/blob/main/packages/ai/src/generate-text/stream-text.ts
+ */
 export const mockStreamOptions: Pick<StreamText, '_internal'> = {
   _internal: {
     generateId: mockGenerateId,
-    currentDate: mockCurrentDate,
+    now: () => 0,
   },
 };
 
