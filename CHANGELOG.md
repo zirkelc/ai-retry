@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.1.0](https://github.com/zirkelc/ai-retry/compare/v1.0.2...v1.1.0) (2026-01-27)
+
+
+### Features
+
+* add schemaMismatch retryable ([7bcb7a7](https://github.com/zirkelc/ai-retry/commit/7bcb7a718ed061322b0b7c5b34e969d62dde6895))
+
+
+### Bug Fixes
+
+* add Zod ([aec5f69](https://github.com/zirkelc/ai-retry/commit/aec5f693bf572fa260af2f09183ce2c767f1fb57))
+* tests ([d1cda2f](https://github.com/zirkelc/ai-retry/commit/d1cda2f3f9cef1d96fb21c6d6e321511de545c57))
+
 ## [1.0.2](https://github.com/zirkelc/ai-retry/compare/v1.0.1...v1.0.2) (2026-01-12)
 
 
