@@ -1,4 +1,5 @@
 import { delay } from '@ai-sdk/provider-utils';
+import { BaseRetryableModel } from './base-retryable-model.js';
 import { calculateExponentialBackoff } from './calculate-exponential-backoff.js';
 import { countModelAttempts } from './count-model-attempts.js';
 import { findRetryModel } from './find-retry-model.js';
@@ -7,12 +8,10 @@ import type {
   LanguageModel,
   LanguageModelCallOptions,
   LanguageModelGenerate,
-  LanguageModelRetryCallOptions,
   LanguageModelStream,
   LanguageModelStreamPart,
   Retry,
   RetryAttempt,
-  RetryableModelOptions,
   RetryContext,
   RetryErrorAttempt,
   RetryResultAttempt,
@@ -23,41 +22,22 @@ import {
   isStreamContentPart,
 } from './utils.js';
 
-export class RetryableLanguageModel implements LanguageModel {
+export class RetryableLanguageModel
+  extends BaseRetryableModel<LanguageModel>
+  implements LanguageModel
+{
   readonly specificationVersion = 'v3';
-
-  private baseModel: LanguageModel;
-  private currentModel: LanguageModel;
-  private options: RetryableModelOptions<LanguageModel>;
 
   get modelId() {
     return this.currentModel.modelId;
   }
+
   get provider() {
     return this.currentModel.provider;
   }
 
   get supportedUrls() {
     return this.currentModel.supportedUrls;
-  }
-
-  constructor(options: RetryableModelOptions<LanguageModel>) {
-    this.options = options;
-    this.baseModel = options.model;
-    this.currentModel = options.model;
-  }
-
-  /**
-   * Check if retries are disabled
-   */
-  private isDisabled(): boolean {
-    if (this.options.disabled === undefined) {
-      return false;
-    }
-
-    return typeof this.options.disabled === 'function'
-      ? this.options.disabled()
-      : this.options.disabled;
   }
 
   /**
@@ -327,9 +307,10 @@ export class RetryableLanguageModel implements LanguageModel {
     callOptions: LanguageModelCallOptions,
   ): Promise<LanguageModelGenerate> {
     /**
-     * Always start with the original model
+     * Resolve the starting model (base or sticky)
      */
-    this.currentModel = this.baseModel;
+    const startModel = this.resolveStartModel();
+    this.currentModel = startModel;
 
     /**
      * If retries are disabled, bypass retry machinery entirely
@@ -345,6 +326,8 @@ export class RetryableLanguageModel implements LanguageModel {
       callOptions: callOptions,
     });
 
+    this.updateStickyModel(startModel);
+
     return result;
   }
 
@@ -352,9 +335,10 @@ export class RetryableLanguageModel implements LanguageModel {
     callOptions: LanguageModelCallOptions,
   ): Promise<LanguageModelStream> {
     /**
-     * Always start with the original model
+     * Resolve the starting model (base or sticky)
      */
-    this.currentModel = this.baseModel;
+    const startModel = this.resolveStartModel();
+    this.currentModel = startModel;
 
     /**
      * If retries are disabled, bypass retry machinery entirely
@@ -372,6 +356,8 @@ export class RetryableLanguageModel implements LanguageModel {
       },
       callOptions: callOptions,
     });
+
+    this.updateStickyModel(startModel);
 
     /**
      * Track the current retry model for computing call options in the stream handler
@@ -488,6 +474,8 @@ export class RetryableLanguageModel implements LanguageModel {
 
             result = retriedResult.result;
             attempts = retriedResult.attempts;
+
+            this.updateStickyModel(startModel);
           } finally {
             reader?.releaseLock();
           }

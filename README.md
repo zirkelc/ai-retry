@@ -757,6 +757,46 @@ const retryableModel = createRetryable({
 });
 ```
 
+#### Reset
+
+By default, every new request starts with the base model, even if a previous request was retried with a different model. The `reset` option changes this behavior by making the last successfully retried model **sticky**, that means subsequent requests will continue using that model instead of switching back to the base model. The reset value controls how long the retry model stays sticky before resetting back to the base model.
+
+| Value | Description |
+|-------|-------------|
+| `'after-request'` | Reset immediately after the next request (default) |
+| `` `after-${N}-requests` `` | Keep the retry model for the next **N** requests, then reset |
+| `` `after-${N}-seconds` `` | Keep the retry model for **N** seconds, then reset |
+
+**Reset after each request (default)**
+
+```typescript
+const retryableModel = createRetryable({
+  model: openai('gpt-4o-mini'),
+  retries: [anthropic('claude-sonnet-4-20250514')],
+  reset: 'after-request', // default — always start with the base model
+});
+```
+
+**Keep the retry model for N requests**
+
+```typescript
+const retryableModel = createRetryable({
+  model: openai('gpt-4o-mini'),
+  retries: [anthropic('claude-sonnet-4-20250514')],
+  reset: 'after-5-requests', // use the retry model for 5 more requests before resetting
+});
+```
+
+**Keep the retry model for N seconds**
+
+```typescript
+const retryableModel = createRetryable({
+  model: openai('gpt-4o-mini'),
+  retries: [anthropic('claude-sonnet-4-20250514')],
+  reset: 'after-30-seconds', // use the retry model for 30 seconds before resetting
+});
+```
+
 ### Streaming
 
 Errors during streaming requests can occur in two ways:
@@ -777,6 +817,7 @@ interface RetryableModelOptions<MODEL extends LanguageModelV2 | EmbeddingModelV2
   model: MODEL;
   retries: Array<Retryable<MODEL> | MODEL>;
   disabled?: boolean | (() => boolean);
+  reset?: Reset;
   onError?: (context: RetryContext<MODEL>) => void;
   onRetry?: (context: RetryContext<MODEL>) => void;
 }
@@ -786,8 +827,24 @@ interface RetryableModelOptions<MODEL extends LanguageModelV2 | EmbeddingModelV2
 - `model`: The base model to use for the initial request.
 - `retries`: Array of retryables (functions, models, or retry objects) to attempt on failure.
 - `disabled`: Disable all retry logic. Can be a boolean or function returning boolean. Default: `false` (retries enabled).
+- `reset`: Controls when to reset back to the base model after a successful retry. See [Reset](#reset) for details. Default: `'after-request'`.
 - `onError`: Callback invoked when an error occurs.
 - `onRetry`: Callback invoked before attempting a retry.
+
+#### `Reset`
+
+Controls when the sticky model resets back to the base model after a successful retry.
+
+```ts
+type Reset =
+  | 'after-request'
+  | `after-${number}-requests`
+  | `after-${number}-seconds`;
+```
+
+- `'after-request'` — reset immediately after the next request (default).
+- `` `after-${N}-requests` `` — keep the retry model for the next N requests, then reset.
+- `` `after-${N}-seconds` `` — keep the retry model for N seconds, then reset.
 
 #### `Retryable`
 

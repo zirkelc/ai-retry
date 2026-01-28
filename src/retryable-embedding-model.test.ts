@@ -1060,4 +1060,184 @@ describe('embed', () => {
       }
     });
   });
+
+  describe(`reset`, () => {
+    describe(`after-request (default)`, () => {
+      it(`should reset to base model on every request`, async () => {
+        // Arrange
+        let callCount = 0;
+        const baseModel = new MockEmbeddingModel({
+          doEmbed: async () => {
+            callCount++;
+            if (callCount <= 1) throw retryableError;
+            return mockEmbeddings;
+          },
+        });
+        const fallbackModel = new MockEmbeddingModel({
+          doEmbed: mockEmbeddings,
+        });
+
+        const retryableModel = createRetryable({
+          model: baseModel,
+          retries: [{ model: fallbackModel, maxAttempts: 1 }],
+        });
+
+        // Act — first request: base fails, fallback succeeds
+        const result1 = await embed({
+          model: retryableModel,
+          value: `Hello!`,
+        });
+
+        // Act — second request: base model is used again (reset), succeeds this time
+        const result2 = await embed({
+          model: retryableModel,
+          value: `Hello!`,
+        });
+
+        // Assert
+        expect(result1.embedding).toEqual(mockEmbeddings.embeddings[0]);
+        expect(result2.embedding).toEqual(mockEmbeddings.embeddings[0]);
+        expect(baseModel.doEmbed).toHaveBeenCalledTimes(2);
+        expect(fallbackModel.doEmbed).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    describe(`after-N-requests`, () => {
+      it(`should use sticky model for N subsequent requests then reset`, async () => {
+        // Arrange
+        const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
+        const fallbackModel = new MockEmbeddingModel({
+          doEmbed: mockEmbeddings,
+        });
+
+        const retryableModel = createRetryable({
+          model: baseModel,
+          retries: [{ model: fallbackModel, maxAttempts: 1 }],
+          reset: `after-2-requests`,
+        });
+
+        // Act — request 1: base fails, fallback succeeds → sticky set
+        const result1 = await embed({ model: retryableModel, value: `Hello!` });
+
+        // Act — request 2: sticky (fallback) used directly
+        const result2 = await embed({ model: retryableModel, value: `Hello!` });
+
+        // Act — request 3: sticky (fallback) used directly (last sticky request)
+        const result3 = await embed({ model: retryableModel, value: `Hello!` });
+
+        // Act — request 4: sticky expired, back to base model → base fails, fallback retried
+        const result4 = await embed({ model: retryableModel, value: `Hello!` });
+
+        // Assert
+        expect(result1.embedding).toEqual(mockEmbeddings.embeddings[0]);
+        expect(result2.embedding).toEqual(mockEmbeddings.embeddings[0]);
+        expect(result3.embedding).toEqual(mockEmbeddings.embeddings[0]);
+        expect(result4.embedding).toEqual(mockEmbeddings.embeddings[0]);
+        // Request 1: base(1) + fallback(1), Request 2: fallback(1), Request 3: fallback(1),
+        // Request 4: base(1) + fallback(1)
+        expect(baseModel.doEmbed).toHaveBeenCalledTimes(2);
+        expect(fallbackModel.doEmbed).toHaveBeenCalledTimes(4);
+      });
+
+      it(`should not set sticky model when no retry occurred`, async () => {
+        // Arrange
+        const baseModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
+        const fallbackModel = new MockEmbeddingModel({
+          doEmbed: mockEmbeddings,
+        });
+
+        const retryableModel = createRetryable({
+          model: baseModel,
+          retries: [{ model: fallbackModel, maxAttempts: 1 }],
+          reset: `after-3-requests`,
+        });
+
+        // Act
+        await embed({ model: retryableModel, value: `Hello!` });
+        await embed({ model: retryableModel, value: `Hello!` });
+
+        // Assert — base model used both times, no fallback
+        expect(baseModel.doEmbed).toHaveBeenCalledTimes(2);
+        expect(fallbackModel.doEmbed).toHaveBeenCalledTimes(0);
+      });
+
+      it(`should reset counter when a new sticky model is set`, async () => {
+        // Arrange
+        let fallback1CallCount = 0;
+        const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
+        const fallbackModel1 = new MockEmbeddingModel({
+          doEmbed: async () => {
+            fallback1CallCount++;
+            /** Fail on second use (when used as sticky on request 2) */
+            if (fallback1CallCount >= 2) throw retryableError;
+            return mockEmbeddings;
+          },
+        });
+        const fallbackModel2 = new MockEmbeddingModel({
+          doEmbed: mockEmbeddings,
+        });
+
+        const retryableModel = createRetryable({
+          model: baseModel,
+          retries: [
+            { model: fallbackModel1, maxAttempts: 1 },
+            { model: fallbackModel2, maxAttempts: 1 },
+          ],
+          reset: `after-2-requests`,
+        });
+
+        // Act — request 1: base fails → fallback1 succeeds → sticky = fallback1
+        await embed({ model: retryableModel, value: `Hello!` });
+
+        // Act — request 2: sticky (fallback1) fails → fallback2 succeeds → sticky = fallback2, counter resets to 2
+        await embed({ model: retryableModel, value: `Hello!` });
+
+        // Act — request 3: sticky (fallback2) used directly (remaining = 1)
+        await embed({ model: retryableModel, value: `Hello!` });
+
+        // Act — request 4: sticky (fallback2) used directly (remaining = 0)
+        await embed({ model: retryableModel, value: `Hello!` });
+
+        // Assert
+        expect(baseModel.doEmbed).toHaveBeenCalledTimes(1);
+        expect(fallbackModel1.doEmbed).toHaveBeenCalledTimes(2);
+        expect(fallbackModel2.doEmbed).toHaveBeenCalledTimes(3);
+      });
+    });
+
+    describe(`after-N-seconds`, () => {
+      it(`should use sticky model within time window then reset`, async () => {
+        // Arrange
+        vi.useFakeTimers();
+
+        const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
+        const fallbackModel = new MockEmbeddingModel({
+          doEmbed: mockEmbeddings,
+        });
+
+        const retryableModel = createRetryable({
+          model: baseModel,
+          retries: [{ model: fallbackModel, maxAttempts: 1 }],
+          reset: `after-5-seconds`,
+        });
+
+        // Act — request 1: base fails, fallback succeeds → sticky set
+        await embed({ model: retryableModel, value: `Hello!` });
+
+        // Act — request 2: within 5s, sticky (fallback) used directly
+        vi.advanceTimersByTime(2_000);
+        await embed({ model: retryableModel, value: `Hello!` });
+
+        // Act — request 3: advance past 5s, sticky expired → back to base → fails → fallback
+        vi.advanceTimersByTime(4_000);
+        await embed({ model: retryableModel, value: `Hello!` });
+
+        // Assert
+        expect(baseModel.doEmbed).toHaveBeenCalledTimes(2);
+        expect(fallbackModel.doEmbed).toHaveBeenCalledTimes(3);
+
+        vi.useRealTimers();
+      });
+    });
+  });
 });

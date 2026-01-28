@@ -1,4 +1,5 @@
 import { delay } from '@ai-sdk/provider-utils';
+import { BaseRetryableModel } from './base-retryable-model.js';
 import { calculateExponentialBackoff } from './calculate-exponential-backoff.js';
 import { countModelAttempts } from './count-model-attempts.js';
 import { findRetryModel } from './find-retry-model.js';
@@ -7,24 +8,22 @@ import type {
   EmbeddingModel,
   EmbeddingModelCallOptions,
   EmbeddingModelEmbed,
-  EmbeddingModelRetryCallOptions,
   Retry,
-  RetryableModelOptions,
   RetryContext,
   RetryErrorAttempt,
 } from './types.js';
 import { isAbortError } from './utils.js';
 
-export class RetryableEmbeddingModel implements EmbeddingModel {
+export class RetryableEmbeddingModel
+  extends BaseRetryableModel<EmbeddingModel>
+  implements EmbeddingModel
+{
   readonly specificationVersion = 'v3';
-
-  private baseModel: EmbeddingModel;
-  private currentModel: EmbeddingModel;
-  private options: RetryableModelOptions<EmbeddingModel>;
 
   get modelId() {
     return this.currentModel.modelId;
   }
+
   get provider() {
     return this.currentModel.provider;
   }
@@ -35,25 +34,6 @@ export class RetryableEmbeddingModel implements EmbeddingModel {
 
   get supportsParallelCalls() {
     return this.currentModel.supportsParallelCalls;
-  }
-
-  constructor(options: RetryableModelOptions<EmbeddingModel>) {
-    this.options = options;
-    this.baseModel = options.model;
-    this.currentModel = options.model;
-  }
-
-  /**
-   * Check if retries are disabled
-   */
-  private isDisabled(): boolean {
-    if (this.options.disabled === undefined) {
-      return false;
-    }
-
-    return typeof this.options.disabled === 'function'
-      ? this.options.disabled()
-      : this.options.disabled;
   }
 
   /**
@@ -238,9 +218,10 @@ export class RetryableEmbeddingModel implements EmbeddingModel {
     callOptions: EmbeddingModelCallOptions,
   ): Promise<EmbeddingModelEmbed> {
     /**
-     * Always start with the original model
+     * Resolve the starting model (base or sticky)
      */
-    this.currentModel = this.baseModel;
+    const startModel = this.resolveStartModel();
+    this.currentModel = startModel;
 
     /**
      * If retries are disabled, bypass retry machinery entirely
@@ -255,6 +236,8 @@ export class RetryableEmbeddingModel implements EmbeddingModel {
       },
       callOptions: callOptions,
     });
+
+    this.updateStickyModel(startModel);
 
     return result;
   }

@@ -125,6 +125,12 @@ export interface RetryableModelOptions<
   model: MODEL;
   retries: Retries<MODEL>;
   disabled?: boolean | (() => boolean);
+  /**
+   * Controls when to reset back to the base model after a successful retry.
+   *
+   * @default 'after-request'
+   */
+  reset?: Reset;
   onError?: (context: RetryContext<MODEL>) => void;
   onRetry?: (context: RetryContext<MODEL>) => void;
 }
@@ -191,6 +197,18 @@ export type Retries<MODEL extends LanguageModel | EmbeddingModel> = Array<
 export type RetryableOptions<
   MODEL extends ResolvableLanguageModel | EmbeddingModel,
 > = Partial<Omit<Retry<MODEL>, 'model'>>;
+
+/**
+ * Controls when to reset the sticky model back to the base model.
+ *
+ * - `'after-request'` — reset after each request (default, current behavior)
+ * - `` `after-${number}-requests` `` — use the retry model for the next N requests
+ * - `` `after-${number}-seconds` `` — use the retry model for the next N seconds
+ */
+export type Reset =
+  | 'after-request'
+  | `after-${number}-requests`
+  | `after-${number}-seconds`;
 
 export type LanguageModelGenerate = Awaited<
   ReturnType<LanguageModel['doGenerate']>
