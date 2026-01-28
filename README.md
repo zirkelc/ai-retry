@@ -759,9 +759,9 @@ By default, every new request starts with the base model, even if a previous req
 
 | Value | Description |
 |-------|-------------|
-| `'after-request'` | Reset immediately after the next request (default) |
-| `` `after-${N}-requests` `` | Keep the retry model for the next **N** requests, then reset |
-| `` `after-${N}-seconds` `` | Keep the retry model for **N** seconds, then reset |
+| `after-request` | Reset immediately after the next request (default) |
+| `after-N-requests` | Keep the retry model for the next **N** requests, then reset |
+| `after-N-seconds` | Keep the retry model for **N** seconds, then reset |
 
 ##### Reset after each request (default)
 
@@ -823,7 +823,7 @@ interface RetryableModelOptions<MODEL extends LanguageModelV2 | EmbeddingModelV2
 - `model`: The base model to use for the initial request.
 - `retries`: Array of retryables (functions, models, or retry objects) to attempt on failure.
 - `disabled`: Disable all retry logic. Can be a boolean or function returning boolean. Default: `false` (retries enabled).
-- `reset`: Controls when to reset back to the base model after a successful retry. See [Reset](#reset) for details. Default: `'after-request'`.
+- `reset`: Controls when to reset back to the base model after a successful retry. Default: `after-request`.
 - `onError`: Callback invoked when an error occurs.
 - `onRetry`: Callback invoked before attempting a retry.
 
@@ -838,9 +838,9 @@ type Reset =
   | `after-${number}-seconds`;
 ```
 
-- `'after-request'` — reset immediately after the next request (default).
-- `` `after-${N}-requests` `` — keep the retry model for the next N requests, then reset.
-- `` `after-${N}-seconds` `` — keep the retry model for N seconds, then reset.
+- `after-request` — reset immediately after the next request (default).
+- `after-N-requests` — keep the retry model for the next N requests, then reset.
+- `after-N-seconds` — keep the retry model for N seconds, then reset.
 
 #### `Retryable`
 
