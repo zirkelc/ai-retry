@@ -356,7 +356,6 @@ There are several built-in dynamic retryables available for common use cases:
 - [`requestNotRetryable`](./src/retryables/request-not-retryable.ts): Request failed with a non-retryable error.
 - [`retryAfterDelay`](./src/retryables/retry-after-delay.ts): Retry with delay and exponential backoff and respect `retry-after` headers.
 - [`serviceOverloaded`](./src/retryables/service-overloaded.ts): Response with status code 529 (service overloaded).
-  - Use this retryable to handle Anthropic's overloaded errors.
 - [`serviceUnavailable`](./src/retryables/service-unavailable.ts): Response with status code 503 (service unavailable).
 - [`schemaMismatch`](./src/retryables/schema-mismatch.ts): Response JSON doesn't match the expected schema from structured output modes (`Output.object()`, `Output.array()`, `Output.choice()`).
 
@@ -411,9 +410,6 @@ const result = await generateText({
 #### Service Overloaded
 
 Handle service overload errors (status code 529) by switching to a provider.
-
-> [!NOTE] 
-> You can use this retryable to handle Anthropic's overloaded errors.
 
 ```typescript
 import { serviceOverloaded } from 'ai-retry/retryables';
@@ -767,17 +763,17 @@ By default, every new request starts with the base model, even if a previous req
 | `` `after-${N}-requests` `` | Keep the retry model for the next **N** requests, then reset |
 | `` `after-${N}-seconds` `` | Keep the retry model for **N** seconds, then reset |
 
-**Reset after each request (default)**
+##### Reset after each request (default)
 
 ```typescript
 const retryableModel = createRetryable({
   model: openai('gpt-4o-mini'),
   retries: [anthropic('claude-sonnet-4-20250514')],
-  reset: 'after-request', // default — always start with the base model
+  reset: 'after-request', // default: always start with the base model
 });
 ```
 
-**Keep the retry model for N requests**
+##### Keep the retry model for N requests
 
 ```typescript
 const retryableModel = createRetryable({
@@ -787,7 +783,7 @@ const retryableModel = createRetryable({
 });
 ```
 
-**Keep the retry model for N seconds**
+##### Keep the retry model for N seconds
 
 ```typescript
 const retryableModel = createRetryable({
