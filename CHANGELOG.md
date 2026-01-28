@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/zirkelc/ai-retry/compare/v1.1.0...v1.2.0) (2026-01-28)
+
+
+### Features
+
+* add reset option for managing sticky models ([5725c79](https://github.com/zirkelc/ai-retry/commit/5725c79967930566ad623eb41d0bff60b7ecfdca))
+
 ## [1.1.0](https://github.com/zirkelc/ai-retry/compare/v1.0.2...v1.1.0) (2026-01-27)
 
 
