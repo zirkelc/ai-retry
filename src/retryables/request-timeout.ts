@@ -1,5 +1,6 @@
 import type {
   EmbeddingModel,
+  ImageModel,
   ResolvableLanguageModel,
   Retryable,
   RetryableOptions,
@@ -12,7 +13,7 @@ import { isErrorAttempt, isTimeoutError } from '../utils.js';
  * If no timeout is specified, a default of 60 seconds is used.
  */
 export function requestTimeout<
-  MODEL extends ResolvableLanguageModel | EmbeddingModel,
+  MODEL extends ResolvableLanguageModel | EmbeddingModel | ImageModel,
 >(model: MODEL, options?: RetryableOptions<MODEL>): Retryable<MODEL> {
   return (context) => {
     const { current } = context;

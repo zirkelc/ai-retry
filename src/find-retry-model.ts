@@ -2,6 +2,7 @@ import { getModelKey } from './get-model-key.js';
 import { resolveModel } from './resolve-model.js';
 import type {
   EmbeddingModel,
+  ImageModel,
   LanguageModel,
   ResolvedModel,
   Retries,
@@ -15,7 +16,7 @@ import { isObject, isResultAttempt } from './utils.js';
  * Find the next model to retry with based on the retry context
  */
 export async function findRetryModel<
-  MODEL extends LanguageModel | EmbeddingModel,
+  MODEL extends LanguageModel | EmbeddingModel | ImageModel,
 >(
   retries: Retries<MODEL>,
   context: RetryContext<MODEL>,
@@ -35,18 +36,20 @@ export async function findRetryModel<
   for (const retry of applicableRetries) {
     let retryModel: Retry<MODEL> | undefined;
 
-    if (typeof retry === 'function') {
-      // Function retryable - call it with context
-      // The function can be either Retryable<MODEL> or Retryable<ResolvableLanguageModel>
-      // At runtime, both work because the context is structurally compatible
-      // We use type assertion here because TypeScript can't prove the union type compatibility
-      retryModel = await (retry as Retryable<MODEL>)(context);
-    } else if (isObject(retry) && 'model' in retry) {
-      // Static Retry object
-      retryModel = retry as Retry<MODEL>;
+    if (typeof retry === `function`) {
+      /**
+       * Function retryable - call it with context
+       * The function can be either Retryable<MODEL> or Retryable<ResolvableLanguageModel>
+       * At runtime, both work because the context is structurally compatible
+       * We use type assertion here because TypeScript can't prove the union type compatibility
+       */
+      retryModel = await (retry as unknown as Retryable<MODEL>)(context);
+    } else if (isObject(retry) && `model` in retry) {
+      /** Static Retry object */
+      retryModel = retry as unknown as Retry<MODEL>;
     } else {
-      // Plain model
-      retryModel = { model: retry } as Retry<MODEL>;
+      /** Plain model */
+      retryModel = { model: retry } as unknown as Retry<MODEL>;
     }
 
     if (retryModel) {

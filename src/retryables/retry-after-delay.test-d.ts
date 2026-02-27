@@ -1,6 +1,10 @@
 import { describe, expectTypeOf, it } from 'vitest';
 import { createRetryable } from '../create-retryable-model.js';
-import { MockEmbeddingModel, MockLanguageModel } from '../test-utils.js';
+import {
+  MockEmbeddingModel,
+  MockImageModel,
+  MockLanguageModel,
+} from '../test-utils.js';
 import type { EmbeddingModel, LanguageModel, Retryable } from '../types.js';
 import { retryAfterDelay } from './retry-after-delay.js';
 
@@ -38,5 +42,17 @@ describe('retryAfterDelay types', () => {
     });
 
     // expectTypeOf(retryable).toEqualTypeOf<Retryable<LanguageModel>>();
+  });
+
+  it('should accept image model with options', () => {
+    const model = new MockImageModel();
+    const retryable = retryAfterDelay<MockImageModel>({ maxAttempts: 3 });
+
+    const retryableModel = createRetryable({
+      model,
+      retries: [retryable],
+    });
+
+    expectTypeOf(retryable).toEqualTypeOf<Retryable<MockImageModel>>();
   });
 });

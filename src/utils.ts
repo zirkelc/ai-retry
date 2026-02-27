@@ -1,5 +1,6 @@
 import type {
   EmbeddingModel,
+  ImageModel,
   LanguageModel,
   LanguageModelGenerate,
   LanguageModelStream,
@@ -17,8 +18,8 @@ export const isString = (value: unknown): value is string =>
 
 export const isModel = (
   model: unknown,
-): model is LanguageModel | EmbeddingModel =>
-  isLanguageModel(model) || isEmbeddingModel(model);
+): model is LanguageModel | EmbeddingModel | ImageModel =>
+  isLanguageModel(model) || isEmbeddingModel(model) || isImageModel(model);
 
 export const isLanguageModel = (model: unknown): model is LanguageModel =>
   isObject(model) &&
@@ -26,6 +27,7 @@ export const isLanguageModel = (model: unknown): model is LanguageModel =>
   'modelId' in model &&
   'specificationVersion' in model &&
   'doGenerate' in model &&
+  'doStream' in model &&
   model.specificationVersion === 'v3';
 
 export const isEmbeddingModel = (model: unknown): model is EmbeddingModel =>
@@ -35,6 +37,16 @@ export const isEmbeddingModel = (model: unknown): model is EmbeddingModel =>
   'specificationVersion' in model &&
   'doEmbed' in model &&
   model.specificationVersion === 'v3';
+
+export const isImageModel = (model: unknown): model is ImageModel =>
+  isObject(model) &&
+  'provider' in model &&
+  'modelId' in model &&
+  'specificationVersion' in model &&
+  'doGenerate' in model &&
+  model.specificationVersion === 'v3' &&
+  !('doStream' in model) &&
+  !('doEmbed' in model);
 
 export const isStreamResult = (
   result: LanguageModelGenerate | LanguageModelStream,

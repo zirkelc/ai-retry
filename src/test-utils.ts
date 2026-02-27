@@ -3,6 +3,8 @@ import { vi } from 'vitest';
 import type {
   EmbeddingModel,
   EmbeddingModelEmbed,
+  ImageModel,
+  ImageModelGenerate,
   LanguageModel,
   LanguageModelGenerate,
   LanguageModelStream,
@@ -14,6 +16,7 @@ type GenerateText = Parameters<typeof generateText>[0];
 export type LanguageModelGenerateFn = LanguageModel['doGenerate'];
 export type LanguageModelStreamFn = LanguageModel['doStream'];
 export type EmbeddingModelEmbedFn = EmbeddingModel['doEmbed'];
+export type ImageModelGenerateFn = ImageModel['doGenerate'];
 
 const mockGenerateId = () => 'aitxt-mock-id';
 
@@ -103,6 +106,32 @@ export class MockEmbeddingModel implements EmbeddingModel {
       if (doEmbed instanceof Error) throw doEmbed;
       if (typeof doEmbed === 'function') return doEmbed(opts);
       return doEmbed;
+    });
+  }
+}
+
+export class MockImageModel implements ImageModel {
+  readonly specificationVersion = 'v3';
+
+  readonly provider: ImageModel['provider'];
+  readonly modelId: ImageModel['modelId'];
+  readonly maxImagesPerCall: ImageModel['maxImagesPerCall'] = 1;
+
+  doGenerate: ImageModel['doGenerate'];
+
+  constructor({
+    doGenerate = (): never => {
+      throw new Error(`Not implemented`);
+    },
+  }: {
+    doGenerate?: ImageModelGenerate | ImageModelGenerateFn | Error;
+  } = {}) {
+    this.provider = `mock-provider`;
+    this.modelId = generateMockModelId();
+    this.doGenerate = vi.fn(async (opts) => {
+      if (doGenerate instanceof Error) throw doGenerate;
+      if (typeof doGenerate === `function`) return doGenerate(opts);
+      return doGenerate;
     });
   }
 }

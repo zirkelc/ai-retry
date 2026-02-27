@@ -2,17 +2,26 @@ import {
   convertArrayToReadableStream,
   convertAsyncIterableToArray,
 } from '@ai-sdk/provider-utils/test';
-import { APICallError, embed, generateText, streamText } from 'ai';
+import {
+  APICallError,
+  embed,
+  generateImage,
+  generateText,
+  streamText,
+} from 'ai';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRetryable } from '../create-retryable-model.js';
 import {
   chunksToText,
   MockEmbeddingModel,
+  MockImageModel,
   MockLanguageModel,
 } from '../test-utils.js';
 import type {
   EmbeddingModel,
   EmbeddingModelEmbed,
+  ImageModel,
+  ImageModelGenerate,
   LanguageModel,
   LanguageModelGenerate,
   LanguageModelStreamPart,
@@ -37,6 +46,19 @@ const mockEmbeddings: EmbeddingModelEmbed = {
   embeddings: [[0.1, 0.2, 0.3]],
   usage: { tokens: 5 },
   warnings: [],
+};
+
+/** Valid base64 PNG image (1x1 transparent pixel) */
+const validBase64Image = `iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==`;
+
+const mockImageResult: ImageModelGenerate = {
+  images: [validBase64Image],
+  warnings: [],
+  response: {
+    timestamp: new Date(),
+    modelId: `mock-model`,
+    headers: undefined,
+  },
 };
 
 const rateLimitError = new APICallError({
@@ -660,6 +682,107 @@ describe('retryAfterDelay', () => {
       expect(baseModel.doEmbed).toHaveBeenCalledTimes(1);
       expect(fallbackModel.doEmbed).toHaveBeenCalledTimes(2);
       expect(result.embedding).toBe(mockEmbeddings.embeddings[0]);
+    });
+  });
+
+  describe('generateImage', () => {
+    it('should succeed without errors', async () => {
+      // Arrange
+      const baseModel = new MockImageModel({ doGenerate: mockImageResult });
+
+      // Act
+      const promise = generateImage({
+        model: createRetryable({
+          model: baseModel,
+          retries: [retryAfterDelay({ delay: 1000 })],
+        }),
+        prompt: 'test',
+      });
+
+      await vi.runAllTimersAsync();
+      const result = await promise;
+
+      // Assert
+      expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
+      expect(result.images.length).toBe(1);
+    });
+
+    it('should retry with delay on retryable error', async () => {
+      // Arrange
+      let attempt = 0;
+      const baseModel = new MockImageModel({
+        doGenerate: async () => {
+          attempt++;
+          if (attempt === 1) {
+            throw rateLimitError;
+          }
+          return mockImageResult;
+        },
+      });
+
+      // Act
+      const promise = generateImage({
+        model: createRetryable({
+          model: baseModel,
+          retries: [retryAfterDelay({ delay: 1000 })],
+        }),
+        prompt: 'test',
+      });
+
+      await vi.runAllTimersAsync();
+      const result = await promise;
+
+      // Assert
+      expect(baseModel.doGenerate).toHaveBeenCalledTimes(2);
+      expect(result.images.length).toBe(1);
+    });
+
+    it('should retry with fallback model when fallback fails with retryable error', async () => {
+      // Arrange
+      const baseModel = new MockImageModel({
+        doGenerate: genericRetryableError,
+      });
+
+      let fallbackAttempt = 0;
+      const fallbackModel = new MockImageModel({
+        doGenerate: async () => {
+          fallbackAttempt++;
+          if (fallbackAttempt === 1) {
+            throw rateLimitError;
+          }
+          return mockImageResult;
+        },
+      });
+
+      const fallbackOnError: Retryable<ImageModel> = (context) => {
+        if (
+          isErrorAttempt(context.current) &&
+          APICallError.isInstance(context.current.error)
+        ) {
+          return { model: fallbackModel, maxAttempts: 1 };
+        }
+        return undefined;
+      };
+
+      // Act
+      const promise = generateImage({
+        model: createRetryable({
+          model: baseModel,
+          retries: [
+            fallbackOnError,
+            retryAfterDelay({ delay: 100, maxAttempts: 3 }),
+          ],
+        }),
+        prompt: 'test',
+      });
+
+      await vi.runAllTimersAsync();
+      const result = await promise;
+
+      // Assert
+      expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
+      expect(fallbackModel.doGenerate).toHaveBeenCalledTimes(2);
+      expect(result.images.length).toBe(1);
     });
   });
 });

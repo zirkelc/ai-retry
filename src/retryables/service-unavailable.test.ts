@@ -2,16 +2,24 @@ import {
   convertArrayToReadableStream,
   convertAsyncIterableToArray,
 } from '@ai-sdk/provider-utils/test';
-import { APICallError, embed, generateText, streamText } from 'ai';
+import {
+  APICallError,
+  embed,
+  generateImage,
+  generateText,
+  streamText,
+} from 'ai';
 import { describe, expect, it } from 'vitest';
 import { createRetryable } from '../create-retryable-model.js';
 import {
   chunksToText,
   MockEmbeddingModel,
+  MockImageModel,
   MockLanguageModel,
 } from '../test-utils.js';
 import type {
   EmbeddingModelEmbed,
+  ImageModelGenerate,
   LanguageModelGenerate,
   LanguageModelStreamPart,
 } from '../types.js';
@@ -69,6 +77,19 @@ const mockStreamChunks: LanguageModelStreamPart[] = [
 const mockEmbeddings: EmbeddingModelEmbed = {
   embeddings: [[0.1, 0.2, 0.3]],
   warnings: [],
+};
+
+/** Valid base64 PNG image (1x1 transparent pixel) */
+const validBase64Image = `iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==`;
+
+const mockImageResult: ImageModelGenerate = {
+  images: [validBase64Image],
+  warnings: [],
+  response: {
+    timestamp: new Date(),
+    modelId: `mock-model`,
+    headers: undefined,
+  },
 };
 
 describe('serviceUnavailable', () => {
@@ -400,6 +421,87 @@ describe('serviceUnavailable', () => {
       await expect(result).rejects.toThrowError(APICallError);
       expect(baseModel.doEmbed).toHaveBeenCalledTimes(1);
       expect(retryModel.doEmbed).toHaveBeenCalledTimes(0);
+    });
+  });
+
+  describe('generateImage', () => {
+    it('should succeed without errors', async () => {
+      // Arrange
+      const baseModel = new MockImageModel({ doGenerate: mockImageResult });
+      const retryModel = new MockImageModel({ doGenerate: mockImageResult });
+
+      // Act
+      const result = await generateImage({
+        model: createRetryable({
+          model: baseModel,
+          retries: [serviceUnavailable(retryModel)],
+        }),
+        prompt: 'test',
+      });
+
+      // Assert
+      expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
+      expect(retryModel.doGenerate).toHaveBeenCalledTimes(0);
+      expect(result.images.length).toBe(1);
+    });
+
+    it('should fallback on status 503', async () => {
+      // Arrange
+      const baseModel = new MockImageModel({ doGenerate: unavailableError });
+      const retryModel = new MockImageModel({ doGenerate: mockImageResult });
+
+      // Act
+      const result = await generateImage({
+        model: createRetryable({
+          model: baseModel,
+          retries: [serviceUnavailable(retryModel)],
+        }),
+        prompt: 'test',
+      });
+
+      // Assert
+      expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
+      expect(retryModel.doGenerate).toHaveBeenCalledTimes(1);
+      expect(result.images.length).toBe(1);
+    });
+
+    it('should not fallback for non-matching errors', async () => {
+      // Arrange
+      const baseModel = new MockImageModel({
+        doGenerate: new APICallError({
+          message: 'Some other error',
+          url: '',
+          requestBodyValues: {},
+          statusCode: 400,
+          responseHeaders: {},
+          responseBody: '{}',
+          isRetryable: false,
+          data: {
+            error: {
+              message: 'Some other error',
+              type: null,
+              param: 'prompt',
+              code: 'other_error',
+            },
+          },
+        }),
+      });
+      const retryModel = new MockImageModel({ doGenerate: mockImageResult });
+
+      // Act
+      const result = generateImage({
+        model: createRetryable({
+          model: baseModel,
+          retries: [serviceUnavailable(retryModel)],
+        }),
+        prompt: 'test',
+        maxRetries: 0,
+      });
+
+      // Assert
+      await expect(result).rejects.toThrowError(APICallError);
+      expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
+      expect(retryModel.doGenerate).toHaveBeenCalledTimes(0);
     });
   });
 });

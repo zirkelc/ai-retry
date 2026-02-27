@@ -1,5 +1,7 @@
 import type {
   EmbeddingModelV3,
+  ImageModelV3,
+  ImageModelV3CallOptions,
   LanguageModelV3,
   LanguageModelV3CallOptions,
   LanguageModelV3Prompt,
@@ -16,8 +18,10 @@ type Literals<T> = T extends string
 
 export type LanguageModel = LanguageModelV3;
 export type EmbeddingModel = EmbeddingModelV3;
+export type ImageModel = ImageModelV3;
 export type LanguageModelCallOptions = LanguageModelV3CallOptions;
 export type LanguageModelStreamPart = LanguageModelV3StreamPart;
+export type ImageModelCallOptions = ImageModelV3CallOptions;
 export type ProviderOptions = SharedV3ProviderOptions;
 
 // export  type GatewayEmbeddingModelId = Parameters<typeof gateway['textEmbeddingModel']>[0];
@@ -29,12 +33,21 @@ export type ResolvableLanguageModel =
   | LanguageModel
   | Literals<GatewayLanguageModelId>;
 
-export type ResolvableModel<MODEL extends LanguageModel | EmbeddingModel> =
-  MODEL extends LanguageModel ? ResolvableLanguageModel : EmbeddingModel;
+export type ResolvableModel<
+  MODEL extends LanguageModel | EmbeddingModel | ImageModel,
+> = MODEL extends LanguageModel
+  ? ResolvableLanguageModel
+  : MODEL extends EmbeddingModel
+    ? EmbeddingModel
+    : ImageModel;
 
 export type ResolvedModel<
-  MODEL extends ResolvableLanguageModel | EmbeddingModel,
-> = MODEL extends ResolvableLanguageModel ? LanguageModel : EmbeddingModel;
+  MODEL extends ResolvableLanguageModel | EmbeddingModel | ImageModel,
+> = MODEL extends ResolvableLanguageModel
+  ? LanguageModel
+  : MODEL extends EmbeddingModel
+    ? EmbeddingModel
+    : ImageModel;
 
 /**
  * Call options that can be overridden during retry for language models.
@@ -64,9 +77,21 @@ export type EmbeddingModelRetryCallOptions = Partial<
 >;
 
 /**
+ * Call options that can be overridden during retry for image models.
+ */
+export type ImageModelRetryCallOptions = Partial<
+  Pick<
+    ImageModelCallOptions,
+    'n' | 'size' | 'aspectRatio' | 'seed' | 'headers' | 'providerOptions'
+  >
+>;
+
+/**
  * A retry attempt with an error
  */
-export type RetryErrorAttempt<MODEL extends LanguageModel | EmbeddingModel> = {
+export type RetryErrorAttempt<
+  MODEL extends LanguageModel | EmbeddingModel | ImageModel,
+> = {
   type: 'error';
   error: unknown;
   result?: undefined;
@@ -76,7 +101,9 @@ export type RetryErrorAttempt<MODEL extends LanguageModel | EmbeddingModel> = {
    */
   options: MODEL extends LanguageModel
     ? LanguageModelCallOptions
-    : EmbeddingModelCallOptions;
+    : MODEL extends EmbeddingModel
+      ? EmbeddingModelCallOptions
+      : ImageModelCallOptions;
 };
 
 /**
@@ -96,15 +123,17 @@ export type RetryResultAttempt = {
 /**
  * A retry attempt with either an error or a result and the model used
  */
-export type RetryAttempt<MODEL extends LanguageModel | EmbeddingModel> =
-  | RetryErrorAttempt<MODEL>
-  | RetryResultAttempt;
+export type RetryAttempt<
+  MODEL extends LanguageModel | EmbeddingModel | ImageModel,
+> = MODEL extends LanguageModel
+  ? RetryErrorAttempt<MODEL> | RetryResultAttempt
+  : RetryErrorAttempt<MODEL>;
 
 /**
  * The context provided to Retryables with the current attempt and all previous attempts.
  */
 export type RetryContext<
-  MODEL extends ResolvableLanguageModel | EmbeddingModel,
+  MODEL extends ResolvableLanguageModel | EmbeddingModel | ImageModel,
 > = {
   /**
    * Current attempt that caused the retry
@@ -120,7 +149,7 @@ export type RetryContext<
  * Options for creating a retryable model.
  */
 export interface RetryableModelOptions<
-  MODEL extends LanguageModel | EmbeddingModel,
+  MODEL extends LanguageModel | EmbeddingModel | ImageModel,
 > {
   model: MODEL;
   retries: Retries<MODEL>;
@@ -146,7 +175,9 @@ export interface RetryableModelOptions<
  * This flexible approach allows retryable functions to return the exact model type
  * they received without type assertions, while still supporting string-based gateway models.
  */
-export type Retry<MODEL extends ResolvableLanguageModel | EmbeddingModel> = {
+export type Retry<
+  MODEL extends ResolvableLanguageModel | EmbeddingModel | ImageModel,
+> = {
   model: MODEL;
   /**
    * Maximum number of attempts for this model.
@@ -170,7 +201,9 @@ export type Retry<MODEL extends ResolvableLanguageModel | EmbeddingModel> = {
    */
   options?: MODEL extends LanguageModel
     ? Partial<LanguageModelRetryCallOptions>
-    : Partial<EmbeddingModelRetryCallOptions>;
+    : MODEL extends EmbeddingModel
+      ? Partial<EmbeddingModelRetryCallOptions>
+      : Partial<ImageModelRetryCallOptions>;
   /**
    * @deprecated Use `options.providerOptions` instead.
    * Provider options to override for this retry.
@@ -183,19 +216,21 @@ export type Retry<MODEL extends ResolvableLanguageModel | EmbeddingModel> = {
 /**
  * A function that determines whether to retry with a different model based on the current attempt and all previous attempts.
  */
-export type Retryable<MODEL extends ResolvableLanguageModel | EmbeddingModel> =
-  (
-    context: RetryContext<MODEL>,
-  ) => Retry<MODEL> | Promise<Retry<MODEL> | undefined> | undefined;
+export type Retryable<
+  MODEL extends ResolvableLanguageModel | EmbeddingModel | ImageModel,
+> = (
+  context: RetryContext<MODEL>,
+) => Retry<MODEL> | Promise<Retry<MODEL> | undefined> | undefined;
 
-export type Retries<MODEL extends LanguageModel | EmbeddingModel> = Array<
-  | Retryable<ResolvableModel<MODEL>>
-  | Retry<ResolvableModel<MODEL>>
-  | ResolvableModel<MODEL>
->;
+export type Retries<MODEL extends LanguageModel | EmbeddingModel | ImageModel> =
+  Array<
+    | Retryable<ResolvableModel<MODEL>>
+    | Retry<ResolvableModel<MODEL>>
+    | ResolvableModel<MODEL>
+  >;
 
 export type RetryableOptions<
-  MODEL extends ResolvableLanguageModel | EmbeddingModel,
+  MODEL extends ResolvableLanguageModel | EmbeddingModel | ImageModel,
 > = Partial<Omit<Retry<MODEL>, 'model'>>;
 
 /**
@@ -225,3 +260,5 @@ export type EmbeddingModelCallOptions = Parameters<
 export type EmbeddingModelEmbed = Awaited<
   ReturnType<EmbeddingModel['doEmbed']>
 >;
+
+export type ImageModelGenerate = Awaited<ReturnType<ImageModel['doGenerate']>>;

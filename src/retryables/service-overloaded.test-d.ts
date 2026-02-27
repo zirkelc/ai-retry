@@ -1,6 +1,10 @@
 import { describe, expectTypeOf, it } from 'vitest';
 import { createRetryable } from '../create-retryable-model.js';
-import { MockEmbeddingModel, MockLanguageModel } from '../test-utils.js';
+import {
+  MockEmbeddingModel,
+  MockImageModel,
+  MockLanguageModel,
+} from '../test-utils.js';
 import type { EmbeddingModel, LanguageModel, Retryable } from '../types.js';
 import { serviceOverloaded } from './service-overloaded.js';
 
@@ -62,5 +66,29 @@ describe('serviceOverloaded', () => {
     });
 
     // expectTypeOf(retryable).toEqualTypeOf<Retryable<LanguageModel>>();
+  });
+
+  it('should accept image model instance', () => {
+    const model = new MockImageModel();
+    const retryable = serviceOverloaded(model);
+
+    const retryableModel = createRetryable({
+      model,
+      retries: [retryable],
+    });
+
+    expectTypeOf(retryable).toEqualTypeOf<Retryable<MockImageModel>>();
+  });
+
+  it('should accept image model with options', () => {
+    const model = new MockImageModel();
+    const retryable = serviceOverloaded(model, { maxAttempts: 3 });
+
+    const retryableModel = createRetryable({
+      model,
+      retries: [retryable],
+    });
+
+    expectTypeOf(retryable).toEqualTypeOf<Retryable<MockImageModel>>();
   });
 });

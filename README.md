@@ -41,7 +41,7 @@ Create a retryable model by providing a base model and a list of retryables or f
 When an error occurs, it will evaluate each retryable in order and use the first one that indicates a retry should be attempted with a different model.
 
 > [!NOTE]
-> `ai-retry` supports both language models and embedding models.
+> `ai-retry` supports language models, embedding models, and image models.
 
 ```typescript
 import { openai } from '@ai-sdk/openai';
@@ -99,6 +99,28 @@ const result = await embed({
 });
 
 console.log(result.embedding);
+```
+
+This also works with image models:
+
+```typescript
+import { openai } from '@ai-sdk/openai';
+import { generateImage } from 'ai';
+import { createRetryable } from 'ai-retry';
+
+const retryableModel = createRetryable({
+  model: openai.image('dall-e-3'),
+  retries: [
+    // Retry strategies and fallbacks...
+  ],
+});
+
+const result = await generateImage({
+  model: retryableModel,
+  prompt: 'A sunset over mountains',
+});
+
+console.log(result.images);
 ```
 
 #### Vercel AI Gateway
@@ -358,6 +380,7 @@ There are several built-in dynamic retryables available for common use cases:
 - [`serviceOverloaded`](./src/retryables/service-overloaded.ts): Response with status code 529 (service overloaded).
 - [`serviceUnavailable`](./src/retryables/service-unavailable.ts): Response with status code 503 (service unavailable).
 - [`schemaMismatch`](./src/retryables/schema-mismatch.ts): Response JSON doesn't match the expected schema from structured output modes (`Output.object()`, `Output.array()`, `Output.choice()`).
+- [`noImageGenerated`](./src/retryables/no-image-generated.ts): Image generation failed with `NoImageGeneratedError`.
 
 #### Content Filter
 
@@ -446,6 +469,29 @@ const retryableModel = createRetryable({
   retries: [
     serviceUnavailable(openai('gpt-4')), // Switch to OpenAI if Azure is unavailable
   ],
+});
+```
+
+#### No Image Generated
+
+Handle image generation failures by switching to a different model.
+
+```typescript
+import { openai } from '@ai-sdk/openai';
+import { generateImage } from 'ai';
+import { createRetryable } from 'ai-retry';
+import { noImageGenerated } from 'ai-retry/retryables';
+
+const retryableModel = createRetryable({
+  model: openai.image('dall-e-3'),
+  retries: [
+    noImageGenerated(openai.image('dall-e-2')), // Fallback to DALL-E 2
+  ],
+});
+
+const result = await generateImage({
+  model: retryableModel,
+  prompt: 'A sunset over mountains',
 });
 ```
 
@@ -732,6 +778,17 @@ The following options can be overridden:
 | [`headers`](https://ai-sdk.dev/docs/reference/ai-sdk-core/embed#headers) | Additional HTTP headers |
 | [`providerOptions`](https://ai-sdk.dev/docs/reference/ai-sdk-core/embed#provideroptions) | Provider-specific options |
 
+##### Image Model Options
+
+| Option | Description |
+|--------|-------------|
+| [`n`](https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-image#n) | Number of images to generate |
+| [`size`](https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-image#size) | Size of generated images |
+| [`aspectRatio`](https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-image#aspectratio) | Aspect ratio of generated images |
+| [`seed`](https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-image#seed) | Random seed for reproducibility |
+| [`headers`](https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-image#headers) | Additional HTTP headers |
+| [`providerOptions`](https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-image#provideroptions) | Provider-specific options |
+
 #### Logging
 
 You can use the following callbacks to log retry attempts and errors:
@@ -804,12 +861,12 @@ In the second case, errors during stream processing will not always be retried, 
 
 ### API Reference
 
-#### `createRetryable(options: RetryableModelOptions): LanguageModelV2 | EmbeddingModelV2`
+#### `createRetryable(options: RetryableModelOptions): LanguageModelV3 | EmbeddingModelV3 | ImageModelV3`
 
-Creates a retryable model that works with both language models and embedding models.
+Creates a retryable model that works with language models, embedding models, and image models.
 
 ```ts
-interface RetryableModelOptions<MODEL extends LanguageModelV2 | EmbeddingModelV2> {
+interface RetryableModelOptions<MODEL extends LanguageModelV3 | EmbeddingModelV3 | ImageModelV3> {
   model: MODEL;
   retries: Array<Retryable<MODEL> | MODEL>;
   disabled?: boolean | (() => boolean);
@@ -855,17 +912,17 @@ type Retryable = (
 
 #### `Retry`
 
-A `Retry` specifies the model to retry and optional settings. The available options depend on the model type (language model or embedding model).
+A `Retry` specifies the model to retry and optional settings. The available options depend on the model type (language model, embedding model, or image model).
 
 ```typescript
 interface Retry {
-  model: LanguageModelV2 | EmbeddingModelV2;
+  model: LanguageModelV3 | EmbeddingModelV3 | ImageModelV3;
   maxAttempts?: number;      // Maximum retry attempts per model (default: 1)
   delay?: number;            // Delay in milliseconds before retrying
   backoffFactor?: number;    // Multiplier for exponential backoff
   timeout?: number;          // Timeout in milliseconds for the retry attempt
   providerOptions?: ProviderOptions; // @deprecated - use options.providerOptions instead
-  options?: LanguageModelV2CallOptions | EmbeddingModelV2CallOptions; // Call options to override for this retry
+  options?: LanguageModelV3CallOptions | EmbeddingModelV3CallOptions | ImageModelV3CallOptions; // Call options to override for this retry
 }
 ```
 
@@ -885,22 +942,22 @@ interface RetryContext {
 A `RetryAttempt` represents a single attempt with a specific model, which can be either an error or a successful result that triggered a retry. Each attempt includes the call options that were used for that specific attempt. For retry attempts, this will reflect any overridden options from the retry configuration.
 
 ```typescript
-// For both language and embedding models
+// For language, embedding, and image models
 type RetryAttempt =
-  | { 
-      type: 'error'; 
-      error: unknown; 
-      model: LanguageModelV2 | EmbeddingModelV2;
-      options: LanguageModelV2CallOptions | EmbeddingModelV2CallOptions;
+  | {
+      type: 'error';
+      error: unknown;
+      model: LanguageModelV3 | EmbeddingModelV3 | ImageModelV3;
+      options: LanguageModelV3CallOptions | EmbeddingModelV3CallOptions | ImageModelV3CallOptions;
     }
-  | { 
-      type: 'result'; 
-      result: LanguageModelV2Generate; 
-      model: LanguageModelV2;
-      options: LanguageModelV2CallOptions;
+  | {
+      type: 'result';
+      result: LanguageModelV3Generate;
+      model: LanguageModelV3;
+      options: LanguageModelV3CallOptions;
     };
 
-// Note: Result-based retries only apply to language models, not embedding models
+// Note: Result-based retries only apply to language models, not embedding or image models
 
 // Type guards for discriminating attempts
 function isErrorAttempt(attempt: RetryAttempt): attempt is RetryErrorAttempt;
