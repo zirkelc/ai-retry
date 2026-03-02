@@ -478,6 +478,7 @@ Handle image generation failures by switching to a different model.
 
 ```typescript
 import { openai } from '@ai-sdk/openai';
+import { google } from '@ai-sdk/google';
 import { generateImage } from 'ai';
 import { createRetryable } from 'ai-retry';
 import { noImageGenerated } from 'ai-retry/retryables';
@@ -485,7 +486,7 @@ import { noImageGenerated } from 'ai-retry/retryables';
 const retryableModel = createRetryable({
   model: openai.image('dall-e-3'),
   retries: [
-    noImageGenerated(openai.image('dall-e-2')), // Fallback to DALL-E 2
+    noImageGenerated(google.image('gemini-3-pro-image-preview')), // Switch to Gemini if DALL-E fails to generate an image
   ],
 });
 
