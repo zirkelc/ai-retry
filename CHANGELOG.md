@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.1](https://github.com/zirkelc/ai-retry/compare/v1.3.0...v1.3.1) (2026-04-01)
+
+
+### Bug Fixes
+
+* move @ai-sdk/provider to peerDependencies to avoid type conflicts ([2046e09](https://github.com/zirkelc/ai-retry/commit/2046e090fdcbc37b70fd486c04f0af0ef59fd563)), closes [#32](https://github.com/zirkelc/ai-retry/issues/32)
+
 ## [1.3.0](https://github.com/zirkelc/ai-retry/compare/v1.2.0...v1.3.0) (2026-02-27)
 
 
