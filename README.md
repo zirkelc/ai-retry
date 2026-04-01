@@ -860,6 +860,9 @@ Errors during streaming requests can occur in two ways:
 
 In the second case, errors during stream processing will not always be retried, because the stream might have already emitted some actual content and the consumer might have processed it. Retrying will be stopped as soon as the first content chunk (e.g. types of `text-delta`, `tool-call`, etc.) is emitted. The type of chunks considered as content are the same as the ones that are passed to [onChunk()](https://github.com/vercel/ai/blob/1fe4bd4144bff927f5319d9d206e782a73979ccb/packages/ai/src/generate-text/stream-text.ts#L684-L697).
 
+> [!IMPORTANT]
+> **Streaming limitation:** Retries and fallbacks only apply before the first content chunk is emitted. Once streaming begins delivering content, the response is committed to the current model. Mid-stream errors will propagate to the caller rather than triggering a fallback. If reliable retries are critical for your use case, consider using `generateText` instead of `streamText`.
+
 ### API Reference
 
 #### `createRetryable(options: RetryableModelOptions): LanguageModelV3 | EmbeddingModelV3 | ImageModelV3`
