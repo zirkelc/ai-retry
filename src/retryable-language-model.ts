@@ -88,6 +88,7 @@ export class RetryableLanguageModel
   }): Promise<{
     result: RESULT;
     attempts: Array<RetryAttempt<LanguageModel>>;
+    callOptions: LanguageModelCallOptions;
   }> {
     /**
      * Track all attempts.
@@ -188,7 +189,7 @@ export class RetryableLanguageModel
           }
         }
 
-        return { result, attempts };
+        return { result, attempts, callOptions: retryCallOptions };
       } catch (error) {
         // Don't retry if user manually aborted the request.
         // TimeoutError from AbortSignal.timeout() will still be handled by retry handlers.
@@ -319,7 +320,11 @@ export class RetryableLanguageModel
       return this.currentModel.doGenerate(callOptions);
     }
 
-    const { result } = await this.withRetry({
+    const {
+      result,
+      attempts,
+      callOptions: finalCallOptions,
+    } = await this.withRetry({
       fn: async (retryCallOptions) => {
         return this.currentModel.doGenerate(retryCallOptions);
       },
@@ -327,6 +332,16 @@ export class RetryableLanguageModel
     });
 
     this.updateStickyModel(startModel);
+
+    this.options.onSuccess?.({
+      current: {
+        type: 'success',
+        model: this.currentModel,
+        result,
+        options: finalCallOptions,
+      },
+      attempts,
+    });
 
     return result;
   }
@@ -350,7 +365,11 @@ export class RetryableLanguageModel
     /**
      * Perform the initial call to doStream with retry logic to handle errors before any data is streamed.
      */
-    let { result, attempts } = await this.withRetry({
+    let {
+      result,
+      attempts,
+      callOptions: finalCallOptions,
+    } = await this.withRetry({
       fn: async (retryCallOptions) => {
         return this.currentModel.doStream(retryCallOptions);
       },
@@ -358,6 +377,16 @@ export class RetryableLanguageModel
     });
 
     this.updateStickyModel(startModel);
+
+    this.options.onSuccess?.({
+      current: {
+        type: 'success',
+        model: this.currentModel,
+        result,
+        options: finalCallOptions,
+      },
+      attempts,
+    });
 
     /**
      * Track the current retry model for computing call options in the stream handler

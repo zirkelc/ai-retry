@@ -22,6 +22,7 @@ import { isErrorAttempt } from './utils.js';
 
 type OnError = Required<RetryableModelOptions<ImageModel>>['onError'];
 type OnRetry = Required<RetryableModelOptions<ImageModel>>['onRetry'];
+type OnSuccess = Required<RetryableModelOptions<ImageModel>>['onSuccess'];
 
 /** Valid base64 PNG image (1x1 transparent pixel) */
 const validBase64Image = `iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==`;
@@ -334,6 +335,82 @@ describe(`generateImage`, () => {
 
       // Assert
       expect(onRetry).toHaveBeenCalledTimes(1);
+    });
+
+    it(`should call onSuccess with base model when no retry occurs`, async () => {
+      // Arrange
+      const baseModel = new MockImageModel({ doGenerate: mockImageResult });
+      const onSuccess = vi.fn<OnSuccess>();
+
+      // Act
+      await generateImage({
+        model: createRetryable({
+          model: baseModel,
+          retries: [],
+          onSuccess,
+        }),
+        prompt: `A beautiful sunset`,
+      });
+
+      // Assert
+      expect(onSuccess).toHaveBeenCalledTimes(1);
+
+      const successCall = onSuccess.mock.calls[0]![0];
+      expect(successCall.current.type).toBe('success');
+      expect(successCall.current.model).toBe(baseModel);
+      expect(successCall.current.result).toBeDefined();
+      expect(successCall.attempts.length).toBe(0);
+    });
+
+    it(`should call onSuccess with fallback model after retry`, async () => {
+      // Arrange
+      const baseModel = new MockImageModel({ doGenerate: retryableError });
+      const fallbackModel = new MockImageModel({
+        doGenerate: mockImageResult,
+      });
+
+      const onSuccess = vi.fn<OnSuccess>();
+
+      // Act
+      await generateImage({
+        model: createRetryable({
+          model: baseModel,
+          retries: [fallbackModel],
+          onSuccess,
+        }),
+        prompt: `A beautiful sunset`,
+      });
+
+      // Assert
+      expect(onSuccess).toHaveBeenCalledTimes(1);
+
+      const successCall = onSuccess.mock.calls[0]![0];
+      expect(successCall.current.type).toBe('success');
+      expect(successCall.current.model).toBe(fallbackModel);
+      expect(successCall.current.result).toBeDefined();
+      expect(successCall.attempts.length).toBe(1);
+    });
+
+    it(`should NOT call onSuccess when all retries fail`, async () => {
+      // Arrange
+      const baseModel = new MockImageModel({ doGenerate: retryableError });
+      const fallbackModel = new MockImageModel({
+        doGenerate: nonRetryableError,
+      });
+      const onSuccess = vi.fn<OnSuccess>();
+
+      // Act & Assert
+      const result = generateImage({
+        model: createRetryable({
+          model: baseModel,
+          retries: [fallbackModel],
+          onSuccess,
+        }),
+        prompt: `A beautiful sunset`,
+      });
+      await expect(result).rejects.toThrow();
+
+      expect(onSuccess).not.toHaveBeenCalled();
     });
   });
 

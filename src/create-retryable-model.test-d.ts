@@ -1,7 +1,16 @@
 import { assertType, describe, expectTypeOf, it } from 'vitest';
 import { createRetryable } from './create-retryable-model.js';
 import { MockEmbeddingModel, MockLanguageModel } from './test-utils.js';
-import type { EmbeddingModel, LanguageModel } from './types.js';
+import type {
+  EmbeddingModel,
+  EmbeddingModelCallOptions,
+  EmbeddingModelEmbed,
+  LanguageModel,
+  LanguageModelCallOptions,
+  LanguageModelGenerate,
+  LanguageModelStream,
+  SuccessContext,
+} from './types.js';
 
 describe('createRetryable', () => {
   it('should return LanguageModel type for language model instance', () => {
@@ -36,6 +45,31 @@ describe('createRetryable', () => {
 
     assertType<LanguageModel>(retryable);
     expectTypeOf(retryable).toEqualTypeOf<LanguageModel>();
+  });
+
+  it('should type SuccessContext correctly for language models', () => {
+    type Ctx = SuccessContext<LanguageModel>;
+
+    expectTypeOf<Ctx['current']['model']>().toEqualTypeOf<LanguageModel>();
+    expectTypeOf<Ctx['current']['result']>().toEqualTypeOf<
+      LanguageModelGenerate | LanguageModelStream
+    >();
+    expectTypeOf<
+      Ctx['current']['options']
+    >().toEqualTypeOf<LanguageModelCallOptions>();
+    expectTypeOf<Ctx['current']['type']>().toEqualTypeOf<'success'>();
+  });
+
+  it('should type SuccessContext correctly for embedding models', () => {
+    type Ctx = SuccessContext<EmbeddingModel>;
+
+    expectTypeOf<Ctx['current']['model']>().toEqualTypeOf<EmbeddingModel>();
+    expectTypeOf<
+      Ctx['current']['result']
+    >().toEqualTypeOf<EmbeddingModelEmbed>();
+    expectTypeOf<
+      Ctx['current']['options']
+    >().toEqualTypeOf<EmbeddingModelCallOptions>();
   });
 
   it('should return EmbeddingModel type for embedding model instance', () => {

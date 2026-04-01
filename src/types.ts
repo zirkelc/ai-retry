@@ -87,6 +87,27 @@ export type ImageModelRetryCallOptions = Partial<
 >;
 
 /**
+ * Maps a model type to its call options type.
+ */
+export type CallOptions<
+  MODEL extends LanguageModel | EmbeddingModel | ImageModel,
+> = MODEL extends LanguageModel
+  ? LanguageModelCallOptions
+  : MODEL extends EmbeddingModel
+    ? EmbeddingModelCallOptions
+    : ImageModelCallOptions;
+
+/**
+ * Maps a model type to its result type.
+ */
+export type Result<MODEL extends LanguageModel | EmbeddingModel | ImageModel> =
+  MODEL extends LanguageModel
+    ? LanguageModelGenerate | LanguageModelStream
+    : MODEL extends EmbeddingModel
+      ? EmbeddingModelEmbed
+      : ImageModelGenerate;
+
+/**
  * A retry attempt with an error
  */
 export type RetryErrorAttempt<
@@ -99,11 +120,7 @@ export type RetryErrorAttempt<
   /**
    * The call options used for this attempt.
    */
-  options: MODEL extends LanguageModel
-    ? LanguageModelCallOptions
-    : MODEL extends EmbeddingModel
-      ? EmbeddingModelCallOptions
-      : ImageModelCallOptions;
+  options: CallOptions<MODEL>;
 };
 
 /**
@@ -146,6 +163,34 @@ export type RetryContext<
 };
 
 /**
+ * A successful attempt with the result
+ */
+export type SuccessAttempt<
+  MODEL extends LanguageModel | EmbeddingModel | ImageModel,
+> = {
+  type: 'success';
+  model: MODEL;
+  result: Result<MODEL>;
+  options: CallOptions<MODEL>;
+};
+
+/**
+ * The context provided to onSuccess with the successful attempt and all previous attempts.
+ */
+export type SuccessContext<
+  MODEL extends ResolvableLanguageModel | EmbeddingModel | ImageModel,
+> = {
+  /**
+   * The successful attempt
+   */
+  current: SuccessAttempt<ResolvedModel<MODEL>>;
+  /**
+   * All attempts made so far, including the current one
+   */
+  attempts: Array<RetryAttempt<ResolvedModel<MODEL>>>;
+};
+
+/**
  * Options for creating a retryable model.
  */
 export interface RetryableModelOptions<
@@ -162,6 +207,7 @@ export interface RetryableModelOptions<
   reset?: Reset;
   onError?: (context: RetryContext<MODEL>) => void;
   onRetry?: (context: RetryContext<MODEL>) => void;
+  onSuccess?: (context: SuccessContext<MODEL>) => void;
 }
 
 /**

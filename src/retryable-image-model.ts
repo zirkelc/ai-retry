@@ -69,6 +69,7 @@ export class RetryableImageModel
   }): Promise<{
     result: RESULT;
     attempts: Array<RetryErrorAttempt<ImageModel>>;
+    callOptions: ImageModelCallOptions;
   }> {
     /**
      * Track all attempts.
@@ -123,7 +124,7 @@ export class RetryableImageModel
          */
         const result = await input.fn(retryCallOptions);
 
-        return { result, attempts };
+        return { result, attempts, callOptions: retryCallOptions };
       } catch (error) {
         /** Don't retry if user manually aborted the request. */
         /** TimeoutError from AbortSignal.timeout() will still be handled by retry handlers. */
@@ -228,7 +229,11 @@ export class RetryableImageModel
       return this.currentModel.doGenerate(callOptions);
     }
 
-    const { result } = await this.withRetry({
+    const {
+      result,
+      attempts,
+      callOptions: finalCallOptions,
+    } = await this.withRetry({
       fn: async (retryCallOptions) => {
         return this.currentModel.doGenerate(retryCallOptions);
       },
@@ -236,6 +241,16 @@ export class RetryableImageModel
     });
 
     this.updateStickyModel(startModel);
+
+    this.options.onSuccess?.({
+      current: {
+        type: 'success',
+        model: this.currentModel,
+        result,
+        options: finalCallOptions,
+      },
+      attempts,
+    });
 
     return result;
   }

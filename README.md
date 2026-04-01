@@ -793,20 +793,24 @@ The following options can be overridden:
 #### Logging
 
 You can use the following callbacks to log retry attempts and errors:
-- `onError` is invoked if an error occurs. 
+- `onError` is invoked if an error occurs.
 - `onRetry` is invoked before attempting a retry.
+- `onSuccess` is invoked after a successful request with the model that handled it.
 
 ```typescript
 const retryableModel = createRetryable({
   model: openai('gpt-4-mini'),
   retries: [/* your retryables */],
   onError: (context) => {
-    console.error(`Attempt ${context.attempts.length} with ${context.current.model.provider}/${context.current.model.modelId} failed:`, 
+    console.error(`Attempt ${context.attempts.length} with ${context.current.model.provider}/${context.current.model.modelId} failed:`,
       context.current.error
     );
   },
   onRetry: (context) => {
     console.log(`Retrying attempt ${context.attempts.length + 1} with model ${context.current.model.provider}/${context.current.model.modelId}...`);
+  },
+  onSuccess: (context) => {
+    console.log(`Request handled by ${context.current.model.provider}/${context.current.model.modelId}`);
   },
 });
 ```
@@ -877,6 +881,7 @@ interface RetryableModelOptions<MODEL extends LanguageModelV3 | EmbeddingModelV3
   reset?: Reset;
   onError?: (context: RetryContext<MODEL>) => void;
   onRetry?: (context: RetryContext<MODEL>) => void;
+  onSuccess?: (context: SuccessContext<MODEL>) => void;
 }
 ```
 
@@ -887,6 +892,7 @@ interface RetryableModelOptions<MODEL extends LanguageModelV3 | EmbeddingModelV3
 - `reset`: Controls when to reset back to the base model after a successful retry. Default: `after-request`.
 - `onError`: Callback invoked when an error occurs.
 - `onRetry`: Callback invoked before attempting a retry.
+- `onSuccess`: Callback invoked after a successful request. Receives the model that handled the request and all previous attempts.
 
 #### `Reset`
 
@@ -938,6 +944,30 @@ The `RetryContext` object contains information about the current attempt and all
 interface RetryContext {
   current: RetryAttempt;
   attempts: Array<RetryAttempt>;
+}
+```
+
+#### `SuccessContext`
+
+The `SuccessContext` object is passed to the `onSuccess` callback after a successful request.
+
+```typescript
+interface SuccessContext {
+  current: SuccessAttempt;
+  attempts: Array<RetryAttempt>;
+}
+```
+
+#### `SuccessAttempt`
+
+A `SuccessAttempt` represents the successful attempt with the model, result, and call options used. The `result` type depends on the model type.
+
+```typescript
+interface SuccessAttempt {
+  type: 'success';
+  model: LanguageModelV3 | EmbeddingModelV3 | ImageModelV3;
+  result: LanguageModelGenerate | LanguageModelStream | EmbeddingModelEmbed | ImageModelGenerate;
+  options: LanguageModelV3CallOptions | EmbeddingModelV3CallOptions | ImageModelV3CallOptions;
 }
 ```
 

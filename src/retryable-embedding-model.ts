@@ -70,6 +70,7 @@ export class RetryableEmbeddingModel
   }): Promise<{
     result: RESULT;
     attempts: Array<RetryErrorAttempt<EmbeddingModel>>;
+    callOptions: EmbeddingModelCallOptions;
   }> {
     /**
      * Track all attempts.
@@ -125,7 +126,7 @@ export class RetryableEmbeddingModel
          */
         const result = await input.fn(retryCallOptions);
 
-        return { result, attempts };
+        return { result, attempts, callOptions: retryCallOptions };
       } catch (error) {
         // Don't retry if user manually aborted the request.
         // TimeoutError from AbortSignal.timeout() will still be handled by retry handlers.
@@ -230,7 +231,11 @@ export class RetryableEmbeddingModel
       return this.currentModel.doEmbed(callOptions);
     }
 
-    const { result } = await this.withRetry({
+    const {
+      result,
+      attempts,
+      callOptions: finalCallOptions,
+    } = await this.withRetry({
       fn: async (retryCallOptions) => {
         return this.currentModel.doEmbed(retryCallOptions);
       },
@@ -238,6 +243,16 @@ export class RetryableEmbeddingModel
     });
 
     this.updateStickyModel(startModel);
+
+    this.options.onSuccess?.({
+      current: {
+        type: 'success',
+        model: this.currentModel,
+        result,
+        options: finalCallOptions,
+      },
+      attempts,
+    });
 
     return result;
   }
