@@ -815,16 +815,15 @@ const retryableModel = createRetryable({
       // Strip provider-scoped metadata from the prompt before retrying on a different provider
       return {
         options: {
-          prompt: sanitizePromptForProvider(
-            previous.options.prompt,
-            current.model.provider,
-          ),
+          prompt: stripProviderMetadata(current.options.prompt),
         },
       };
     }
   },
 });
 ```
+
+Inside the `onRetry` callback, `context.current.model` is the model that's about to be tried next, while `context.current.options` and `context.current.error` describe the failed attempt that triggered the retry. The previous model is available at `context.attempts.at(-1).model`.
 
 `onRetry` may also be `async`, which is useful if computing the override needs to do work (e.g. fetching a fresh credential):
 
@@ -844,7 +843,7 @@ const retryableModel = createRetryable({
 **Precedence** for the upcoming retry attempt (highest to lowest):
 
 1. The value returned from `onRetry`
-2. `Retry.options` (declared on the retryable)
+2. The `options` returned from the retryable
 3. The original call options from the request
 
 #### Logging
