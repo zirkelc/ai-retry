@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.5.0](https://github.com/zirkelc/ai-retry/compare/v1.4.0...v1.5.0) (2026-04-14)
+
+
+### Features
+
+* allow onRetry to return overrides for the upcoming retry attempt ([9de8f7d](https://github.com/zirkelc/ai-retry/commit/9de8f7d2d7b218bb99bb8d3057af28c779c7759a)), closes [#36](https://github.com/zirkelc/ai-retry/issues/36)
+
+
+### Bug Fixes
+
+* lint ([6ed96e3](https://github.com/zirkelc/ai-retry/commit/6ed96e3c0c600d3d8e11f01e00eb4520dee6a971))
+* lint ci ([73a61f8](https://github.com/zirkelc/ai-retry/commit/73a61f898d22f4a1b6b19d2e84643426f8231970))
+
 ## [1.4.0](https://github.com/zirkelc/ai-retry/compare/v1.3.1...v1.4.0) (2026-04-01)
 
 
