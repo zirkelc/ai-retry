@@ -18,7 +18,11 @@ import type {
   RetryErrorAttempt,
   RetryResultAttempt,
 } from './types.js';
-import { isAbortError, isGenerateResult, isStreamContentPart } from './utils.js';
+import {
+  isAbortError,
+  isGenerateResult,
+  isStreamContentPart,
+} from './utils.js';
 
 export class RetryableLanguageModel
   extends BaseRetryableModel<LanguageModel>
@@ -41,7 +45,9 @@ export class RetryableLanguageModel
   /**
    * Execute a function with retry logic for handling errors
    */
-  private async withRetry<RESULT extends LanguageModelStream | LanguageModelGenerate>(input: {
+  private async withRetry<
+    RESULT extends LanguageModelStream | LanguageModelGenerate,
+  >(input: {
     fn: (retryCallOptions: LanguageModelCallOptions) => Promise<RESULT>;
     callOptions: LanguageModelCallOptions;
     attempts?: Array<RetryAttempt<LanguageModel>>;
@@ -128,7 +134,10 @@ export class RetryableLanguageModel
                * - Attempt 2: 2000ms
                * - Attempt 3: 4000ms
                */
-              const modelAttemptsCount = countModelAttempts(retryModel.model, attempts);
+              const modelAttemptsCount = countModelAttempts(
+                retryModel.model,
+                attempts,
+              );
               const calculatedDelay = calculateExponentialBackoff(
                 retryModel.delay,
                 retryModel.backoffFactor,
@@ -157,7 +166,11 @@ export class RetryableLanguageModel
           throw error;
         }
 
-        const { retryModel, attempt } = await this.handleError(error, attempts, retryCallOptions);
+        const { retryModel, attempt } = await this.handleError(
+          error,
+          attempts,
+          retryCallOptions,
+        );
 
         attempts.push(attempt);
 
@@ -166,7 +179,10 @@ export class RetryableLanguageModel
            * Calculate exponential backoff delay based on the number of attempts for this specific model.
            * The delay grows exponentially: baseDelay * backoffFactor^attempts
            */
-          const modelAttemptsCount = countModelAttempts(retryModel.model, attempts);
+          const modelAttemptsCount = countModelAttempts(
+            retryModel.model,
+            attempts,
+          );
           const calculatedDelay = calculateExponentialBackoff(
             retryModel.delay,
             retryModel.backoffFactor,
@@ -257,7 +273,9 @@ export class RetryableLanguageModel
     return { retryModel, attempt: errorAttempt };
   }
 
-  async doGenerate(callOptions: LanguageModelCallOptions): Promise<LanguageModelGenerate> {
+  async doGenerate(
+    callOptions: LanguageModelCallOptions,
+  ): Promise<LanguageModelGenerate> {
     /**
      * Resolve the starting model (base or sticky)
      */
@@ -297,7 +315,9 @@ export class RetryableLanguageModel
     return result;
   }
 
-  async doStream(callOptions: LanguageModelCallOptions): Promise<LanguageModelStream> {
+  async doStream(
+    callOptions: LanguageModelCallOptions,
+  ): Promise<LanguageModelStream> {
     /**
      * Resolve the starting model (base or sticky)
      */
@@ -347,7 +367,9 @@ export class RetryableLanguageModel
      */
     const retryableStream = new ReadableStream({
       start: async (controller) => {
-        let reader: ReadableStreamDefaultReader<LanguageModelStreamPart> | undefined;
+        let reader:
+          | ReadableStreamDefaultReader<LanguageModelStreamPart>
+          | undefined;
         let isStreaming = false;
 
         while (true) {
@@ -413,7 +435,10 @@ export class RetryableLanguageModel
                * Calculate exponential backoff delay based on the number of attempts for this specific model.
                * The delay grows exponentially: baseDelay * backoffFactor^attempts
                */
-              const modelAttemptsCount = countModelAttempts(retryModel.model, attempts);
+              const modelAttemptsCount = countModelAttempts(
+                retryModel.model,
+                attempts,
+              );
               const calculatedDelay = calculateExponentialBackoff(
                 retryModel.delay,
                 retryModel.backoffFactor,

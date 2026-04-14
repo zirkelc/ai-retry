@@ -23,6 +23,7 @@ This is an AI SDK retry library that provides intelligent fallback mechanisms fo
 ### Retry System Design
 
 The retry system uses a functional approach where:
+
 1. Each retryable handler is a function that receives a `RetryContext` and returns a `RetryModel` or `undefined`
 2. The context includes error details, tried models map, and attempt counts
 3. Retry handlers can specify different fallback models and max attempts per model
@@ -31,9 +32,10 @@ The retry system uses a functional approach where:
 ### Built-in Retryable Handlers
 
 Located in `src/retryables/`:
+
 - **content-filter-triggered**: Switches models when content filtering blocks responses
 - **request-timeout**: Handles timeout errors
-- **request-not-retryable**: Handles non-retryable request errors  
+- **request-not-retryable**: Handles non-retryable request errors
 - **response-schema-mismatch**: Switches models for schema validation failures
 - **service-overloaded**: Handles HTTP 529 service overloaded errors
 - **anthropic-service-overloaded**: Anthropic-specific overload handling for both HTTP 529 and 200 OK responses

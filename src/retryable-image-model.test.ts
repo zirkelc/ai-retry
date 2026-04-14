@@ -1,4 +1,9 @@
-import { APICallError, generateImage, NoImageGeneratedError, RetryError } from 'ai';
+import {
+  APICallError,
+  generateImage,
+  NoImageGeneratedError,
+  RetryError,
+} from 'ai';
 import { describe, expect, it, vi } from 'vitest';
 import { createRetryable } from './create-retryable-model.js';
 import { noImageGenerated } from './retryables/no-image-generated.js';
@@ -131,7 +136,10 @@ describe('generateImage', () => {
         });
 
         const fallbackRetryable = (context: RetryContext<ImageModel>) => {
-          if (isErrorAttempt(context.current) && APICallError.isInstance(context.current.error)) {
+          if (
+            isErrorAttempt(context.current) &&
+            APICallError.isInstance(context.current.error)
+          ) {
             return { model: fallbackModel, maxAttempts: 1 };
           }
           return undefined;
@@ -189,7 +197,10 @@ describe('generateImage', () => {
         });
 
         const fallbackRetryable = (context: RetryContext<ImageModel>) => {
-          if (isErrorAttempt(context.current) && APICallError.isInstance(context.current.error)) {
+          if (
+            isErrorAttempt(context.current) &&
+            APICallError.isInstance(context.current.error)
+          ) {
             return { model: fallbackModel2, maxAttempts: 1 };
           }
           return undefined;
@@ -352,7 +363,8 @@ describe('generateImage', () => {
         });
 
         // Assert
-        const fallbackCallOptions = (fallbackModel.doGenerate as any).mock.calls[0][0];
+        const fallbackCallOptions = (fallbackModel.doGenerate as any).mock
+          .calls[0][0];
         expect(fallbackCallOptions.size).toBe(`1024x1024`);
         expect(fallbackCallOptions.seed).toBe(42);
       });
@@ -379,8 +391,11 @@ describe('generateImage', () => {
         });
 
         // Assert
-        const fallbackCallOptions = (fallbackModel.doGenerate as any).mock.calls[0][0];
-        expect(fallbackCallOptions.providerOptions).toEqual(sanitizedProviderOptions);
+        const fallbackCallOptions = (fallbackModel.doGenerate as any).mock
+          .calls[0][0];
+        expect(fallbackCallOptions.providerOptions).toEqual(
+          sanitizedProviderOptions,
+        );
       });
 
       it('should let onRetry overrides beat Retry.options', async () => {
@@ -404,7 +419,8 @@ describe('generateImage', () => {
         });
 
         // Assert
-        const fallbackCallOptions = (fallbackModel.doGenerate as any).mock.calls[0][0];
+        const fallbackCallOptions = (fallbackModel.doGenerate as any).mock
+          .calls[0][0];
         expect(fallbackCallOptions.size).toBe(`2048x2048`);
       });
 
@@ -426,7 +442,8 @@ describe('generateImage', () => {
         });
 
         // Assert
-        const fallbackCallOptions = (fallbackModel.doGenerate as any).mock.calls[0][0];
+        const fallbackCallOptions = (fallbackModel.doGenerate as any).mock
+          .calls[0][0];
         expect(fallbackCallOptions.size).toBe(`1024x1024`);
       });
 
@@ -451,7 +468,8 @@ describe('generateImage', () => {
         });
 
         // Assert
-        const fallbackCallOptions = (fallbackModel.doGenerate as any).mock.calls[0][0];
+        const fallbackCallOptions = (fallbackModel.doGenerate as any).mock
+          .calls[0][0];
         expect(fallbackCallOptions.seed).toBe(99);
       });
 
@@ -679,7 +697,8 @@ describe('generateImage', () => {
         });
 
         // Assert
-        const fallbackCallOptions = (fallbackModel.doGenerate as any).mock.calls[0][0];
+        const fallbackCallOptions = (fallbackModel.doGenerate as any).mock
+          .calls[0][0];
         expect(fallbackCallOptions.size).toBe(`1024x1024`);
       });
     });
@@ -703,7 +722,8 @@ describe('generateImage', () => {
         });
 
         // Assert
-        const fallbackCallOptions = (fallbackModel.doGenerate as any).mock.calls[0][0];
+        const fallbackCallOptions = (fallbackModel.doGenerate as any).mock
+          .calls[0][0];
         expect(fallbackCallOptions.seed).toBe(42);
       });
     });

@@ -155,7 +155,9 @@ describe('mergeLanguageModelCallOptions', () => {
           options: { providerOptions: { openai: { reasoningEffort: 'high' } } },
         },
         onRetryOverrides: {
-          options: { providerOptions: { openai: { reasoningEffort: 'minimal' } } },
+          options: {
+            providerOptions: { openai: { reasoningEffort: 'minimal' } },
+          },
         },
       });
 

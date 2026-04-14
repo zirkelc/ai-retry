@@ -88,8 +88,7 @@ export class MockEmbeddingModel implements EmbeddingModel {
   readonly provider: EmbeddingModel['provider'];
   readonly modelId: EmbeddingModel['modelId'];
   readonly maxEmbeddingsPerCall: EmbeddingModel['maxEmbeddingsPerCall'] = 1;
-  readonly supportsParallelCalls: EmbeddingModel['supportsParallelCalls'] =
-    true;
+  readonly supportsParallelCalls: EmbeddingModel['supportsParallelCalls'] = true;
 
   doEmbed: EmbeddingModel['doEmbed'];
 

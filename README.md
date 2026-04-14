@@ -14,6 +14,7 @@ Automatically handle API failures, content filtering, timeouts and other errors 
 `ai-retry` wraps the provided base model with a set of retry conditions (retryables). When a request fails with an error or the response is not satisfying, it iterates through the given retryables to find a suitable fallback model. It automatically tracks which models have been tried and how many attempts have been made to prevent infinite loops.
 
 It supports two types of retries:
+
 - Error-based retries: when the model throws an error (e.g. timeouts, API errors, etc.)
 - Result-based retries: when the model returns a successful response that needs retrying (e.g. content filtering, etc.)
 
@@ -24,7 +25,7 @@ This library supports both AI SDK v5 and v6. The main branch reflects the latest
 > [!WARNING]
 > Version compatibility:
 >
-> - Use `ai-retry` version 0.x for AI SDK v5. 
+> - Use `ai-retry` version 0.x for AI SDK v5.
 > - Use `ai-retry` version 1.x for AI SDK v6.
 
 ```bash
@@ -133,17 +134,13 @@ import { createRetryable } from 'ai-retry';
 
 const retryableModel = createRetryable({
   model: 'openai/gpt-5',
-  retries: [
-    'anthropic/claude-sonnet-4'
-  ]
+  retries: ['anthropic/claude-sonnet-4'],
 });
 
 // Is the same as:
 const retryableModel = createRetryable({
   model: gateway('openai/gpt-5'),
-  retries: [
-    gateway('anthropic/claude-sonnet-4')
-  ]
+  retries: [gateway('anthropic/claude-sonnet-4')],
 });
 ```
 
@@ -179,16 +176,16 @@ const retryableModel = createRetryable({
     // Dynamic retryables act like if-branches:
     // If error.code == 429 (too many requests) happens, retry with this model
     (context) => {
-      return context.current.error.statusCode === 429 
-        ? { model: azure('gpt-4-mini') }   // Retry 
-        : undefined;                       // Skip
+      return context.current.error.statusCode === 429
+        ? { model: azure('gpt-4-mini') } // Retry
+        : undefined; // Skip
     },
 
     // If error.message ~= "service overloaded", retry with this model
     (context) => {
-      return context.current.error.message.includes("service overloaded") 
-        ? { model: azure('gpt-4-mini') }   // Retry 
-        : undefined;                       // Skip
+      return context.current.error.message.includes('service overloaded')
+        ? { model: azure('gpt-4-mini') } // Retry
+        : undefined; // Skip
     },
 
     // Static retryables act like else branches:
@@ -245,7 +242,7 @@ const retryableModel = createRetryable({
   retries: [
     // Error-based: catches thrown errors like timeouts, rate limits, etc.
     errorBasedRetry,
-    
+
     // Result-based: catches successful responses that need retrying
     resultBasedRetry,
   ],
@@ -258,7 +255,7 @@ Result-based retryables are only available for generate calls like `generateText
 
 If you don't need precise error matching with custom logic and just want to fallback to different models on any error, you can simply provide a list of models.
 
-> [!NOTE] 
+> [!NOTE]
 > Use the object syntax `{ model: openai('gpt-4') }` if you need to provide additional options like `maxAttempts`, `delay`, etc.
 
 ```typescript
@@ -318,10 +315,10 @@ const rateLimitRetry: Retryable = (context) => {
 
 const retryableModel = createRetryable({
   // Base model
-  model: openai('gpt-4-mini'), 
+  model: openai('gpt-4-mini'),
   retries: [
     // Use custom rate limit retryable
-    rateLimitRetry
+    rateLimitRetry,
 
     // Other retryables...
   ],
@@ -340,12 +337,12 @@ import { RetryError } from 'ai';
 
 const retryableModel = createRetryable({
   // Base model = first attempt
-  model: azure('gpt-4-mini'), 
+  model: azure('gpt-4-mini'),
   retries: [
     // Fallback model 1 = Second attempt
-    openai('gpt-3.5-turbo'), 
+    openai('gpt-3.5-turbo'),
     // Fallback model 2 = Third attempt
-    anthropic('claude-3-haiku-20240307') 
+    anthropic('claude-3-haiku-20240307'),
   ],
 });
 
@@ -404,8 +401,8 @@ const retryableModel = createRetryable({
 
 Handle timeouts by switching to potentially faster models.
 
-> [!NOTE] 
-> You need to use an `abortSignal` with a timeout on your request. 
+> [!NOTE]
+> You need to use an `abortSignal` with a timeout on your request.
 
 When a request times out, the `requestTimeout` retryable will automatically create a fresh abort signal for the retry attempt. This prevents the retry from immediately failing due to the already-aborted signal from the original request. If you do not provide a `timeout` value, a default of 60 seconds is used for the retry attempt.
 
@@ -416,8 +413,8 @@ const retryableModel = createRetryable({
   model: azure('gpt-4'),
   retries: [
     // Defaults to 60 seconds timeout for the retry attempt
-    requestTimeout(azure('gpt-4-mini')), 
-    
+    requestTimeout(azure('gpt-4-mini')),
+
     // Or specify a custom timeout for the retry attempt
     requestTimeout(azure('gpt-4-mini'), { timeout: 30_000 }),
   ],
@@ -500,9 +497,8 @@ const result = await generateImage({
 
 Handle cases where the base model fails with a non-retryable error.
 
-> [!NOTE] 
+> [!NOTE]
 > You can check if an error is retryable with the `isRetryable` property on an [`APICallError`](https://ai-sdk.dev/docs/reference/ai-sdk-errors/ai-api-call-error#ai_apicallerror).
-
 
 ```typescript
 import { requestNotRetryable } from 'ai-retry/retryables';
@@ -517,7 +513,7 @@ const retryable = createRetryable({
 
 #### Retry After Delay
 
-If an error is retryable, such as 429 (Too Many Requests) or 503 (Service Unavailable) errors, it will be retried after a delay. 
+If an error is retryable, such as 429 (Too Many Requests) or 503 (Service Unavailable) errors, it will be retried after a delay.
 The delay and exponential backoff can be configured. If the response contains a [`retry-after`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Retry-After) header, it will be prioritized over the configured delay.
 
 Note that this retryable does not accept a model parameter, it will always retry the model from the latest failed attempt.
@@ -546,7 +542,7 @@ By default, if a [`retry-after-ms`](https://learn.microsoft.com/en-us/azure/ai-f
 
 Automatically retry with a different model when the response JSON doesn't match the expected schema.
 
-This is a result-based retryable that validates the model's JSON output against the schema set by structured output modes like `Output.object()`, `Output.array()`, and `Output.choice()`. 
+This is a result-based retryable that validates the model's JSON output against the schema set by structured output modes like `Output.object()`, `Output.array()`, and `Output.choice()`.
 Normally, schema validation happens outside the model in `generateText`, so a schema validation error would not be seen by the retryable model. This retryable catches it early and retries with a fallback model.
 
 > [!NOTE]
@@ -591,21 +587,27 @@ You can disable retries entirely, which is useful for testing or specific enviro
 ```typescript
 const retryableModel = createRetryable({
   model: openai('gpt-4'), // Base model
-  retries: [/* ... */],
+  retries: [
+    /* ... */
+  ],
   disabled: true, // Retries are completely disabled
 });
 
 // Or disable based on environment
 const retryableModel = createRetryable({
   model: openai('gpt-4'), // Base model
-  retries: [/* ... */],
+  retries: [
+    /* ... */
+  ],
   disabled: process.env.NODE_ENV === 'test', // Disable in test environment
 });
 
 // Or use a function for dynamic control
 const retryableModel = createRetryable({
   model: openai('gpt-4'), // Base model
-  retries: [/* ... */],
+  retries: [
+    /* ... */
+  ],
   disabled: () => !featureFlags.isEnabled('ai-retries'), // Check feature flag
 });
 ```
@@ -630,7 +632,7 @@ const result = await generateText({
   model: retryableModel,
   prompt: 'Write a vegetarian lasagna recipe for 4 people.',
   // Will be respected during delays
-  abortSignal: AbortSignal.timeout(60_000), 
+  abortSignal: AbortSignal.timeout(60_000),
 });
 ```
 
@@ -647,6 +649,7 @@ const retryableModel = createRetryable({
   ],
 });
 ```
+
 #### Timeouts
 
 When a retry specifies a `timeout` value, a fresh `AbortSignal.timeout()` is created for that retry attempt, replacing any existing abort signal. This is essential when retrying after timeout errors, as the original abort signal would already be in an aborted state.
@@ -656,9 +659,9 @@ const retryableModel = createRetryable({
   model: openai('gpt-4'),
   retries: [
     // Provide a fresh 30 second timeout for the retry
-    { 
-      model: openai('gpt-3.5-turbo'), 
-      timeout: 30_000 
+    {
+      model: openai('gpt-3.5-turbo'),
+      timeout: 30_000,
     },
   ],
 });
@@ -668,7 +671,7 @@ const result = await generateText({
   model: retryableModel,
   prompt: 'Write a story',
   // Original request timeout
-  abortSignal: AbortSignal.timeout(60_000), 
+  abortSignal: AbortSignal.timeout(60_000),
 });
 ```
 
@@ -681,11 +684,11 @@ const retryableModel = createRetryable({
   model: openai('gpt-4'),
   retries: [
     // Try this once
-    anthropic('claude-3-haiku-20240307'), 
+    anthropic('claude-3-haiku-20240307'),
     // Try this one more time (initial + 1 retry)
-    { model: openai('gpt-4'), maxAttempts: 2 }, 
+    { model: openai('gpt-4'), maxAttempts: 2 },
     // Already tried, won't be retried again
-    anthropic('claude-3-haiku-20240307') 
+    anthropic('claude-3-haiku-20240307'),
   ],
 });
 ```
@@ -757,38 +760,38 @@ The following options can be overridden:
 
 ##### Language Model Options
 
-| Option | Description |
-|--------|-------------|
-| [`prompt`](https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-text#prompt) | Override the entire prompt for the retry |
-| [`temperature`](https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-text#temperature) | Temperature setting for controlling randomness |
-| [`topP`](https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-text#topp) | Nucleus sampling parameter |
-| [`topK`](https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-text#topk) | Top-K sampling parameter |
-| [`maxOutputTokens`](https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-text#max-output-tokens) | Maximum number of tokens to generate |
-| [`seed`](https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-text#seed) | Random seed for deterministic generation |
-| [`stopSequences`](https://ai-sdk.dev/docs/reference/ai-sdk-types/generate-text#stopsequences) | Stop sequences to end generation |
-| [`presencePenalty`](https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-text#presencepenalty) | Presence penalty for reducing repetition |
-| [`frequencyPenalty`](https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-text#frequencypenalty) | Frequency penalty for reducing repetition |
-| [`headers`](https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-text#headers) | Additional HTTP headers |
-| [`providerOptions`](https://ai-sdk.dev/docs/reference/ai-sdk-types/generate-text#provideroptions) | Provider-specific options |
+| Option                                                                                             | Description                                    |
+| -------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| [`prompt`](https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-text#prompt)                     | Override the entire prompt for the retry       |
+| [`temperature`](https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-text#temperature)           | Temperature setting for controlling randomness |
+| [`topP`](https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-text#topp)                         | Nucleus sampling parameter                     |
+| [`topK`](https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-text#topk)                         | Top-K sampling parameter                       |
+| [`maxOutputTokens`](https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-text#max-output-tokens) | Maximum number of tokens to generate           |
+| [`seed`](https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-text#seed)                         | Random seed for deterministic generation       |
+| [`stopSequences`](https://ai-sdk.dev/docs/reference/ai-sdk-types/generate-text#stopsequences)      | Stop sequences to end generation               |
+| [`presencePenalty`](https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-text#presencepenalty)   | Presence penalty for reducing repetition       |
+| [`frequencyPenalty`](https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-text#frequencypenalty) | Frequency penalty for reducing repetition      |
+| [`headers`](https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-text#headers)                   | Additional HTTP headers                        |
+| [`providerOptions`](https://ai-sdk.dev/docs/reference/ai-sdk-types/generate-text#provideroptions)  | Provider-specific options                      |
 
 ##### Embedding Model Options
 
-| Option | Description |
-|--------|-------------|
-| [`values`](https://ai-sdk.dev/docs/reference/ai-sdk-core/embed#values) | Override the values to embed |
-| [`headers`](https://ai-sdk.dev/docs/reference/ai-sdk-core/embed#headers) | Additional HTTP headers |
-| [`providerOptions`](https://ai-sdk.dev/docs/reference/ai-sdk-core/embed#provideroptions) | Provider-specific options |
+| Option                                                                                   | Description                  |
+| ---------------------------------------------------------------------------------------- | ---------------------------- |
+| [`values`](https://ai-sdk.dev/docs/reference/ai-sdk-core/embed#values)                   | Override the values to embed |
+| [`headers`](https://ai-sdk.dev/docs/reference/ai-sdk-core/embed#headers)                 | Additional HTTP headers      |
+| [`providerOptions`](https://ai-sdk.dev/docs/reference/ai-sdk-core/embed#provideroptions) | Provider-specific options    |
 
 ##### Image Model Options
 
-| Option | Description |
-|--------|-------------|
-| [`n`](https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-image#n) | Number of images to generate |
-| [`size`](https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-image#size) | Size of generated images |
-| [`aspectRatio`](https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-image#aspectratio) | Aspect ratio of generated images |
-| [`seed`](https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-image#seed) | Random seed for reproducibility |
-| [`headers`](https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-image#headers) | Additional HTTP headers |
-| [`providerOptions`](https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-image#provideroptions) | Provider-specific options |
+| Option                                                                                            | Description                      |
+| ------------------------------------------------------------------------------------------------- | -------------------------------- |
+| [`n`](https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-image#n)                             | Number of images to generate     |
+| [`size`](https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-image#size)                       | Size of generated images         |
+| [`aspectRatio`](https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-image#aspectratio)         | Aspect ratio of generated images |
+| [`seed`](https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-image#seed)                       | Random seed for reproducibility  |
+| [`headers`](https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-image#headers)                 | Additional HTTP headers          |
+| [`providerOptions`](https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-image#provideroptions) | Provider-specific options        |
 
 #### Dynamic Call Options
 
@@ -831,7 +834,7 @@ const retryableModel = createRetryable({
   retries: [anthropic('claude-sonnet-4-20250514')],
   onRetry: async (context) => {
     const { current } = context;
-    
+
     const headers = await refreshAuthHeaders(current.model.provider);
     return { options: { headers } };
   },
@@ -847,6 +850,7 @@ const retryableModel = createRetryable({
 #### Logging
 
 You can use the following callbacks to log retry attempts and errors:
+
 - `onError` is invoked if an error occurs.
 - `onRetry` is invoked before attempting a retry.
 - `onSuccess` is invoked after a successful request with the model that handled it.
@@ -854,17 +858,24 @@ You can use the following callbacks to log retry attempts and errors:
 ```typescript
 const retryableModel = createRetryable({
   model: openai('gpt-4-mini'),
-  retries: [/* your retryables */],
+  retries: [
+    /* your retryables */
+  ],
   onError: (context) => {
-    console.error(`Attempt ${context.attempts.length} with ${context.current.model.provider}/${context.current.model.modelId} failed:`,
-      context.current.error
+    console.error(
+      `Attempt ${context.attempts.length} with ${context.current.model.provider}/${context.current.model.modelId} failed:`,
+      context.current.error,
     );
   },
   onRetry: (context) => {
-    console.log(`Retrying attempt ${context.attempts.length + 1} with model ${context.current.model.provider}/${context.current.model.modelId}...`);
+    console.log(
+      `Retrying attempt ${context.attempts.length + 1} with model ${context.current.model.provider}/${context.current.model.modelId}...`,
+    );
   },
   onSuccess: (context) => {
-    console.log(`Request handled by ${context.current.model.provider}/${context.current.model.modelId}`);
+    console.log(
+      `Request handled by ${context.current.model.provider}/${context.current.model.modelId}`,
+    );
   },
 });
 ```
@@ -873,11 +884,11 @@ const retryableModel = createRetryable({
 
 By default, every new request starts with the base model, even if a previous request was retried with a different model. The `reset` option changes this behavior by making the last successfully retried model **sticky**, that means subsequent requests will continue using that model instead of switching back to the base model. The reset value controls how long the retry model stays sticky before resetting back to the base model.
 
-| Value | Description |
-|-------|-------------|
-| `after-request` | Reset immediately after the next request (default) |
+| Value              | Description                                                  |
+| ------------------ | ------------------------------------------------------------ |
+| `after-request`    | Reset immediately after the next request (default)           |
 | `after-N-requests` | Keep the retry model for the next **N** requests, then reset |
-| `after-N-seconds` | Keep the retry model for **N** seconds, then reset |
+| `after-N-seconds`  | Keep the retry model for **N** seconds, then reset           |
 
 ##### Reset after each request (default)
 
@@ -928,7 +939,9 @@ In the second case, errors during stream processing will not always be retried, 
 Creates a retryable model that works with language models, embedding models, and image models.
 
 ```ts
-interface RetryableModelOptions<MODEL extends LanguageModelV3 | EmbeddingModelV3 | ImageModelV3> {
+interface RetryableModelOptions<
+  MODEL extends LanguageModelV3 | EmbeddingModelV3 | ImageModelV3,
+> {
   model: MODEL;
   retries: Array<Retryable<MODEL> | MODEL>;
   disabled?: boolean | (() => boolean);
@@ -936,15 +949,13 @@ interface RetryableModelOptions<MODEL extends LanguageModelV3 | EmbeddingModelV3
   onError?: (context: RetryContext<MODEL>) => void;
   onRetry?: (
     context: RetryContext<MODEL>,
-  ) =>
-    | void
-    | OnRetryOverrides<MODEL>
-    | Promise<void | OnRetryOverrides<MODEL>>;
+  ) => void | OnRetryOverrides<MODEL> | Promise<void | OnRetryOverrides<MODEL>>;
   onSuccess?: (context: SuccessContext<MODEL>) => void;
 }
 ```
 
 **Options:**
+
 - `model`: The base model to use for the initial request.
 - `retries`: Array of retryables (functions, models, or retry objects) to attempt on failure.
 - `disabled`: Disable all retry logic. Can be a boolean or function returning boolean. Default: `false` (retries enabled).
@@ -974,9 +985,7 @@ A `Retryable` is a function that receives a `RetryContext` with the current erro
 It should evaluate the error/result and decide whether to retry by returning a `Retry` or to skip by returning `undefined`.
 
 ```ts
-type Retryable = (
-  context: RetryContext
-) => Retry | Promise<Retry> | undefined;
+type Retryable = (context: RetryContext) => Retry | Promise<Retry> | undefined;
 ```
 
 #### `Retry`
@@ -986,12 +995,15 @@ A `Retry` specifies the model to retry and optional settings. The available opti
 ```typescript
 interface Retry {
   model: LanguageModelV3 | EmbeddingModelV3 | ImageModelV3;
-  maxAttempts?: number;      // Maximum retry attempts per model (default: 1)
-  delay?: number;            // Delay in milliseconds before retrying
-  backoffFactor?: number;    // Multiplier for exponential backoff
-  timeout?: number;          // Timeout in milliseconds for the retry attempt
+  maxAttempts?: number; // Maximum retry attempts per model (default: 1)
+  delay?: number; // Delay in milliseconds before retrying
+  backoffFactor?: number; // Multiplier for exponential backoff
+  timeout?: number; // Timeout in milliseconds for the retry attempt
   providerOptions?: ProviderOptions; // @deprecated - use options.providerOptions instead
-  options?: LanguageModelV3CallOptions | EmbeddingModelV3CallOptions | ImageModelV3CallOptions; // Call options to override for this retry
+  options?:
+    | LanguageModelV3CallOptions
+    | EmbeddingModelV3CallOptions
+    | ImageModelV3CallOptions; // Call options to override for this retry
 }
 ```
 
@@ -1025,8 +1037,15 @@ A `SuccessAttempt` represents the successful attempt with the model, result, and
 interface SuccessAttempt {
   type: 'success';
   model: LanguageModelV3 | EmbeddingModelV3 | ImageModelV3;
-  result: LanguageModelGenerate | LanguageModelStream | EmbeddingModelEmbed | ImageModelGenerate;
-  options: LanguageModelV3CallOptions | EmbeddingModelV3CallOptions | ImageModelV3CallOptions;
+  result:
+    | LanguageModelGenerate
+    | LanguageModelStream
+    | EmbeddingModelEmbed
+    | ImageModelGenerate;
+  options:
+    | LanguageModelV3CallOptions
+    | EmbeddingModelV3CallOptions
+    | ImageModelV3CallOptions;
 }
 ```
 
@@ -1041,7 +1060,10 @@ type RetryAttempt =
       type: 'error';
       error: unknown;
       model: LanguageModelV3 | EmbeddingModelV3 | ImageModelV3;
-      options: LanguageModelV3CallOptions | EmbeddingModelV3CallOptions | ImageModelV3CallOptions;
+      options:
+        | LanguageModelV3CallOptions
+        | EmbeddingModelV3CallOptions
+        | ImageModelV3CallOptions;
     }
   | {
       type: 'result';

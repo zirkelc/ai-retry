@@ -12,10 +12,10 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  checks: write         # needed for checks
-  id-token: write       # needed for npm publish with provenance
-  contents: write       # needed for github release
-  pull-requests: write  # needed for coverage comment
+  checks: write # needed for checks
+  id-token: write # needed for npm publish with provenance
+  contents: write # needed for github release
+  pull-requests: write # needed for coverage comment
 
 jobs:
   lint:

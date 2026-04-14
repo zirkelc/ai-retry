@@ -53,7 +53,8 @@ export class RetryableEmbeddingModel
     /**
      * Track all attempts.
      */
-    const attempts: Array<RetryErrorAttempt<EmbeddingModel>> = input.attempts ?? [];
+    const attempts: Array<RetryErrorAttempt<EmbeddingModel>> =
+      input.attempts ?? [];
 
     /**
      * Track current retry configuration.
@@ -115,7 +116,11 @@ export class RetryableEmbeddingModel
           throw error;
         }
 
-        const { retryModel, attempt } = await this.handleError(error, attempts, retryCallOptions);
+        const { retryModel, attempt } = await this.handleError(
+          error,
+          attempts,
+          retryCallOptions,
+        );
 
         attempts.push(attempt);
 
@@ -128,7 +133,10 @@ export class RetryableEmbeddingModel
            * - Attempt 2: 2000ms
            * - Attempt 3: 4000ms
            */
-          const modelAttemptsCount = countModelAttempts(retryModel.model, attempts);
+          const modelAttemptsCount = countModelAttempts(
+            retryModel.model,
+            attempts,
+          );
           const calculatedDelay = calculateExponentialBackoff(
             retryModel.delay,
             retryModel.backoffFactor,
@@ -189,7 +197,9 @@ export class RetryableEmbeddingModel
     return { retryModel, attempt: errorAttempt };
   }
 
-  async doEmbed(callOptions: EmbeddingModelCallOptions): Promise<EmbeddingModelEmbed> {
+  async doEmbed(
+    callOptions: EmbeddingModelCallOptions,
+  ): Promise<EmbeddingModelEmbed> {
     /**
      * Resolve the starting model (base or sticky)
      */

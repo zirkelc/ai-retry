@@ -19,17 +19,23 @@ import type {
  *   3. `currentRetry.providerOptions` (deprecated top-level form)
  *   4. `base` (call options' own `providerOptions`)
  */
-function resolveProviderOptions<MODEL extends LanguageModel | EmbeddingModel | ImageModel>(
+function resolveProviderOptions<
+  MODEL extends LanguageModel | EmbeddingModel | ImageModel,
+>(
   base: ProviderOptions,
   currentRetry: Retry<MODEL> | undefined,
   onRetryOverrides: OnRetryOverrides<MODEL> | undefined,
 ): ProviderOptions;
-function resolveProviderOptions<MODEL extends LanguageModel | EmbeddingModel | ImageModel>(
+function resolveProviderOptions<
+  MODEL extends LanguageModel | EmbeddingModel | ImageModel,
+>(
   base: ProviderOptions | undefined,
   currentRetry: Retry<MODEL> | undefined,
   onRetryOverrides: OnRetryOverrides<MODEL> | undefined,
 ): ProviderOptions | undefined;
-function resolveProviderOptions<MODEL extends LanguageModel | EmbeddingModel | ImageModel>(
+function resolveProviderOptions<
+  MODEL extends LanguageModel | EmbeddingModel | ImageModel,
+>(
   base: ProviderOptions | undefined,
   currentRetry: Retry<MODEL> | undefined,
   onRetryOverrides: OnRetryOverrides<MODEL> | undefined,
@@ -49,7 +55,9 @@ function resolveProviderOptions<MODEL extends LanguageModel | EmbeddingModel | I
  * fresh `AbortSignal.timeout(...)` is created (override wins). Otherwise
  * the base `abortSignal` is preserved unchanged.
  */
-function resolveAbortSignal<MODEL extends LanguageModel | EmbeddingModel | ImageModel>(
+function resolveAbortSignal<
+  MODEL extends LanguageModel | EmbeddingModel | ImageModel,
+>(
   base: AbortSignal | undefined,
   currentRetry: Retry<MODEL> | undefined,
   onRetryOverrides: OnRetryOverrides<MODEL> | undefined,
@@ -87,9 +95,14 @@ export function mergeLanguageModelCallOptions(input: {
       overrideOptions.maxOutputTokens ??
       retryOptions.maxOutputTokens ??
       callOptions.maxOutputTokens,
-    temperature: overrideOptions.temperature ?? retryOptions.temperature ?? callOptions.temperature,
+    temperature:
+      overrideOptions.temperature ??
+      retryOptions.temperature ??
+      callOptions.temperature,
     stopSequences:
-      overrideOptions.stopSequences ?? retryOptions.stopSequences ?? callOptions.stopSequences,
+      overrideOptions.stopSequences ??
+      retryOptions.stopSequences ??
+      callOptions.stopSequences,
     topP: overrideOptions.topP ?? retryOptions.topP ?? callOptions.topP,
     topK: overrideOptions.topK ?? retryOptions.topK ?? callOptions.topK,
     presencePenalty:
@@ -101,7 +114,8 @@ export function mergeLanguageModelCallOptions(input: {
       retryOptions.frequencyPenalty ??
       callOptions.frequencyPenalty,
     seed: overrideOptions.seed ?? retryOptions.seed ?? callOptions.seed,
-    headers: overrideOptions.headers ?? retryOptions.headers ?? callOptions.headers,
+    headers:
+      overrideOptions.headers ?? retryOptions.headers ?? callOptions.headers,
     providerOptions: resolveProviderOptions<LanguageModel>(
       callOptions.providerOptions,
       currentRetry,
@@ -130,7 +144,8 @@ export function mergeEmbeddingModelCallOptions(input: {
   return {
     ...callOptions,
     values: overrideOptions.values ?? retryOptions.values ?? callOptions.values,
-    headers: overrideOptions.headers ?? retryOptions.headers ?? callOptions.headers,
+    headers:
+      overrideOptions.headers ?? retryOptions.headers ?? callOptions.headers,
     providerOptions: resolveProviderOptions<EmbeddingModel>(
       callOptions.providerOptions,
       currentRetry,
@@ -160,9 +175,13 @@ export function mergeImageModelCallOptions(input: {
     ...callOptions,
     n: overrideOptions.n ?? retryOptions.n ?? callOptions.n,
     size: overrideOptions.size ?? retryOptions.size ?? callOptions.size,
-    aspectRatio: overrideOptions.aspectRatio ?? retryOptions.aspectRatio ?? callOptions.aspectRatio,
+    aspectRatio:
+      overrideOptions.aspectRatio ??
+      retryOptions.aspectRatio ??
+      callOptions.aspectRatio,
     seed: overrideOptions.seed ?? retryOptions.seed ?? callOptions.seed,
-    headers: overrideOptions.headers ?? retryOptions.headers ?? callOptions.headers,
+    headers:
+      overrideOptions.headers ?? retryOptions.headers ?? callOptions.headers,
     providerOptions: resolveProviderOptions<ImageModel>(
       callOptions.providerOptions,
       currentRetry,

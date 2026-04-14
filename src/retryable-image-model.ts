@@ -16,7 +16,10 @@ import type {
 } from './types.js';
 import { isAbortError } from './utils.js';
 
-export class RetryableImageModel extends BaseRetryableModel<ImageModel> implements ImageModel {
+export class RetryableImageModel
+  extends BaseRetryableModel<ImageModel>
+  implements ImageModel
+{
   readonly specificationVersion = 'v3';
 
   get modelId() {
@@ -108,7 +111,11 @@ export class RetryableImageModel extends BaseRetryableModel<ImageModel> implemen
           throw error;
         }
 
-        const { retryModel, attempt } = await this.handleError(error, attempts, retryCallOptions);
+        const { retryModel, attempt } = await this.handleError(
+          error,
+          attempts,
+          retryCallOptions,
+        );
 
         attempts.push(attempt);
 
@@ -121,7 +128,10 @@ export class RetryableImageModel extends BaseRetryableModel<ImageModel> implemen
            * - Attempt 2: 2000ms
            * - Attempt 3: 4000ms
            */
-          const modelAttemptsCount = countModelAttempts(retryModel.model, attempts);
+          const modelAttemptsCount = countModelAttempts(
+            retryModel.model,
+            attempts,
+          );
           const calculatedDelay = calculateExponentialBackoff(
             retryModel.delay,
             retryModel.backoffFactor,
@@ -182,7 +192,9 @@ export class RetryableImageModel extends BaseRetryableModel<ImageModel> implemen
     return { retryModel, attempt: errorAttempt };
   }
 
-  async doGenerate(callOptions: ImageModelCallOptions): Promise<ImageModelGenerate> {
+  async doGenerate(
+    callOptions: ImageModelCallOptions,
+  ): Promise<ImageModelGenerate> {
     /**
      * Resolve the starting model (base or sticky)
      */

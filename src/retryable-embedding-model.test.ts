@@ -27,7 +27,8 @@ const retryableError = new APICallError({
   requestBodyValues: {},
   statusCode: 429,
   responseHeaders: {},
-  responseBody: '{"error": {"message": "Rate limit exceeded", "code": "rate_limit_exceeded"}}',
+  responseBody:
+    '{"error": {"message": "Rate limit exceeded", "code": "rate_limit_exceeded"}}',
   isRetryable: true,
   data: {
     error: {
@@ -43,7 +44,8 @@ const nonRetryableError = new APICallError({
   requestBodyValues: {},
   statusCode: 401,
   responseHeaders: {},
-  responseBody: '{"error": {"message": "Invalid API key", "code": "invalid_api_key"}}',
+  responseBody:
+    '{"error": {"message": "Invalid API key", "code": "invalid_api_key"}}',
   isRetryable: false,
   data: {
     error: {
@@ -85,7 +87,10 @@ describe('embed', () => {
         });
 
         const fallbackRetryable = (context: RetryContext<EmbeddingModel>) => {
-          if (isErrorAttempt(context.current) && APICallError.isInstance(context.current.error)) {
+          if (
+            isErrorAttempt(context.current) &&
+            APICallError.isInstance(context.current.error)
+          ) {
             return { model: fallbackModel, maxAttempts: 1 };
           }
           return undefined;
@@ -144,7 +149,10 @@ describe('embed', () => {
         });
 
         const fallbackRetryable = (context: RetryContext<EmbeddingModel>) => {
-          if (isErrorAttempt(context.current) && APICallError.isInstance(context.current.error)) {
+          if (
+            isErrorAttempt(context.current) &&
+            APICallError.isInstance(context.current.error)
+          ) {
             return { model: fallbackModel2, maxAttempts: 1 };
           }
           return undefined;
@@ -601,7 +609,9 @@ describe('embed', () => {
         await embed({
           model: createRetryable({
             model: baseModel,
-            retries: [{ model: fallbackModel, options: { values: ['from-retry'] } }],
+            retries: [
+              { model: fallbackModel, options: { values: ['from-retry'] } },
+            ],
             onRetry: () => ({ options: { values: ['from-onRetry'] } }),
           }),
           value: 'original',
@@ -624,7 +634,9 @@ describe('embed', () => {
         await embed({
           model: createRetryable({
             model: baseModel,
-            retries: [{ model: fallbackModel, options: { values: ['from-retry'] } }],
+            retries: [
+              { model: fallbackModel, options: { values: ['from-retry'] } },
+            ],
             onRetry: () => undefined,
           }),
           value: 'original',
@@ -787,7 +799,9 @@ describe('embed', () => {
 
       const errorContext = onErrorSpy.mock.calls[0]![0];
       expect(errorContext.current.options).toBeDefined();
-      expect((errorContext.current.options as { values: string[] }).values).toEqual(['test value']);
+      expect(
+        (errorContext.current.options as { values: string[] }).values,
+      ).toEqual(['test value']);
     });
 
     it('should reflect overridden options in retry attempts', async () => {
@@ -804,7 +818,10 @@ describe('embed', () => {
       await embed({
         model: createRetryable({
           model: baseModel,
-          retries: [{ model: fallbackModel, options: { values: overrideValues } }, finalModel],
+          retries: [
+            { model: fallbackModel, options: { values: overrideValues } },
+            finalModel,
+          ],
           onError: onErrorSpy,
         }),
         value: 'original value',
@@ -815,15 +832,15 @@ describe('embed', () => {
 
       // First attempt should have original value
       const firstErrorContext = onErrorSpy.mock.calls[0]![0];
-      expect((firstErrorContext.current.options as { values: string[] }).values).toEqual([
-        'original value',
-      ]);
+      expect(
+        (firstErrorContext.current.options as { values: string[] }).values,
+      ).toEqual(['original value']);
 
       // Second attempt should have overridden value
       const secondErrorContext = onErrorSpy.mock.calls[1]![0];
-      expect((secondErrorContext.current.options as { values: string[] }).values).toEqual(
-        overrideValues,
-      );
+      expect(
+        (secondErrorContext.current.options as { values: string[] }).values,
+      ).toEqual(overrideValues);
     });
   });
 
@@ -1076,7 +1093,10 @@ describe('embed', () => {
         let fallbackModelSignal: AbortSignal | undefined;
         // Use TimeoutError (from AbortSignal.timeout()) which should be retried,
         // as opposed to AbortError (from user cancellation) which should NOT be retried
-        const timeoutError = new DOMException('The operation timed out', 'TimeoutError');
+        const timeoutError = new DOMException(
+          'The operation timed out',
+          'TimeoutError',
+        );
 
         const baseModel = new MockEmbeddingModel({
           doEmbed: async (opts: any) => {
@@ -1142,7 +1162,9 @@ describe('embed', () => {
         await embed({
           model: createRetryable({
             model: baseModel,
-            retries: [{ model: fallbackModel, options: { values: overrideValues } }],
+            retries: [
+              { model: fallbackModel, options: { values: overrideValues } },
+            ],
           }),
           value: 'original value',
         });
@@ -1168,7 +1190,9 @@ describe('embed', () => {
         await embed({
           model: createRetryable({
             model: baseModel,
-            retries: [{ model: fallbackModel, options: { headers: retryHeaders } }],
+            retries: [
+              { model: fallbackModel, options: { headers: retryHeaders } },
+            ],
           }),
           value: 'Hello!',
         });
@@ -1205,7 +1229,9 @@ describe('embed', () => {
           }),
           value: 'Hello!',
         });
-        expect.unreachable('Should throw RetryError when all attempts are exhausted');
+        expect.unreachable(
+          'Should throw RetryError when all attempts are exhausted',
+        );
       } catch (error) {
         expect(error).toBeInstanceOf(RetryError);
 
@@ -1232,7 +1258,9 @@ describe('embed', () => {
           value: 'Hello!',
           maxRetries: 0, // No automatic retries
         });
-        expect.unreachable('Should throw original error on first attempt with no retries');
+        expect.unreachable(
+          'Should throw original error on first attempt with no retries',
+        );
       } catch (error) {
         expect(error).not.toBeInstanceOf(RetryError);
         expect(error).toBe(retryableError);
@@ -1255,7 +1283,9 @@ describe('embed', () => {
           value: 'Hello!',
           maxRetries: 0, // No automatic retries
         });
-        expect.unreachable('Should throw original error when retry models return undefined');
+        expect.unreachable(
+          'Should throw original error when retry models return undefined',
+        );
       } catch (error) {
         expect(error).not.toBeInstanceOf(RetryError);
         expect(error).toBe(nonRetryableError);
