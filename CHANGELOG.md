@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.0](https://github.com/zirkelc/ai-retry/compare/v1.3.1...v1.4.0) (2026-04-01)
+
+
+### Features
+
+* add onSuccess callback to expose which model handled the request ([02b0766](https://github.com/zirkelc/ai-retry/commit/02b076690bd372276c09205128826e6fcdff772b)), closes [#31](https://github.com/zirkelc/ai-retry/issues/31)
+
 ## [1.3.1](https://github.com/zirkelc/ai-retry/compare/v1.3.0...v1.3.1) (2026-04-01)
 
 
