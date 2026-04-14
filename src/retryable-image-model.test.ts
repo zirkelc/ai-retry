@@ -1,9 +1,4 @@
-import {
-  APICallError,
-  generateImage,
-  NoImageGeneratedError,
-  RetryError,
-} from 'ai';
+import { APICallError, generateImage, NoImageGeneratedError, RetryError } from 'ai';
 import { describe, expect, it, vi } from 'vitest';
 import { createRetryable } from './create-retryable-model.js';
 import { noImageGenerated } from './retryables/no-image-generated.js';
@@ -14,6 +9,7 @@ import { MockImageModel } from './test-utils.js';
 import type {
   ImageModel,
   ImageModelGenerate,
+  OnRetryOverrides,
   Retryable,
   RetryableModelOptions,
   RetryContext,
@@ -103,8 +99,8 @@ const noImageError = new NoImageGeneratedError({
   message: `No image generated`,
 });
 
-describe(`generateImage`, () => {
-  it(`should generate image successfully when no errors occur`, async () => {
+describe('generateImage', () => {
+  it('should generate image successfully when no errors occur', async () => {
     // Arrange
     const baseModel = new MockImageModel({
       doGenerate: mockImageResult,
@@ -125,9 +121,9 @@ describe(`generateImage`, () => {
     expect(result.images.length).toBe(1);
   });
 
-  describe(`retries`, () => {
-    describe(`error-based retries`, () => {
-      it(`should retry with errors`, async () => {
+  describe('retries', () => {
+    describe('error-based retries', () => {
+      it('should retry with errors', async () => {
         // Arrange
         const baseModel = new MockImageModel({ doGenerate: retryableError });
         const fallbackModel = new MockImageModel({
@@ -135,10 +131,7 @@ describe(`generateImage`, () => {
         });
 
         const fallbackRetryable = (context: RetryContext<ImageModel>) => {
-          if (
-            isErrorAttempt(context.current) &&
-            APICallError.isInstance(context.current.error)
-          ) {
+          if (isErrorAttempt(context.current) && APICallError.isInstance(context.current.error)) {
             return { model: fallbackModel, maxAttempts: 1 };
           }
           return undefined;
@@ -159,7 +152,7 @@ describe(`generateImage`, () => {
         expect(result.images.length).toBe(1);
       });
 
-      it(`should not retry without errors`, async () => {
+      it('should not retry without errors', async () => {
         // Arrange
         const baseModel = new MockImageModel({ doGenerate: mockImageResult });
         const fallbackModel1 = new MockImageModel({
@@ -185,7 +178,7 @@ describe(`generateImage`, () => {
         expect(result.images.length).toBe(1);
       });
 
-      it(`should use plain image models for error-based attempts`, async () => {
+      it('should use plain image models for error-based attempts', async () => {
         // Arrange
         const baseModel = new MockImageModel({ doGenerate: retryableError });
         const fallbackModel1 = new MockImageModel({
@@ -196,10 +189,7 @@ describe(`generateImage`, () => {
         });
 
         const fallbackRetryable = (context: RetryContext<ImageModel>) => {
-          if (
-            isErrorAttempt(context.current) &&
-            APICallError.isInstance(context.current.error)
-          ) {
+          if (isErrorAttempt(context.current) && APICallError.isInstance(context.current.error)) {
             return { model: fallbackModel2, maxAttempts: 1 };
           }
           return undefined;
@@ -223,8 +213,8 @@ describe(`generateImage`, () => {
     });
   });
 
-  describe(`disabled`, () => {
-    it(`should not retry when disabled is true`, async () => {
+  describe('disabled', () => {
+    it('should not retry when disabled is true', async () => {
       // Arrange
       const baseModel = new MockImageModel({ doGenerate: retryableError });
       const fallbackModel = new MockImageModel({
@@ -252,7 +242,7 @@ describe(`generateImage`, () => {
       expect(fallbackModel.doGenerate).toHaveBeenCalledTimes(0);
     });
 
-    it(`should not retry when disabled function returns true`, async () => {
+    it('should not retry when disabled function returns true', async () => {
       // Arrange
       const baseModel = new MockImageModel({ doGenerate: retryableError });
       const fallbackModel = new MockImageModel({
@@ -281,15 +271,15 @@ describe(`generateImage`, () => {
     });
   });
 
-  describe(`callbacks`, () => {
-    it(`should call onError callback when error occurs`, async () => {
+  describe('onError', () => {
+    it('should call onError callback when error occurs', async () => {
       // Arrange
       const baseModel = new MockImageModel({ doGenerate: retryableError });
       const fallbackModel = new MockImageModel({
         doGenerate: mockImageResult,
       });
 
-      const onError = vi.fn<OnError>();
+      const onErrorSpy = vi.fn<OnError>();
 
       const fallbackRetryable: Retryable<ImageModel> = () => {
         return { model: fallbackModel, maxAttempts: 1 };
@@ -300,24 +290,26 @@ describe(`generateImage`, () => {
         model: createRetryable({
           model: baseModel,
           retries: [fallbackRetryable],
-          onError,
+          onError: onErrorSpy,
         }),
         prompt: `A beautiful sunset`,
       });
 
       // Assert
-      expect(onError).toHaveBeenCalledTimes(1);
-      expect(onError.mock.calls[0]?.[0].current.type).toBe(`error`);
+      expect(onErrorSpy).toHaveBeenCalledTimes(1);
+      expect(onErrorSpy.mock.calls[0]?.[0].current.type).toBe(`error`);
     });
+  });
 
-    it(`should call onRetry callback before retry`, async () => {
+  describe('onRetry', () => {
+    it('should call onRetry callback before retry', async () => {
       // Arrange
       const baseModel = new MockImageModel({ doGenerate: retryableError });
       const fallbackModel = new MockImageModel({
         doGenerate: mockImageResult,
       });
 
-      const onRetry = vi.fn<OnRetry>();
+      const onRetrySpy = vi.fn<OnRetry>();
 
       const fallbackRetryable: Retryable<ImageModel> = () => {
         return { model: fallbackModel, maxAttempts: 1 };
@@ -328,94 +320,249 @@ describe(`generateImage`, () => {
         model: createRetryable({
           model: baseModel,
           retries: [fallbackRetryable],
-          onRetry,
+          onRetry: onRetrySpy,
         }),
         prompt: `A beautiful sunset`,
       });
 
       // Assert
-      expect(onRetry).toHaveBeenCalledTimes(1);
+      expect(onRetrySpy).toHaveBeenCalledTimes(1);
     });
 
-    it(`should call onSuccess with base model when no retry occurs`, async () => {
+    describe('overrides', () => {
+      it('should override size and seed for the upcoming retry attempt', async () => {
+        // Arrange
+        const baseModel = new MockImageModel({ doGenerate: retryableError });
+        const fallbackModel = new MockImageModel({
+          doGenerate: mockImageResult,
+        });
+        const override: OnRetryOverrides<ImageModel> = {
+          options: { size: `1024x1024`, seed: 42 },
+        };
+
+        // Act
+        await generateImage({
+          model: createRetryable({
+            model: baseModel,
+            retries: [fallbackModel],
+            onRetry: () => override,
+          }),
+          prompt: `A beautiful sunset`,
+          size: `512x512`,
+        });
+
+        // Assert
+        const fallbackCallOptions = (fallbackModel.doGenerate as any).mock.calls[0][0];
+        expect(fallbackCallOptions.size).toBe(`1024x1024`);
+        expect(fallbackCallOptions.seed).toBe(42);
+      });
+
+      it('should override providerOptions for the upcoming retry attempt', async () => {
+        // Arrange
+        const baseModel = new MockImageModel({ doGenerate: retryableError });
+        const fallbackModel = new MockImageModel({
+          doGenerate: mockImageResult,
+        });
+        const sanitizedProviderOptions = { openai: { quality: `low` } };
+
+        // Act
+        await generateImage({
+          model: createRetryable({
+            model: baseModel,
+            retries: [fallbackModel],
+            onRetry: () => ({
+              options: { providerOptions: sanitizedProviderOptions },
+            }),
+          }),
+          prompt: `A beautiful sunset`,
+          providerOptions: { openai: { quality: `high` } },
+        });
+
+        // Assert
+        const fallbackCallOptions = (fallbackModel.doGenerate as any).mock.calls[0][0];
+        expect(fallbackCallOptions.providerOptions).toEqual(sanitizedProviderOptions);
+      });
+
+      it('should let onRetry overrides beat Retry.options', async () => {
+        // Arrange
+        const baseModel = new MockImageModel({ doGenerate: retryableError });
+        const fallbackModel = new MockImageModel({
+          doGenerate: mockImageResult,
+        });
+        const override: OnRetryOverrides<ImageModel> = {
+          options: { size: `2048x2048` },
+        };
+
+        // Act
+        await generateImage({
+          model: createRetryable({
+            model: baseModel,
+            retries: [{ model: fallbackModel, options: { size: `1024x1024` } }],
+            onRetry: () => override,
+          }),
+          prompt: `A beautiful sunset`,
+        });
+
+        // Assert
+        const fallbackCallOptions = (fallbackModel.doGenerate as any).mock.calls[0][0];
+        expect(fallbackCallOptions.size).toBe(`2048x2048`);
+      });
+
+      it('should fall back to Retry.options when onRetry returns undefined', async () => {
+        // Arrange
+        const baseModel = new MockImageModel({ doGenerate: retryableError });
+        const fallbackModel = new MockImageModel({
+          doGenerate: mockImageResult,
+        });
+
+        // Act
+        await generateImage({
+          model: createRetryable({
+            model: baseModel,
+            retries: [{ model: fallbackModel, options: { size: `1024x1024` } }],
+            onRetry: () => undefined,
+          }),
+          prompt: `A beautiful sunset`,
+        });
+
+        // Assert
+        const fallbackCallOptions = (fallbackModel.doGenerate as any).mock.calls[0][0];
+        expect(fallbackCallOptions.size).toBe(`1024x1024`);
+      });
+
+      it('should support async onRetry returning overrides', async () => {
+        // Arrange
+        const baseModel = new MockImageModel({ doGenerate: retryableError });
+        const fallbackModel = new MockImageModel({
+          doGenerate: mockImageResult,
+        });
+
+        // Act
+        await generateImage({
+          model: createRetryable({
+            model: baseModel,
+            retries: [fallbackModel],
+            onRetry: async () => {
+              await Promise.resolve();
+              return { options: { seed: 99 } };
+            },
+          }),
+          prompt: `A beautiful sunset`,
+        });
+
+        // Assert
+        const fallbackCallOptions = (fallbackModel.doGenerate as any).mock.calls[0][0];
+        expect(fallbackCallOptions.seed).toBe(99);
+      });
+
+      it('should override timeout for the upcoming retry attempt', async () => {
+        // Arrange
+        let fallbackSignal: AbortSignal | undefined;
+        const baseModel = new MockImageModel({ doGenerate: retryableError });
+        const fallbackModel = new MockImageModel({
+          doGenerate: async (opts) => {
+            fallbackSignal = opts.abortSignal;
+            return mockImageResult;
+          },
+        });
+
+        // Act
+        await generateImage({
+          model: createRetryable({
+            model: baseModel,
+            retries: [fallbackModel],
+            onRetry: () => ({ timeout: 30_000 }),
+          }),
+          prompt: `A beautiful sunset`,
+        });
+
+        // Assert
+        expect(fallbackSignal).toBeDefined();
+        expect(fallbackSignal?.aborted).toBe(false);
+      });
+    });
+  });
+
+  describe('onSuccess', () => {
+    it('should call onSuccess with base model when no retry occurs', async () => {
       // Arrange
       const baseModel = new MockImageModel({ doGenerate: mockImageResult });
-      const onSuccess = vi.fn<OnSuccess>();
+      const onSuccessSpy = vi.fn<OnSuccess>();
 
       // Act
       await generateImage({
         model: createRetryable({
           model: baseModel,
           retries: [],
-          onSuccess,
+          onSuccess: onSuccessSpy,
         }),
         prompt: `A beautiful sunset`,
       });
 
       // Assert
-      expect(onSuccess).toHaveBeenCalledTimes(1);
+      expect(onSuccessSpy).toHaveBeenCalledTimes(1);
 
-      const successCall = onSuccess.mock.calls[0]![0];
+      const successCall = onSuccessSpy.mock.calls[0]![0];
       expect(successCall.current.type).toBe('success');
       expect(successCall.current.model).toBe(baseModel);
       expect(successCall.current.result).toBeDefined();
       expect(successCall.attempts.length).toBe(0);
     });
 
-    it(`should call onSuccess with fallback model after retry`, async () => {
+    it('should call onSuccess with fallback model after retry', async () => {
       // Arrange
       const baseModel = new MockImageModel({ doGenerate: retryableError });
       const fallbackModel = new MockImageModel({
         doGenerate: mockImageResult,
       });
 
-      const onSuccess = vi.fn<OnSuccess>();
+      const onSuccessSpy = vi.fn<OnSuccess>();
 
       // Act
       await generateImage({
         model: createRetryable({
           model: baseModel,
           retries: [fallbackModel],
-          onSuccess,
+          onSuccess: onSuccessSpy,
         }),
         prompt: `A beautiful sunset`,
       });
 
       // Assert
-      expect(onSuccess).toHaveBeenCalledTimes(1);
+      expect(onSuccessSpy).toHaveBeenCalledTimes(1);
 
-      const successCall = onSuccess.mock.calls[0]![0];
+      const successCall = onSuccessSpy.mock.calls[0]![0];
       expect(successCall.current.type).toBe('success');
       expect(successCall.current.model).toBe(fallbackModel);
       expect(successCall.current.result).toBeDefined();
       expect(successCall.attempts.length).toBe(1);
     });
 
-    it(`should NOT call onSuccess when all retries fail`, async () => {
+    it('should NOT call onSuccess when all retries fail', async () => {
       // Arrange
       const baseModel = new MockImageModel({ doGenerate: retryableError });
       const fallbackModel = new MockImageModel({
         doGenerate: nonRetryableError,
       });
-      const onSuccess = vi.fn<OnSuccess>();
+      const onSuccessSpy = vi.fn<OnSuccess>();
 
       // Act & Assert
       const result = generateImage({
         model: createRetryable({
           model: baseModel,
           retries: [fallbackModel],
-          onSuccess,
+          onSuccess: onSuccessSpy,
         }),
         prompt: `A beautiful sunset`,
       });
       await expect(result).rejects.toThrow();
 
-      expect(onSuccess).not.toHaveBeenCalled();
+      expect(onSuccessSpy).not.toHaveBeenCalled();
     });
   });
 
-  describe(`RetryError`, () => {
-    it(`should throw RetryError when all retries fail`, async () => {
+  describe('RetryError', () => {
+    it('should throw RetryError when all retries fail', async () => {
       // Arrange
       const baseModel = new MockImageModel({ doGenerate: retryableError });
       const fallbackModel = new MockImageModel({
@@ -447,208 +594,223 @@ describe(`generateImage`, () => {
     });
   });
 
-  describe(`noImageGenerated handler`, () => {
-    it(`should retry with fallback model on NoImageGeneratedError`, async () => {
-      // Arrange
-      const baseModel = new MockImageModel({ doGenerate: noImageError });
-      const fallbackModel = new MockImageModel({
-        doGenerate: mockImageResult,
-      });
+  describe('RetryableOptions', () => {
+    describe('maxAttempts', () => {
+      it('should respect maxAttempts per model', async () => {
+        // Arrange
+        const baseModel = new MockImageModel({ doGenerate: retryableError });
+        const fallbackModel = new MockImageModel({
+          doGenerate: retryableError,
+        });
 
-      // Act
-      const result = await generateImage({
-        model: createRetryable({
-          model: baseModel,
-          retries: [noImageGenerated(fallbackModel)],
-        }),
-        prompt: `A beautiful sunset`,
-      });
-
-      // Assert
-      expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
-      expect(fallbackModel.doGenerate).toHaveBeenCalledTimes(1);
-      expect(result.images.length).toBe(1);
-    });
-  });
-
-  describe(`serviceOverloaded handler`, () => {
-    it(`should retry with fallback model on 529 error`, async () => {
-      // Arrange
-      const baseModel = new MockImageModel({
-        doGenerate: serviceOverloadedError,
-      });
-      const fallbackModel = new MockImageModel({
-        doGenerate: mockImageResult,
-      });
-
-      // Act
-      const result = await generateImage({
-        model: createRetryable({
-          model: baseModel,
-          retries: [serviceOverloaded(fallbackModel)],
-        }),
-        prompt: `A beautiful sunset`,
-      });
-
-      // Assert
-      expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
-      expect(fallbackModel.doGenerate).toHaveBeenCalledTimes(1);
-      expect(result.images.length).toBe(1);
-    });
-  });
-
-  describe(`serviceUnavailable handler`, () => {
-    it(`should retry with fallback model on 503 error`, async () => {
-      // Arrange
-      const baseModel = new MockImageModel({
-        doGenerate: serviceUnavailableError,
-      });
-      const fallbackModel = new MockImageModel({
-        doGenerate: mockImageResult,
-      });
-
-      // Act
-      const result = await generateImage({
-        model: createRetryable({
-          model: baseModel,
-          retries: [serviceUnavailable(fallbackModel)],
-        }),
-        prompt: `A beautiful sunset`,
-      });
-
-      // Assert
-      expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
-      expect(fallbackModel.doGenerate).toHaveBeenCalledTimes(1);
-      expect(result.images.length).toBe(1);
-    });
-  });
-
-  describe(`requestTimeout handler`, () => {
-    it(`should retry with fallback model on timeout error`, async () => {
-      // Arrange
-      const timeoutError = new Error(`Request timed out`);
-      timeoutError.name = `TimeoutError`;
-
-      const baseModel = new MockImageModel({ doGenerate: timeoutError });
-      const fallbackModel = new MockImageModel({
-        doGenerate: mockImageResult,
-      });
-
-      // Act
-      const result = await generateImage({
-        model: createRetryable({
-          model: baseModel,
-          retries: [requestTimeout(fallbackModel)],
-        }),
-        prompt: `A beautiful sunset`,
-      });
-
-      // Assert
-      expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
-      expect(fallbackModel.doGenerate).toHaveBeenCalledTimes(1);
-      expect(result.images.length).toBe(1);
-    });
-  });
-
-  describe(`maxAttempts`, () => {
-    it(`should respect maxAttempts per model`, async () => {
-      // Arrange
-      const baseModel = new MockImageModel({ doGenerate: retryableError });
-      const fallbackModel = new MockImageModel({
-        doGenerate: retryableError,
-      });
-
-      const fallbackRetryable = (context: RetryContext<ImageModel>) => {
-        if (isErrorAttempt(context.current)) {
-          return { model: fallbackModel, maxAttempts: 2 };
-        }
-        return undefined;
-      };
-
-      const retryableModel = createRetryable({
-        model: baseModel,
-        retries: [fallbackRetryable],
-      });
-
-      // Act & Assert
-      const result = generateImage({
-        model: retryableModel,
-        prompt: `A beautiful sunset`,
-      });
-      await expect(result).rejects.toThrow(RetryError);
-      expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
-      expect(fallbackModel.doGenerate).toHaveBeenCalledTimes(2);
-    });
-  });
-
-  describe(`delay and backoff`, () => {
-    it(`should apply delay before retry`, async () => {
-      // Arrange
-      vi.useFakeTimers();
-      const baseModel = new MockImageModel({ doGenerate: retryableError });
-      const fallbackModel = new MockImageModel({
-        doGenerate: mockImageResult,
-      });
-
-      const fallbackRetryable: Retryable<ImageModel> = () => {
-        return { model: fallbackModel, maxAttempts: 1, delay: 1000 };
-      };
-
-      // Act
-      const resultPromise = generateImage({
-        model: createRetryable({
-          model: baseModel,
-          retries: [fallbackRetryable],
-        }),
-        prompt: `A beautiful sunset`,
-      });
-
-      await vi.advanceTimersByTimeAsync(1000);
-      const result = await resultPromise;
-
-      // Assert
-      expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
-      expect(fallbackModel.doGenerate).toHaveBeenCalledTimes(1);
-      expect(result.images.length).toBe(1);
-
-      vi.useRealTimers();
-    });
-  });
-
-  describe(`call options override`, () => {
-    it(`should override call options on retry`, async () => {
-      // Arrange
-      const baseModel = new MockImageModel({ doGenerate: retryableError });
-      const fallbackModel = new MockImageModel({
-        doGenerate: mockImageResult,
-      });
-
-      const fallbackRetryable: Retryable<ImageModel> = () => {
-        return {
-          model: fallbackModel,
-          maxAttempts: 1,
-          options: {
-            size: `1024x1024`,
-            seed: 42,
-          },
+        const fallbackRetryable = (context: RetryContext<ImageModel>) => {
+          if (isErrorAttempt(context.current)) {
+            return { model: fallbackModel, maxAttempts: 2 };
+          }
+          return undefined;
         };
-      };
 
-      // Act
-      await generateImage({
-        model: createRetryable({
+        const retryableModel = createRetryable({
           model: baseModel,
           retries: [fallbackRetryable],
-        }),
-        prompt: `A beautiful sunset`,
-        size: `512x512`,
-      });
+        });
 
-      // Assert
-      const fallbackCallOptions = (fallbackModel.doGenerate as any).mock
-        .calls[0][0];
-      expect(fallbackCallOptions.size).toBe(`1024x1024`);
-      expect(fallbackCallOptions.seed).toBe(42);
+        // Act & Assert
+        const result = generateImage({
+          model: retryableModel,
+          prompt: `A beautiful sunset`,
+        });
+        await expect(result).rejects.toThrow(RetryError);
+        expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
+        expect(fallbackModel.doGenerate).toHaveBeenCalledTimes(2);
+      });
+    });
+
+    describe('delay', () => {
+      it('should apply delay before retry', async () => {
+        // Arrange
+        vi.useFakeTimers();
+        const baseModel = new MockImageModel({ doGenerate: retryableError });
+        const fallbackModel = new MockImageModel({
+          doGenerate: mockImageResult,
+        });
+
+        const fallbackRetryable: Retryable<ImageModel> = () => {
+          return { model: fallbackModel, maxAttempts: 1, delay: 1000 };
+        };
+
+        // Act
+        const resultPromise = generateImage({
+          model: createRetryable({
+            model: baseModel,
+            retries: [fallbackRetryable],
+          }),
+          prompt: `A beautiful sunset`,
+        });
+
+        await vi.advanceTimersByTimeAsync(1000);
+        const result = await resultPromise;
+
+        // Assert
+        expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
+        expect(fallbackModel.doGenerate).toHaveBeenCalledTimes(1);
+        expect(result.images.length).toBe(1);
+
+        vi.useRealTimers();
+      });
+    });
+
+    describe('size', () => {
+      it('should override size on retry', async () => {
+        // Arrange
+        const baseModel = new MockImageModel({ doGenerate: retryableError });
+        const fallbackModel = new MockImageModel({
+          doGenerate: mockImageResult,
+        });
+
+        // Act
+        await generateImage({
+          model: createRetryable({
+            model: baseModel,
+            retries: [{ model: fallbackModel, options: { size: `1024x1024` } }],
+          }),
+          prompt: `A beautiful sunset`,
+          size: `512x512`,
+        });
+
+        // Assert
+        const fallbackCallOptions = (fallbackModel.doGenerate as any).mock.calls[0][0];
+        expect(fallbackCallOptions.size).toBe(`1024x1024`);
+      });
+    });
+
+    describe('seed', () => {
+      it('should override seed on retry', async () => {
+        // Arrange
+        const baseModel = new MockImageModel({ doGenerate: retryableError });
+        const fallbackModel = new MockImageModel({
+          doGenerate: mockImageResult,
+        });
+
+        // Act
+        await generateImage({
+          model: createRetryable({
+            model: baseModel,
+            retries: [{ model: fallbackModel, options: { seed: 42 } }],
+          }),
+          prompt: `A beautiful sunset`,
+          seed: 1,
+        });
+
+        // Assert
+        const fallbackCallOptions = (fallbackModel.doGenerate as any).mock.calls[0][0];
+        expect(fallbackCallOptions.seed).toBe(42);
+      });
+    });
+  });
+
+  describe('retryables', () => {
+    describe('noImageGenerated handler', () => {
+      it('should retry with fallback model on NoImageGeneratedError', async () => {
+        // Arrange
+        const baseModel = new MockImageModel({ doGenerate: noImageError });
+        const fallbackModel = new MockImageModel({
+          doGenerate: mockImageResult,
+        });
+
+        // Act
+        const result = await generateImage({
+          model: createRetryable({
+            model: baseModel,
+            retries: [noImageGenerated(fallbackModel)],
+          }),
+          prompt: `A beautiful sunset`,
+        });
+
+        // Assert
+        expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
+        expect(fallbackModel.doGenerate).toHaveBeenCalledTimes(1);
+        expect(result.images.length).toBe(1);
+      });
+    });
+
+    describe('serviceOverloaded handler', () => {
+      it('should retry with fallback model on 529 error', async () => {
+        // Arrange
+        const baseModel = new MockImageModel({
+          doGenerate: serviceOverloadedError,
+        });
+        const fallbackModel = new MockImageModel({
+          doGenerate: mockImageResult,
+        });
+
+        // Act
+        const result = await generateImage({
+          model: createRetryable({
+            model: baseModel,
+            retries: [serviceOverloaded(fallbackModel)],
+          }),
+          prompt: `A beautiful sunset`,
+        });
+
+        // Assert
+        expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
+        expect(fallbackModel.doGenerate).toHaveBeenCalledTimes(1);
+        expect(result.images.length).toBe(1);
+      });
+    });
+
+    describe('serviceUnavailable handler', () => {
+      it('should retry with fallback model on 503 error', async () => {
+        // Arrange
+        const baseModel = new MockImageModel({
+          doGenerate: serviceUnavailableError,
+        });
+        const fallbackModel = new MockImageModel({
+          doGenerate: mockImageResult,
+        });
+
+        // Act
+        const result = await generateImage({
+          model: createRetryable({
+            model: baseModel,
+            retries: [serviceUnavailable(fallbackModel)],
+          }),
+          prompt: `A beautiful sunset`,
+        });
+
+        // Assert
+        expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
+        expect(fallbackModel.doGenerate).toHaveBeenCalledTimes(1);
+        expect(result.images.length).toBe(1);
+      });
+    });
+
+    describe('requestTimeout handler', () => {
+      it('should retry with fallback model on timeout error', async () => {
+        // Arrange
+        const timeoutError = new Error(`Request timed out`);
+        timeoutError.name = `TimeoutError`;
+
+        const baseModel = new MockImageModel({ doGenerate: timeoutError });
+        const fallbackModel = new MockImageModel({
+          doGenerate: mockImageResult,
+        });
+
+        // Act
+        const result = await generateImage({
+          model: createRetryable({
+            model: baseModel,
+            retries: [requestTimeout(fallbackModel)],
+          }),
+          prompt: `A beautiful sunset`,
+        });
+
+        // Assert
+        expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
+        expect(fallbackModel.doGenerate).toHaveBeenCalledTimes(1);
+        expect(result.images.length).toBe(1);
+      });
     });
   });
 });

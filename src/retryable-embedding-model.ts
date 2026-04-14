@@ -4,10 +4,12 @@ import { calculateExponentialBackoff } from './calculate-exponential-backoff.js'
 import { countModelAttempts } from './count-model-attempts.js';
 import { findRetryModel } from './find-retry-model.js';
 import { prepareRetryError } from './prepare-retry-error.js';
+import { mergeEmbeddingModelCallOptions } from './merge-retry-call-options.js';
 import type {
   EmbeddingModel,
   EmbeddingModelCallOptions,
   EmbeddingModelEmbed,
+  OnRetryOverrides,
   Retry,
   RetryContext,
   RetryErrorAttempt,
@@ -37,30 +39,6 @@ export class RetryableEmbeddingModel
   }
 
   /**
-   * Get the retry call options overrides from a retry configuration.
-   */
-  private getRetryCallOptions(
-    callOptions: EmbeddingModelCallOptions,
-    currentRetry?: Retry<EmbeddingModel>,
-  ): EmbeddingModelCallOptions {
-    const retryOptions = currentRetry?.options ?? {};
-
-    return {
-      ...callOptions,
-      values: retryOptions.values ?? callOptions.values,
-      headers: retryOptions.headers ?? callOptions.headers,
-      // Support deprecated providerOptions at top level for backward compatibility
-      providerOptions:
-        retryOptions.providerOptions ??
-        currentRetry?.providerOptions ??
-        callOptions.providerOptions,
-      abortSignal: currentRetry?.timeout
-        ? AbortSignal.timeout(currentRetry.timeout)
-        : callOptions.abortSignal,
-    };
-  }
-
-  /**
    * Execute a function with retry logic for handling errors
    */
   private async withRetry<RESULT extends EmbeddingModelEmbed>(input: {
@@ -75,8 +53,7 @@ export class RetryableEmbeddingModel
     /**
      * Track all attempts.
      */
-    const attempts: Array<RetryErrorAttempt<EmbeddingModel>> =
-      input.attempts ?? [];
+    const attempts: Array<RetryErrorAttempt<EmbeddingModel>> = input.attempts ?? [];
 
     /**
      * Track current retry configuration.
@@ -93,6 +70,9 @@ export class RetryableEmbeddingModel
        * Call the onRetry handler if provided.
        * Skip on the first attempt since no previous attempt exists yet.
        */
+      // TODO: future iteration could let `onError` similarly decide whether
+      // a retry actually fires (today it is purely observational).
+      let onRetryOverrides: OnRetryOverrides<EmbeddingModel> | undefined;
       if (previousAttempt) {
         const currentAttempt: RetryErrorAttempt<EmbeddingModel> = {
           ...previousAttempt,
@@ -109,16 +89,17 @@ export class RetryableEmbeddingModel
           attempts: updatedAttempts,
         };
 
-        this.options.onRetry?.(context);
+        onRetryOverrides = (await this.options.onRetry?.(context)) ?? undefined;
       }
 
       /**
        * Get the retry call options overrides for this attempt
        */
-      const retryCallOptions = this.getRetryCallOptions(
-        input.callOptions,
+      const retryCallOptions = mergeEmbeddingModelCallOptions({
+        callOptions: input.callOptions,
         currentRetry,
-      );
+        onRetryOverrides,
+      });
 
       try {
         /**
@@ -134,11 +115,7 @@ export class RetryableEmbeddingModel
           throw error;
         }
 
-        const { retryModel, attempt } = await this.handleError(
-          error,
-          attempts,
-          retryCallOptions,
-        );
+        const { retryModel, attempt } = await this.handleError(error, attempts, retryCallOptions);
 
         attempts.push(attempt);
 
@@ -151,10 +128,7 @@ export class RetryableEmbeddingModel
            * - Attempt 2: 2000ms
            * - Attempt 3: 4000ms
            */
-          const modelAttemptsCount = countModelAttempts(
-            retryModel.model,
-            attempts,
-          );
+          const modelAttemptsCount = countModelAttempts(retryModel.model, attempts);
           const calculatedDelay = calculateExponentialBackoff(
             retryModel.delay,
             retryModel.backoffFactor,
@@ -215,9 +189,7 @@ export class RetryableEmbeddingModel
     return { retryModel, attempt: errorAttempt };
   }
 
-  async doEmbed(
-    callOptions: EmbeddingModelCallOptions,
-  ): Promise<EmbeddingModelEmbed> {
+  async doEmbed(callOptions: EmbeddingModelCallOptions): Promise<EmbeddingModelEmbed> {
     /**
      * Resolve the starting model (base or sticky)
      */

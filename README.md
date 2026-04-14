@@ -790,6 +790,60 @@ The following options can be overridden:
 | [`headers`](https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-image#headers) | Additional HTTP headers |
 | [`providerOptions`](https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-image#provideroptions) | Provider-specific options |
 
+#### Dynamic Call Options
+
+You can also override call options dynamically from inside the `onRetry` callback, instead of declaring them statically on the retry object. This is useful when the override depends on something only known at runtime, like the prompt that just failed, the model that's about to be tried next, or the error that triggered the retry. The overrides apply to the upcoming retry attempt only, and can change the same fields as the static `options` on a retry plus the request `timeout`. The callback may also be `async` if computing the override needs to do work (e.g. fetching a fresh credential).
+
+A common use case is sanitizing provider-scoped metadata when falling back to a different provider, for example stripping `providerOptions.azure.itemId` references from the previous prompt before retrying on OpenAI:
+
+```typescript
+import { createRetryable } from 'ai-retry';
+import { azure } from '@ai-sdk/azure';
+import { openai } from '@ai-sdk/openai';
+
+const retryableModel = createRetryable({
+  model: azure('gpt-5-chat'),
+  retries: [openai('gpt-5-chat')],
+  onRetry: (context) => {
+    const { current, attempts } = context;
+    const previous = attempts.at(-1);
+
+    if (current.model.provider !== previous.model.provider) {
+      // Strip provider-scoped metadata from the prompt before retrying on a different provider
+      return {
+        options: {
+          prompt: sanitizePromptForProvider(
+            previous.options.prompt,
+            current.model.provider,
+          ),
+        },
+      };
+    }
+  },
+});
+```
+
+`onRetry` may also be `async`, which is useful if computing the override needs to do work (e.g. fetching a fresh credential):
+
+```typescript
+const retryableModel = createRetryable({
+  model: openai('gpt-4o-mini'),
+  retries: [anthropic('claude-sonnet-4-20250514')],
+  onRetry: async (context) => {
+    const { current } = context;
+    
+    const headers = await refreshAuthHeaders(current.model.provider);
+    return { options: { headers } };
+  },
+});
+```
+
+**Precedence** for the upcoming retry attempt (highest to lowest):
+
+1. The value returned from `onRetry`
+2. `Retry.options` (declared on the retryable)
+3. The original call options from the request
+
 #### Logging
 
 You can use the following callbacks to log retry attempts and errors:
@@ -880,7 +934,12 @@ interface RetryableModelOptions<MODEL extends LanguageModelV3 | EmbeddingModelV3
   disabled?: boolean | (() => boolean);
   reset?: Reset;
   onError?: (context: RetryContext<MODEL>) => void;
-  onRetry?: (context: RetryContext<MODEL>) => void;
+  onRetry?: (
+    context: RetryContext<MODEL>,
+  ) =>
+    | void
+    | OnRetryOverrides<MODEL>
+    | Promise<void | OnRetryOverrides<MODEL>>;
   onSuccess?: (context: SuccessContext<MODEL>) => void;
 }
 ```
@@ -891,7 +950,7 @@ interface RetryableModelOptions<MODEL extends LanguageModelV3 | EmbeddingModelV3
 - `disabled`: Disable all retry logic. Can be a boolean or function returning boolean. Default: `false` (retries enabled).
 - `reset`: Controls when to reset back to the base model after a successful retry. Default: `after-request`.
 - `onError`: Callback invoked when an error occurs.
-- `onRetry`: Callback invoked before attempting a retry.
+- `onRetry`: Callback invoked before attempting a retry. May optionally return an `OnRetryOverrides` object (or a `Promise` of one) to override `options.*` and `timeout` for the upcoming attempt only. See [Dynamic Call Options via `onRetry`](#dynamic-call-options-via-onretry).
 - `onSuccess`: Callback invoked after a successful request. Receives the model that handled the request and all previous attempts.
 
 #### `Reset`

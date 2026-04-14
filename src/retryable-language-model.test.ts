@@ -87,8 +87,7 @@ const retryableError = new APICallError({
   requestBodyValues: {},
   statusCode: 429,
   responseHeaders: {},
-  responseBody:
-    '{"error": {"message": "Rate limit exceeded", "code": "rate_limit_exceeded"}}',
+  responseBody: '{"error": {"message": "Rate limit exceeded", "code": "rate_limit_exceeded"}}',
   isRetryable: true,
   data: {
     error: {
@@ -104,8 +103,7 @@ const nonRetryableError = new APICallError({
   requestBodyValues: {},
   statusCode: 401,
   responseHeaders: {},
-  responseBody:
-    '{"error": {"message": "Invalid API key", "code": "invalid_api_key"}}',
+  responseBody: '{"error": {"message": "Invalid API key", "code": "invalid_api_key"}}',
   isRetryable: false,
   data: {
     error: {
@@ -153,10 +151,7 @@ describe('generateText', () => {
         const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
 
         const fallbackRetryable: Retryable<LanguageModel> = (context) => {
-          if (
-            isErrorAttempt(context.current) &&
-            APICallError.isInstance(context.current.error)
-          ) {
+          if (isErrorAttempt(context.current) && APICallError.isInstance(context.current.error)) {
             return { model: fallbackModel, maxAttempts: 1 };
           }
           return undefined;
@@ -215,10 +210,7 @@ describe('generateText', () => {
         });
 
         const fallbackRetryable: Retryable<LanguageModel> = (context) => {
-          if (
-            isErrorAttempt(context.current) &&
-            APICallError.isInstance(context.current.error)
-          ) {
+          if (isErrorAttempt(context.current) && APICallError.isInstance(context.current.error)) {
             return { model: fallbackModel2, maxAttempts: 1 };
           }
           return undefined;
@@ -253,10 +245,7 @@ describe('generateText', () => {
         });
 
         const fallbackRetryable: Retryable<LanguageModel> = (context) => {
-          if (
-            isErrorAttempt(context.current) &&
-            APICallError.isInstance(context.current.error)
-          ) {
+          if (isErrorAttempt(context.current) && APICallError.isInstance(context.current.error)) {
             return { model: fallbackModel2, maxAttempts: 1 };
           }
           return undefined;
@@ -740,9 +729,7 @@ describe('generateText', () => {
       const retryCall = onRetrySpy.mock.calls[0]![0];
       expect(isResultAttempt(retryCall.current)).toBe(true);
       if (isResultAttempt(retryCall.current)) {
-        expect(retryCall.current.result.finishReason.unified).toBe(
-          'content-filter',
-        );
+        expect(retryCall.current.result.finishReason.unified).toBe('content-filter');
       }
       expect(retryCall.current.model).toBe(fallbackModel);
       expect(retryCall.attempts.length).toBe(1);
@@ -809,6 +796,157 @@ describe('generateText', () => {
 
       // Assert
       expect(onRetrySpy).not.toHaveBeenCalled();
+    });
+
+    describe('overrides', () => {
+      it('should override prompt for the upcoming retry attempt', async () => {
+        // Arrange
+        const baseModel = new MockLanguageModel({ doGenerate: retryableError });
+        const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
+        const sanitizedPrompt = [
+          {
+            role: 'user' as const,
+            content: [{ type: 'text' as const, text: 'sanitized' }],
+          },
+        ];
+
+        // Act
+        await generateText({
+          model: createRetryable({
+            model: baseModel,
+            retries: [fallbackModel],
+            onRetry: () => ({ options: { prompt: sanitizedPrompt } }),
+          }),
+          prompt: 'original',
+        });
+
+        // Assert
+        expect(fallbackModel.doGenerate).toHaveBeenCalledWith(
+          expect.objectContaining({ prompt: sanitizedPrompt }),
+        );
+      });
+
+      it('should override providerOptions for the upcoming retry attempt', async () => {
+        // Arrange — simulates stripping provider-scoped metadata when
+        // crossing a provider boundary on retry.
+        const baseModel = new MockLanguageModel({ doGenerate: retryableError });
+        const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
+        const sanitizedProviderOptions = { openai: { reasoningEffort: 'low' } };
+
+        // Act
+        await generateText({
+          model: createRetryable({
+            model: baseModel,
+            retries: [fallbackModel],
+            onRetry: () => ({
+              options: { providerOptions: sanitizedProviderOptions },
+            }),
+          }),
+          prompt: 'Hello!',
+          providerOptions: { azure: { itemId: 'rs_xyz' } },
+        });
+
+        // Assert
+        expect(fallbackModel.doGenerate).toHaveBeenCalledWith(
+          expect.objectContaining({
+            providerOptions: sanitizedProviderOptions,
+          }),
+        );
+      });
+
+      it('should let onRetry overrides beat Retry.options', async () => {
+        // Arrange
+        const baseModel = new MockLanguageModel({ doGenerate: retryableError });
+        const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
+
+        // Act
+        await generateText({
+          model: createRetryable({
+            model: baseModel,
+            retries: [{ model: fallbackModel, options: { temperature: 0.5 } }],
+            onRetry: () => ({ options: { temperature: 0.1 } }),
+          }),
+          prompt: 'Hello!',
+          temperature: 1.0,
+        });
+
+        // Assert
+        expect(fallbackModel.doGenerate).toHaveBeenCalledWith(
+          expect.objectContaining({ temperature: 0.1 }),
+        );
+      });
+
+      it('should fall back to Retry.options when onRetry returns undefined', async () => {
+        // Arrange
+        const baseModel = new MockLanguageModel({ doGenerate: retryableError });
+        const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
+
+        // Act
+        await generateText({
+          model: createRetryable({
+            model: baseModel,
+            retries: [{ model: fallbackModel, options: { temperature: 0.5 } }],
+            onRetry: () => undefined,
+          }),
+          prompt: 'Hello!',
+          temperature: 1.0,
+        });
+
+        // Assert
+        expect(fallbackModel.doGenerate).toHaveBeenCalledWith(
+          expect.objectContaining({ temperature: 0.5 }),
+        );
+      });
+
+      it('should support async onRetry returning overrides', async () => {
+        // Arrange
+        const baseModel = new MockLanguageModel({ doGenerate: retryableError });
+        const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
+
+        // Act
+        await generateText({
+          model: createRetryable({
+            model: baseModel,
+            retries: [fallbackModel],
+            onRetry: async () => {
+              await Promise.resolve();
+              return { options: { temperature: 0.42 } };
+            },
+          }),
+          prompt: 'Hello!',
+        });
+
+        // Assert
+        expect(fallbackModel.doGenerate).toHaveBeenCalledWith(
+          expect.objectContaining({ temperature: 0.42 }),
+        );
+      });
+
+      it('should override timeout for the upcoming retry attempt', async () => {
+        // Arrange
+        let fallbackSignal: AbortSignal | undefined;
+        const baseModel = new MockLanguageModel({ doGenerate: retryableError });
+        const fallbackModel = new MockLanguageModel({
+          doGenerate: async (opts) => {
+            fallbackSignal = opts.abortSignal;
+            return mockResult;
+          },
+        });
+
+        // Act
+        await generateText({
+          model: createRetryable({
+            model: baseModel,
+            retries: [fallbackModel],
+            onRetry: () => ({ timeout: 30_000 }),
+          }),
+          prompt: 'Hello!',
+        });
+
+        // Assert
+        expect(fallbackSignal).toBeDefined();
+        expect(fallbackSignal?.aborted).toBe(false);
+      });
     });
   });
 
@@ -970,10 +1108,7 @@ describe('generateText', () => {
       await generateText({
         model: createRetryable({
           model: baseModel,
-          retries: [
-            { model: fallbackModel, options: { temperature: 0.5 } },
-            finalModel,
-          ],
+          retries: [{ model: fallbackModel, options: { temperature: 0.5 } }, finalModel],
           onError: onErrorSpy,
         }),
         prompt: 'Hello!',
@@ -1269,10 +1404,7 @@ describe('generateText', () => {
         let fallbackModelSignal: AbortSignal | undefined;
         // Use TimeoutError (from AbortSignal.timeout()) which should be retried,
         // as opposed to AbortError (from user cancellation) which should NOT be retried
-        const timeoutError = new DOMException(
-          'The operation timed out',
-          'TimeoutError',
-        );
+        const timeoutError = new DOMException('The operation timed out', 'TimeoutError');
 
         const baseModel = new MockLanguageModel({
           doGenerate: async (opts: LanguageModelCallOptions) => {
@@ -1341,9 +1473,7 @@ describe('generateText', () => {
         await generateText({
           model: createRetryable({
             model: baseModel,
-            retries: [
-              { model: fallbackModel, options: { prompt: overridePrompt } },
-            ],
+            retries: [{ model: fallbackModel, options: { prompt: overridePrompt } }],
           }),
           prompt: 'Original prompt',
         });
@@ -1398,9 +1528,7 @@ describe('generateText', () => {
         });
 
         // Assert
-        expect(baseModel.doGenerate).toHaveBeenCalledWith(
-          expect.objectContaining({ topP: 1.0 }),
-        );
+        expect(baseModel.doGenerate).toHaveBeenCalledWith(expect.objectContaining({ topP: 1.0 }));
         expect(fallbackModel.doGenerate).toHaveBeenCalledWith(
           expect.objectContaining({ topP: 0.8 }),
         );
@@ -1424,9 +1552,7 @@ describe('generateText', () => {
         });
 
         // Assert
-        expect(baseModel.doGenerate).toHaveBeenCalledWith(
-          expect.objectContaining({ topK: 50 }),
-        );
+        expect(baseModel.doGenerate).toHaveBeenCalledWith(expect.objectContaining({ topK: 50 }));
         expect(fallbackModel.doGenerate).toHaveBeenCalledWith(
           expect.objectContaining({ topK: 10 }),
         );
@@ -1443,9 +1569,7 @@ describe('generateText', () => {
         await generateText({
           model: createRetryable({
             model: baseModel,
-            retries: [
-              { model: fallbackModel, options: { maxOutputTokens: 500 } },
-            ],
+            retries: [{ model: fallbackModel, options: { maxOutputTokens: 500 } }],
           }),
           prompt: 'Hello!',
           maxOutputTokens: 1000,
@@ -1478,9 +1602,7 @@ describe('generateText', () => {
         });
 
         // Assert
-        expect(baseModel.doGenerate).toHaveBeenCalledWith(
-          expect.objectContaining({ seed: 123 }),
-        );
+        expect(baseModel.doGenerate).toHaveBeenCalledWith(expect.objectContaining({ seed: 123 }));
         expect(fallbackModel.doGenerate).toHaveBeenCalledWith(
           expect.objectContaining({ seed: 42 }),
         );
@@ -1528,9 +1650,7 @@ describe('generateText', () => {
         await generateText({
           model: createRetryable({
             model: baseModel,
-            retries: [
-              { model: fallbackModel, options: { presencePenalty: 0.5 } },
-            ],
+            retries: [{ model: fallbackModel, options: { presencePenalty: 0.5 } }],
           }),
           prompt: 'Hello!',
           presencePenalty: 0.0,
@@ -1556,9 +1676,7 @@ describe('generateText', () => {
         await generateText({
           model: createRetryable({
             model: baseModel,
-            retries: [
-              { model: fallbackModel, options: { frequencyPenalty: 0.8 } },
-            ],
+            retries: [{ model: fallbackModel, options: { frequencyPenalty: 0.8 } }],
           }),
           prompt: 'Hello!',
           frequencyPenalty: 0.2,
@@ -1586,9 +1704,7 @@ describe('generateText', () => {
         await generateText({
           model: createRetryable({
             model: baseModel,
-            retries: [
-              { model: fallbackModel, options: { headers: retryHeaders } },
-            ],
+            retries: [{ model: fallbackModel, options: { headers: retryHeaders } }],
           }),
           prompt: 'Hello!',
         });
@@ -1625,9 +1741,7 @@ describe('generateText', () => {
           }),
           prompt: 'Hello!',
         });
-        expect.unreachable(
-          'Should throw RetryError when all attempts are exhausted',
-        );
+        expect.unreachable('Should throw RetryError when all attempts are exhausted');
       } catch (error) {
         expect(error).toBeInstanceOf(RetryError);
 
@@ -1654,9 +1768,7 @@ describe('generateText', () => {
           prompt: 'Hello!',
           maxRetries: 0, // No automatic retries
         });
-        expect.unreachable(
-          'Should throw original error on first attempt with no retries',
-        );
+        expect.unreachable('Should throw original error on first attempt with no retries');
       } catch (error) {
         expect(error).not.toBeInstanceOf(RetryError);
         expect(error).toBe(retryableError);
@@ -1679,9 +1791,7 @@ describe('generateText', () => {
           prompt: 'Hello!',
           maxRetries: 0, // No automatic retries
         });
-        expect.unreachable(
-          'Should throw original error when retry models return undefined',
-        );
+        expect.unreachable('Should throw original error when retry models return undefined');
       } catch (error) {
         expect(error).not.toBeInstanceOf(RetryError);
         expect(error).toBe(nonRetryableError);
@@ -2329,7 +2439,7 @@ describe('streamText', () => {
             "response": {
               "headers": undefined,
               "id": "aitxt-mock-id",
-              "modelId": "mock-model-128",
+              "modelId": "mock-model-140",
               "timestamp": 1970-01-01T00:00:00.000Z,
             },
             "type": "finish-step",
@@ -2411,9 +2521,7 @@ describe('streamText', () => {
       expect(fallbackModel.doStream).toHaveBeenCalledTimes(0);
 
       // Check that an error chunk was emitted
-      const errorChunk: any = chunks.find(
-        (chunk: any) => chunk.type === 'error',
-      );
+      const errorChunk: any = chunks.find((chunk: any) => chunk.type === 'error');
       expect(errorChunk).toBeDefined();
       expect(errorChunk.error.message).toBe('Rate limit exceeded');
     });
@@ -2764,11 +2872,7 @@ describe('streamText', () => {
         // Act
         const retryableModel = createRetryable({
           model: baseModel,
-          retries: [
-            fallbackModel1,
-            { model: fallbackModel2 },
-            async () => ({ model: finalModel }),
-          ],
+          retries: [fallbackModel1, { model: fallbackModel2 }, async () => ({ model: finalModel })],
         });
 
         const result = streamText({
@@ -2977,10 +3081,7 @@ describe('streamText', () => {
         let fallbackModelSignal: AbortSignal | undefined;
         // Use TimeoutError (from AbortSignal.timeout()) which should be retried,
         // as opposed to AbortError (from user cancellation) which should NOT be retried
-        const timeoutError = new DOMException(
-          'The operation timed out',
-          'TimeoutError',
-        );
+        const timeoutError = new DOMException('The operation timed out', 'TimeoutError');
 
         const baseModel = new MockLanguageModel({
           doStream: async (opts: LanguageModelCallOptions) => {
@@ -3116,12 +3217,8 @@ describe('streamText', () => {
         await convertAsyncIterableToArray(result.fullStream);
 
         // Assert
-        expect(baseModel.doStream).toHaveBeenCalledWith(
-          expect.objectContaining({ topP: 1.0 }),
-        );
-        expect(fallbackModel.doStream).toHaveBeenCalledWith(
-          expect.objectContaining({ topP: 0.8 }),
-        );
+        expect(baseModel.doStream).toHaveBeenCalledWith(expect.objectContaining({ topP: 1.0 }));
+        expect(fallbackModel.doStream).toHaveBeenCalledWith(expect.objectContaining({ topP: 0.8 }));
       });
     });
 
@@ -3158,12 +3255,8 @@ describe('streamText', () => {
         await convertAsyncIterableToArray(result.fullStream);
 
         // Assert
-        expect(baseModel.doStream).toHaveBeenCalledWith(
-          expect.objectContaining({ topK: 50 }),
-        );
-        expect(fallbackModel.doStream).toHaveBeenCalledWith(
-          expect.objectContaining({ topK: 10 }),
-        );
+        expect(baseModel.doStream).toHaveBeenCalledWith(expect.objectContaining({ topK: 50 }));
+        expect(fallbackModel.doStream).toHaveBeenCalledWith(expect.objectContaining({ topK: 10 }));
       });
     });
 
@@ -3187,9 +3280,7 @@ describe('streamText', () => {
 
         const retryableModel = createRetryable({
           model: baseModel,
-          retries: [
-            { model: fallbackModel, options: { maxOutputTokens: 500 } },
-          ],
+          retries: [{ model: fallbackModel, options: { maxOutputTokens: 500 } }],
         });
 
         // Act
@@ -3244,12 +3335,8 @@ describe('streamText', () => {
         await convertAsyncIterableToArray(result.fullStream);
 
         // Assert
-        expect(baseModel.doStream).toHaveBeenCalledWith(
-          expect.objectContaining({ seed: 123 }),
-        );
-        expect(fallbackModel.doStream).toHaveBeenCalledWith(
-          expect.objectContaining({ seed: 42 }),
-        );
+        expect(baseModel.doStream).toHaveBeenCalledWith(expect.objectContaining({ seed: 123 }));
+        expect(fallbackModel.doStream).toHaveBeenCalledWith(expect.objectContaining({ seed: 42 }));
       });
     });
 
@@ -3320,9 +3407,7 @@ describe('streamText', () => {
 
         const retryableModel = createRetryable({
           model: baseModel,
-          retries: [
-            { model: fallbackModel, options: { presencePenalty: 0.5 } },
-          ],
+          retries: [{ model: fallbackModel, options: { presencePenalty: 0.5 } }],
         });
 
         // Act
@@ -3364,9 +3449,7 @@ describe('streamText', () => {
 
         const retryableModel = createRetryable({
           model: baseModel,
-          retries: [
-            { model: fallbackModel, options: { frequencyPenalty: 0.8 } },
-          ],
+          retries: [{ model: fallbackModel, options: { frequencyPenalty: 0.8 } }],
         });
 
         // Act
@@ -3410,9 +3493,7 @@ describe('streamText', () => {
 
         const retryableModel = createRetryable({
           model: baseModel,
-          retries: [
-            { model: fallbackModel, options: { headers: retryHeaders } },
-          ],
+          retries: [{ model: fallbackModel, options: { headers: retryHeaders } }],
         });
 
         // Act

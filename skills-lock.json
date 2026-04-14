@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "commit": {
+      "source": "zirkelc/skills",
+      "sourceType": "github",
+      "computedHash": "085413afafe3c71cc985121d1e587bafa8611ad0490081c09e4f415a23f7ee92"
+    }
+  }
+}

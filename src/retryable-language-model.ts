@@ -3,6 +3,7 @@ import { BaseRetryableModel } from './base-retryable-model.js';
 import { calculateExponentialBackoff } from './calculate-exponential-backoff.js';
 import { countModelAttempts } from './count-model-attempts.js';
 import { findRetryModel } from './find-retry-model.js';
+import { mergeLanguageModelCallOptions } from './merge-retry-call-options.js';
 import { prepareRetryError } from './prepare-retry-error.js';
 import type {
   LanguageModel,
@@ -10,17 +11,14 @@ import type {
   LanguageModelGenerate,
   LanguageModelStream,
   LanguageModelStreamPart,
+  OnRetryOverrides,
   Retry,
   RetryAttempt,
   RetryContext,
   RetryErrorAttempt,
   RetryResultAttempt,
 } from './types.js';
-import {
-  isAbortError,
-  isGenerateResult,
-  isStreamContentPart,
-} from './utils.js';
+import { isAbortError, isGenerateResult, isStreamContentPart } from './utils.js';
 
 export class RetryableLanguageModel
   extends BaseRetryableModel<LanguageModel>
@@ -41,46 +39,9 @@ export class RetryableLanguageModel
   }
 
   /**
-   * Get the retry call options overrides from a retry configuration.
-   */
-  private getRetryCallOptions(
-    callOptions: LanguageModelCallOptions,
-    currentRetry?: Retry<LanguageModel>,
-  ): LanguageModelCallOptions {
-    const retryOptions = currentRetry?.options ?? {};
-
-    return {
-      ...callOptions,
-      prompt: retryOptions.prompt ?? callOptions.prompt,
-      maxOutputTokens:
-        retryOptions.maxOutputTokens ?? callOptions.maxOutputTokens,
-      temperature: retryOptions.temperature ?? callOptions.temperature,
-      stopSequences: retryOptions.stopSequences ?? callOptions.stopSequences,
-      topP: retryOptions.topP ?? callOptions.topP,
-      topK: retryOptions.topK ?? callOptions.topK,
-      presencePenalty:
-        retryOptions.presencePenalty ?? callOptions.presencePenalty,
-      frequencyPenalty:
-        retryOptions.frequencyPenalty ?? callOptions.frequencyPenalty,
-      seed: retryOptions.seed ?? callOptions.seed,
-      headers: retryOptions.headers ?? callOptions.headers,
-      // Support deprecated providerOptions at top level for backward compatibility
-      providerOptions:
-        retryOptions.providerOptions ??
-        currentRetry?.providerOptions ??
-        callOptions.providerOptions,
-      abortSignal: currentRetry?.timeout
-        ? AbortSignal.timeout(currentRetry.timeout)
-        : callOptions.abortSignal,
-    };
-  }
-
-  /**
    * Execute a function with retry logic for handling errors
    */
-  private async withRetry<
-    RESULT extends LanguageModelStream | LanguageModelGenerate,
-  >(input: {
+  private async withRetry<RESULT extends LanguageModelStream | LanguageModelGenerate>(input: {
     fn: (retryCallOptions: LanguageModelCallOptions) => Promise<RESULT>;
     callOptions: LanguageModelCallOptions;
     attempts?: Array<RetryAttempt<LanguageModel>>;
@@ -110,6 +71,7 @@ export class RetryableLanguageModel
        * Call the onRetry handler if provided.
        * Skip on the first attempt since no previous attempt exists yet.
        */
+      let onRetryOverrides: OnRetryOverrides<LanguageModel> | undefined;
       if (previousAttempt) {
         const currentAttempt: RetryAttempt<LanguageModel> = {
           ...previousAttempt,
@@ -126,16 +88,17 @@ export class RetryableLanguageModel
           attempts: updatedAttempts,
         };
 
-        this.options.onRetry?.(context);
+        onRetryOverrides = (await this.options.onRetry?.(context)) ?? undefined;
       }
 
       /**
        * Get the retry call options overrides for this attempt
        */
-      const retryCallOptions = this.getRetryCallOptions(
-        input.callOptions,
+      const retryCallOptions = mergeLanguageModelCallOptions({
+        callOptions: input.callOptions,
         currentRetry,
-      );
+        onRetryOverrides,
+      });
 
       try {
         /**
@@ -165,10 +128,7 @@ export class RetryableLanguageModel
                * - Attempt 2: 2000ms
                * - Attempt 3: 4000ms
                */
-              const modelAttemptsCount = countModelAttempts(
-                retryModel.model,
-                attempts,
-              );
+              const modelAttemptsCount = countModelAttempts(retryModel.model, attempts);
               const calculatedDelay = calculateExponentialBackoff(
                 retryModel.delay,
                 retryModel.backoffFactor,
@@ -197,11 +157,7 @@ export class RetryableLanguageModel
           throw error;
         }
 
-        const { retryModel, attempt } = await this.handleError(
-          error,
-          attempts,
-          retryCallOptions,
-        );
+        const { retryModel, attempt } = await this.handleError(error, attempts, retryCallOptions);
 
         attempts.push(attempt);
 
@@ -210,10 +166,7 @@ export class RetryableLanguageModel
            * Calculate exponential backoff delay based on the number of attempts for this specific model.
            * The delay grows exponentially: baseDelay * backoffFactor^attempts
            */
-          const modelAttemptsCount = countModelAttempts(
-            retryModel.model,
-            attempts,
-          );
+          const modelAttemptsCount = countModelAttempts(retryModel.model, attempts);
           const calculatedDelay = calculateExponentialBackoff(
             retryModel.delay,
             retryModel.backoffFactor,
@@ -304,9 +257,7 @@ export class RetryableLanguageModel
     return { retryModel, attempt: errorAttempt };
   }
 
-  async doGenerate(
-    callOptions: LanguageModelCallOptions,
-  ): Promise<LanguageModelGenerate> {
+  async doGenerate(callOptions: LanguageModelCallOptions): Promise<LanguageModelGenerate> {
     /**
      * Resolve the starting model (base or sticky)
      */
@@ -346,9 +297,7 @@ export class RetryableLanguageModel
     return result;
   }
 
-  async doStream(
-    callOptions: LanguageModelCallOptions,
-  ): Promise<LanguageModelStream> {
+  async doStream(callOptions: LanguageModelCallOptions): Promise<LanguageModelStream> {
     /**
      * Resolve the starting model (base or sticky)
      */
@@ -398,9 +347,7 @@ export class RetryableLanguageModel
      */
     const retryableStream = new ReadableStream({
       start: async (controller) => {
-        let reader:
-          | ReadableStreamDefaultReader<LanguageModelStreamPart>
-          | undefined;
+        let reader: ReadableStreamDefaultReader<LanguageModelStreamPart> | undefined;
         let isStreaming = false;
 
         while (true) {
@@ -441,10 +388,10 @@ export class RetryableLanguageModel
             /**
              * Get the retry call options for the failed attempt
              */
-            const retryCallOptions = this.getRetryCallOptions(
+            const retryCallOptions = mergeLanguageModelCallOptions({
               callOptions,
               currentRetry,
-            );
+            });
 
             /**
              * Check if the error from the stream can be retried.
@@ -466,10 +413,7 @@ export class RetryableLanguageModel
                * Calculate exponential backoff delay based on the number of attempts for this specific model.
                * The delay grows exponentially: baseDelay * backoffFactor^attempts
                */
-              const modelAttemptsCount = countModelAttempts(
-                retryModel.model,
-                attempts,
-              );
+              const modelAttemptsCount = countModelAttempts(retryModel.model, attempts);
               const calculatedDelay = calculateExponentialBackoff(
                 retryModel.delay,
                 retryModel.backoffFactor,

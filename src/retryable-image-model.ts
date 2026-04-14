@@ -4,20 +4,19 @@ import { calculateExponentialBackoff } from './calculate-exponential-backoff.js'
 import { countModelAttempts } from './count-model-attempts.js';
 import { findRetryModel } from './find-retry-model.js';
 import { prepareRetryError } from './prepare-retry-error.js';
+import { mergeImageModelCallOptions } from './merge-retry-call-options.js';
 import type {
   ImageModel,
   ImageModelCallOptions,
   ImageModelGenerate,
+  OnRetryOverrides,
   Retry,
   RetryContext,
   RetryErrorAttempt,
 } from './types.js';
 import { isAbortError } from './utils.js';
 
-export class RetryableImageModel
-  extends BaseRetryableModel<ImageModel>
-  implements ImageModel
-{
+export class RetryableImageModel extends BaseRetryableModel<ImageModel> implements ImageModel {
   readonly specificationVersion = 'v3';
 
   get modelId() {
@@ -30,33 +29,6 @@ export class RetryableImageModel
 
   get maxImagesPerCall() {
     return this.currentModel.maxImagesPerCall;
-  }
-
-  /**
-   * Get the retry call options overrides from a retry configuration.
-   */
-  private getRetryCallOptions(
-    callOptions: ImageModelCallOptions,
-    currentRetry?: Retry<ImageModel>,
-  ): ImageModelCallOptions {
-    const retryOptions = currentRetry?.options ?? {};
-
-    return {
-      ...callOptions,
-      n: retryOptions.n ?? callOptions.n,
-      size: retryOptions.size ?? callOptions.size,
-      aspectRatio: retryOptions.aspectRatio ?? callOptions.aspectRatio,
-      seed: retryOptions.seed ?? callOptions.seed,
-      headers: retryOptions.headers ?? callOptions.headers,
-      /** Support deprecated providerOptions at top level for backward compatibility */
-      providerOptions:
-        retryOptions.providerOptions ??
-        currentRetry?.providerOptions ??
-        callOptions.providerOptions,
-      abortSignal: currentRetry?.timeout
-        ? AbortSignal.timeout(currentRetry.timeout)
-        : callOptions.abortSignal,
-    };
   }
 
   /**
@@ -91,6 +63,9 @@ export class RetryableImageModel
        * Call the onRetry handler if provided.
        * Skip on the first attempt since no previous attempt exists yet.
        */
+      // TODO: future iteration could let `onError` similarly decide whether
+      // a retry actually fires (today it is purely observational).
+      let onRetryOverrides: OnRetryOverrides<ImageModel> | undefined;
       if (previousAttempt) {
         const currentAttempt: RetryErrorAttempt<ImageModel> = {
           ...previousAttempt,
@@ -107,16 +82,17 @@ export class RetryableImageModel
           attempts: updatedAttempts,
         };
 
-        this.options.onRetry?.(context);
+        onRetryOverrides = (await this.options.onRetry?.(context)) ?? undefined;
       }
 
       /**
        * Get the retry call options overrides for this attempt
        */
-      const retryCallOptions = this.getRetryCallOptions(
-        input.callOptions,
+      const retryCallOptions = mergeImageModelCallOptions({
+        callOptions: input.callOptions,
         currentRetry,
-      );
+        onRetryOverrides,
+      });
 
       try {
         /**
@@ -132,11 +108,7 @@ export class RetryableImageModel
           throw error;
         }
 
-        const { retryModel, attempt } = await this.handleError(
-          error,
-          attempts,
-          retryCallOptions,
-        );
+        const { retryModel, attempt } = await this.handleError(error, attempts, retryCallOptions);
 
         attempts.push(attempt);
 
@@ -149,10 +121,7 @@ export class RetryableImageModel
            * - Attempt 2: 2000ms
            * - Attempt 3: 4000ms
            */
-          const modelAttemptsCount = countModelAttempts(
-            retryModel.model,
-            attempts,
-          );
+          const modelAttemptsCount = countModelAttempts(retryModel.model, attempts);
           const calculatedDelay = calculateExponentialBackoff(
             retryModel.delay,
             retryModel.backoffFactor,
@@ -213,9 +182,7 @@ export class RetryableImageModel
     return { retryModel, attempt: errorAttempt };
   }
 
-  async doGenerate(
-    callOptions: ImageModelCallOptions,
-  ): Promise<ImageModelGenerate> {
+  async doGenerate(callOptions: ImageModelCallOptions): Promise<ImageModelGenerate> {
     /**
      * Resolve the starting model (base or sticky)
      */

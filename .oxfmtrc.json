@@ -1,0 +1,8 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "ignorePatterns": ["CHANGELOG.md"],
+  "semi": true,
+  "singleQuote": true,
+  "useTabs": false,
+  "tabWidth": 2
+}
