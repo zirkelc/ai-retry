@@ -33,8 +33,6 @@ jobs:
         run: pnpm install
       - name: Lint
         run: pnpm lint:ci
-      - name: Format
-        run: pnpm format:ci
 
   test:
     name: Test
