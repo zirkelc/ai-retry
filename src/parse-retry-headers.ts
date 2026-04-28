@@ -1,3 +1,10 @@
+/**
+ * Upper bound for `Retry-After` / `Retry-After-Ms` honored by retry actions.
+ * Servers can technically request very long delays; cap to keep retries
+ * responsive.
+ */
+export const MAX_RETRY_AFTER_MS = 60_000;
+
 export function parseRetryHeaders(
   headers: Record<string, string> | undefined,
 ): number | null {

@@ -1,5 +1,8 @@
 import { APICallError } from 'ai';
-import { parseRetryHeaders } from '../parse-retry-headers.js';
+import {
+  MAX_RETRY_AFTER_MS,
+  parseRetryHeaders,
+} from '../parse-retry-headers.js';
 import type {
   EmbeddingModel,
   ImageModel,
@@ -8,8 +11,6 @@ import type {
   RetryableOptions,
 } from '../types.js';
 import { isErrorAttempt } from '../utils.js';
-
-const MAX_RETRY_AFTER_MS = 60_000;
 
 /**
  * Retry the current failed attempt with the same model, if the error is retryable.

@@ -22,6 +22,7 @@
   "exports": {
     ".": "./dist/index.mjs",
     "./retryables": "./dist/retryables/index.mjs",
+    "./retryables/experimental": "./dist/retryables/experimental/index.mjs",
     "./package.json": "./package.json"
   },
   "publishConfig": {

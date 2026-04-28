@@ -1,13 +1,23 @@
-import type { generateText, streamText, TextStreamPart } from 'ai';
+import {
+  APICallError,
+  type generateText,
+  type streamText,
+  type TextStreamPart,
+} from 'ai';
 import { vi } from 'vitest';
 import type {
   EmbeddingModel,
   EmbeddingModelEmbed,
   ImageModel,
+  ImageModelCallOptions,
   ImageModelGenerate,
   LanguageModel,
+  LanguageModelCallOptions,
   LanguageModelGenerate,
   LanguageModelStream,
+  RetryContext,
+  RetryErrorAttempt,
+  RetryResultAttempt,
 } from './types.js';
 
 type StreamText = Parameters<typeof streamText>[0];
@@ -166,4 +176,87 @@ export const errorFromChunks = (
 ): unknown | null => {
   const errorChunk = chunks.find((chunk) => chunk.type === 'error');
   return errorChunk && errorChunk.type === 'error' ? errorChunk.error : null;
+};
+
+/**
+ * Build a synthetic `RetryContext` carrying an error attempt for a language
+ * model. Used by unit tests that exercise condition predicates without
+ * spinning up `generateText`.
+ */
+export const buildErrorContext = (
+  error: unknown,
+  model: MockLanguageModel = new MockLanguageModel(),
+): RetryContext<MockLanguageModel> => {
+  const attempt: RetryErrorAttempt<MockLanguageModel> = {
+    type: 'error',
+    error,
+    model,
+    options: {} as LanguageModelCallOptions,
+  };
+  return { current: attempt, attempts: [attempt] };
+};
+
+/**
+ * Build a synthetic `RetryContext` carrying a result attempt for a language
+ * model.
+ */
+export const buildResultContext = (
+  result: LanguageModelGenerate = generateEmptyResult,
+  model: MockLanguageModel = new MockLanguageModel(),
+): RetryContext<MockLanguageModel> => {
+  const attempt: RetryResultAttempt = {
+    type: 'result',
+    result,
+    model,
+    options: {} as LanguageModelCallOptions,
+  };
+  return { current: attempt, attempts: [attempt] };
+};
+
+/**
+ * Build a synthetic `RetryContext` carrying an error attempt for an image
+ * model.
+ */
+export const buildImageErrorContext = (
+  error: unknown,
+  model: MockImageModel = new MockImageModel(),
+): RetryContext<MockImageModel> => {
+  const attempt: RetryErrorAttempt<MockImageModel> = {
+    type: 'error',
+    error,
+    model,
+    options: {} as ImageModelCallOptions,
+  };
+  return { current: attempt, attempts: [attempt] };
+};
+
+/**
+ * Build an `APICallError` with sensible defaults. Override any field.
+ */
+export const apiError = (
+  options: Partial<ConstructorParameters<typeof APICallError>[0]> = {},
+): APICallError =>
+  new APICallError({
+    message: 'boom',
+    url: '',
+    requestBodyValues: {},
+    statusCode: 500,
+    responseHeaders: {},
+    responseBody: '',
+    data: {},
+    ...options,
+  });
+
+/** `Error` with `name === 'TimeoutError'`, as `AbortSignal.timeout()` produces. */
+export const timeoutError = (): Error => {
+  const err = new Error('timed out');
+  err.name = 'TimeoutError';
+  return err;
+};
+
+/** `Error` with `name === 'AbortError'`, as manual `controller.abort()` produces. */
+export const abortError = (): Error => {
+  const err = new Error('aborted');
+  err.name = 'AbortError';
+  return err;
 };
