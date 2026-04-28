@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.6.0](https://github.com/zirkelc/ai-retry/compare/v1.5.0...v1.6.0) (2026-04-28)
+
+
+### Features
+
+* add experimental composable conditions retryable API ([370bb03](https://github.com/zirkelc/ai-retry/commit/370bb033390abc5907a4f97737216a3690b2cbec))
+
+
+### Bug Fixes
+
+* ci ([869d918](https://github.com/zirkelc/ai-retry/commit/869d918bfb92fd866a8c7bf9f9b9a0d646d7db35))
+
 ## [1.5.0](https://github.com/zirkelc/ai-retry/compare/v1.4.0...v1.5.0) (2026-04-14)
 
 
