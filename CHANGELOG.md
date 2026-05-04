@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.1](https://github.com/zirkelc/ai-retry/compare/v1.6.0...v1.6.1) (2026-05-04)
+
+
+### Bug Fixes
+
+* skip retry when inbound signal is aborted and retry has no timeout ([814de8e](https://github.com/zirkelc/ai-retry/commit/814de8ed151d0f069d2446a51083818fd87554af))
+
 ## [1.6.0](https://github.com/zirkelc/ai-retry/compare/v1.5.0...v1.6.0) (2026-04-28)
 
 
