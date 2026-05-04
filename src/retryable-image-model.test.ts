@@ -472,32 +472,6 @@ describe('generateImage', () => {
           .calls[0][0];
         expect(fallbackCallOptions.seed).toBe(99);
       });
-
-      it('should override timeout for the upcoming retry attempt', async () => {
-        // Arrange
-        let fallbackSignal: AbortSignal | undefined;
-        const baseModel = new MockImageModel({ doGenerate: retryableError });
-        const fallbackModel = new MockImageModel({
-          doGenerate: async (opts) => {
-            fallbackSignal = opts.abortSignal;
-            return mockImageResult;
-          },
-        });
-
-        // Act
-        await generateImage({
-          model: createRetryable({
-            model: baseModel,
-            retries: [fallbackModel],
-            onRetry: () => ({ timeout: 30_000 }),
-          }),
-          prompt: `A beautiful sunset`,
-        });
-
-        // Assert
-        expect(fallbackSignal).toBeDefined();
-        expect(fallbackSignal?.aborted).toBe(false);
-      });
     });
   });
 

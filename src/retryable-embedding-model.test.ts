@@ -673,32 +673,6 @@ describe('embed', () => {
           expect.objectContaining({ values: ['async'] }),
         );
       });
-
-      it('should override timeout for the upcoming retry attempt', async () => {
-        // Arrange
-        let fallbackSignal: AbortSignal | undefined;
-        const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
-        const fallbackModel = new MockEmbeddingModel({
-          doEmbed: async (opts) => {
-            fallbackSignal = opts.abortSignal;
-            return mockEmbeddings;
-          },
-        });
-
-        // Act
-        await embed({
-          model: createRetryable({
-            model: baseModel,
-            retries: [fallbackModel],
-            onRetry: () => ({ timeout: 30_000 }),
-          }),
-          value: 'Hello!',
-        });
-
-        // Assert
-        expect(fallbackSignal).toBeDefined();
-        expect(fallbackSignal?.aborted).toBe(false);
-      });
     });
   });
 

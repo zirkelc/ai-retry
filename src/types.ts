@@ -103,7 +103,7 @@ export type RetryCallOptions<
  */
 export type OnRetryOverrides<
   MODEL extends LanguageModel | EmbeddingModel | ImageModel,
-> = Pick<Retry<MODEL>, 'options' | 'timeout'>;
+> = Pick<Retry<MODEL>, 'options'>;
 
 /**
  * Maps a model type to its call options type.

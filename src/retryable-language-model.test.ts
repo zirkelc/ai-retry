@@ -934,32 +934,6 @@ describe('generateText', () => {
           expect.objectContaining({ temperature: 0.42 }),
         );
       });
-
-      it('should override timeout for the upcoming retry attempt', async () => {
-        // Arrange
-        let fallbackSignal: AbortSignal | undefined;
-        const baseModel = new MockLanguageModel({ doGenerate: retryableError });
-        const fallbackModel = new MockLanguageModel({
-          doGenerate: async (opts) => {
-            fallbackSignal = opts.abortSignal;
-            return mockResult;
-          },
-        });
-
-        // Act
-        await generateText({
-          model: createRetryable({
-            model: baseModel,
-            retries: [fallbackModel],
-            onRetry: () => ({ timeout: 30_000 }),
-          }),
-          prompt: 'Hello!',
-        });
-
-        // Assert
-        expect(fallbackSignal).toBeDefined();
-        expect(fallbackSignal?.aborted).toBe(false);
-      });
     });
   });
 
@@ -1473,6 +1447,51 @@ describe('generateText', () => {
         expect(fallbackModelSignal).toBeDefined();
         expect(fallbackModelSignal?.aborted).toBe(false);
         expect(baseModelSignal).not.toBe(fallbackModelSignal);
+      });
+
+      it('should not retry when base signal is aborted and retry has no timeout', async () => {
+        // Arrange — simulates a framework-level abort (e.g. AI SDK
+        // step/chunk timeout) where the inbound signal is already dead by
+        // the time we catch the error. Without a fresh deadline on the
+        // retry, the fallback would die instantly with the same abort.
+        const abortError = Object.assign(
+          new Error('The operation was aborted'),
+          { name: 'AbortError' },
+        );
+
+        const baseModel = new MockLanguageModel({
+          doGenerate: async () => {
+            throw abortError;
+          },
+        });
+        const fallbackModel = new MockLanguageModel({
+          doGenerate: mockResult,
+        });
+
+        const onError = vi.fn();
+        const onRetry = vi.fn();
+
+        const controller = new AbortController();
+        controller.abort();
+
+        // Act
+        const result = generateText({
+          model: createRetryable({
+            model: baseModel,
+            retries: [fallbackModel],
+            onError,
+            onRetry,
+          }),
+          prompt: 'Hello!',
+          abortSignal: controller.signal,
+        });
+
+        // Assert
+        await expect(result).rejects.toThrow();
+        expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
+        expect(fallbackModel.doGenerate).toHaveBeenCalledTimes(0);
+        expect(onError).toHaveBeenCalledTimes(1);
+        expect(onRetry).toHaveBeenCalledTimes(0);
       });
     });
 
@@ -3185,6 +3204,60 @@ describe('streamText', () => {
         expect(fallbackModelSignal).toBeDefined();
         expect(fallbackModelSignal?.aborted).toBe(false);
         expect(baseModelSignal).not.toBe(fallbackModelSignal);
+      });
+
+      it('should not retry mid-stream abort when retry has no timeout', async () => {
+        // Arrange — reproduces issue #39: stream creation succeeds but the
+        // stream errors mid-flight while the inbound signal is aborted (as
+        // happens when the AI SDK `timeout: { stepMs }` fires). Without a
+        // fresh deadline on the retry, fallback can't recover, so we
+        // rethrow rather than fire a misleading retry log.
+        const abortError = Object.assign(
+          new Error('The operation was aborted'),
+          { name: 'AbortError' },
+        );
+
+        const baseModel = new MockLanguageModel({
+          doStream: {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'error', error: abortError },
+            ]),
+          },
+        });
+        const fallbackModel = new MockLanguageModel({
+          doStream: {
+            stream: convertArrayToReadableStream(mockStreamChunks),
+          },
+        });
+
+        const onError = vi.fn();
+        const onRetry = vi.fn();
+
+        const controller = new AbortController();
+        controller.abort();
+
+        // Act
+        const result = streamText({
+          model: createRetryable({
+            model: baseModel,
+            retries: [fallbackModel],
+            onError,
+            onRetry,
+          }),
+          prompt,
+          abortSignal: controller.signal,
+          ...mockStreamOptions,
+        });
+
+        await convertAsyncIterableToArray(result.fullStream);
+
+        // Assert — fallback never runs and onRetry never fires; onError
+        // still fires so operators see the underlying abort.
+        expect(baseModel.doStream).toHaveBeenCalledTimes(1);
+        expect(fallbackModel.doStream).toHaveBeenCalledTimes(0);
+        expect(onError).toHaveBeenCalledTimes(1);
+        expect(onRetry).toHaveBeenCalledTimes(0);
       });
     });
 

@@ -198,16 +198,47 @@ describe('mergeLanguageModelCallOptions', () => {
       expect(result.abortSignal?.aborted).toBe(false);
     });
 
-    it('should let onRetryOverrides.timeout beat Retry.timeout', () => {
-      // Arrange / Act
+    it('should compose base signal with fresh timeout when base is alive', () => {
+      // Arrange
+      const controller = new AbortController();
+
+      // Act
       const result = mergeLanguageModelCallOptions({
-        callOptions: baseLanguageCallOptions,
+        callOptions: {
+          ...baseLanguageCallOptions,
+          abortSignal: controller.signal,
+        },
         currentRetry: { model: {} as LanguageModel, timeout: 30_000 },
-        onRetryOverrides: { timeout: 5_000 },
       });
 
       // Assert
       expect(result.abortSignal).toBeDefined();
+      expect(result.abortSignal).not.toBe(controller.signal);
+      expect(result.abortSignal?.aborted).toBe(false);
+
+      // Aborting the base should propagate through the composed signal so
+      // user cancellation still works mid-retry.
+      controller.abort();
+      expect(result.abortSignal?.aborted).toBe(true);
+    });
+
+    it('should drop already-aborted base signal when timeout is set', () => {
+      // Arrange
+      const controller = new AbortController();
+      controller.abort();
+
+      // Act
+      const result = mergeLanguageModelCallOptions({
+        callOptions: {
+          ...baseLanguageCallOptions,
+          abortSignal: controller.signal,
+        },
+        currentRetry: { model: {} as LanguageModel, timeout: 30_000 },
+      });
+
+      // Assert
+      expect(result.abortSignal).toBeDefined();
+      expect(result.abortSignal).not.toBe(controller.signal);
       expect(result.abortSignal?.aborted).toBe(false);
     });
   });
@@ -248,18 +279,6 @@ describe('mergeEmbeddingModelCallOptions', () => {
 
     // Assert
     expect(result.providerOptions).toEqual({ openai: { dimensions: 256 } });
-  });
-
-  it('should create a fresh AbortSignal from onRetryOverrides.timeout', () => {
-    // Arrange / Act
-    const result = mergeEmbeddingModelCallOptions({
-      callOptions: baseEmbeddingCallOptions,
-      onRetryOverrides: { timeout: 5_000 },
-    });
-
-    // Assert
-    expect(result.abortSignal).toBeDefined();
-    expect(result.abortSignal?.aborted).toBe(false);
   });
 });
 

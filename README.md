@@ -782,7 +782,9 @@ const retryableModel = createRetryable({
 
 #### Timeouts
 
-When a retry specifies a `timeout` value, a fresh `AbortSignal.timeout()` is created for that retry attempt, replacing any existing abort signal. This is essential when retrying after timeout errors, as the original abort signal would already be in an aborted state.
+When a retry specifies a `timeout` value, a fresh `AbortSignal.timeout()` is created for that retry attempt. If the original `abortSignal` is still alive, the fresh deadline is composed with it via `AbortSignal.any()` so user cancellation still works mid-retry. If the original signal is already aborted (for example it carried a request-level deadline that already fired), it is dropped so the retry runs against the fresh deadline alone.
+
+If the original `abortSignal` is already aborted at the time of retry and the chosen retry does **not** supply a `timeout`, ai-retry rethrows the original error rather than firing a misleading retry against the dead signal. `onError` still fires for observability, but `onRetry` is skipped. Setting `retry.timeout` is the explicit opt-in for retrying past an aborted signal.
 
 ```typescript
 const retryableModel = createRetryable({
@@ -925,7 +927,7 @@ The following options can be overridden:
 
 #### Dynamic Call Options
 
-You can also override call options dynamically from inside the `onRetry` callback, instead of declaring them statically on the retry object. This is useful when the override depends on something only known at runtime, like the prompt that just failed, the model that's about to be tried next, or the error that triggered the retry. The overrides apply to the upcoming retry attempt only, and can change the same fields as the static `options` on a retry plus the request `timeout`. The callback may also be `async` if computing the override needs to do work (e.g. fetching a fresh credential).
+You can also override call options dynamically from inside the `onRetry` callback, instead of declaring them statically on the retry object. This is useful when the override depends on something only known at runtime, like the prompt that just failed, the model that's about to be tried next, or the error that triggered the retry. The overrides apply to the upcoming retry attempt only, and can change the same fields as the static `options` on a retry. The callback may also be `async` if computing the override needs to do work (e.g. fetching a fresh credential).
 
 A common use case is sanitizing provider-scoped metadata when falling back to a different provider, for example stripping `providerOptions.azure.itemId` references from the previous prompt before retrying on OpenAI:
 
@@ -1090,7 +1092,7 @@ interface RetryableModelOptions<
 - `disabled`: Disable all retry logic. Can be a boolean or function returning boolean. Default: `false` (retries enabled).
 - `reset`: Controls when to reset back to the base model after a successful retry. Default: `after-request`.
 - `onError`: Callback invoked when an error occurs.
-- `onRetry`: Callback invoked before attempting a retry. May optionally return an `OnRetryOverrides` object (or a `Promise` of one) to override `options.*` and `timeout` for the upcoming attempt only. See [Dynamic Call Options via `onRetry`](#dynamic-call-options-via-onretry).
+- `onRetry`: Callback invoked before attempting a retry. May optionally return an `OnRetryOverrides` object (or a `Promise` of one) to override `options.*` for the upcoming attempt only. See [Dynamic Call Options via `onRetry`](#dynamic-call-options-via-onretry).
 - `onSuccess`: Callback invoked after a successful request. Receives the model that handled the request and all previous attempts.
 
 #### `Reset`

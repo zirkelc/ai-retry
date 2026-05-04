@@ -51,24 +51,28 @@ function resolveProviderOptions<
 /**
  * Resolve `abortSignal` for the upcoming attempt.
  *
- * If either `onRetryOverrides.timeout` or `currentRetry.timeout` is set, a
- * fresh `AbortSignal.timeout(...)` is created (override wins). Otherwise
- * the base `abortSignal` is preserved unchanged.
+ * If `currentRetry.timeout` is set, a fresh `AbortSignal.timeout(...)` is
+ * created. When the base signal is still alive, the fresh deadline is
+ * composed with it via `AbortSignal.any` so the user can still cancel
+ * mid-retry. When the base is already aborted, it is dropped so the retry
+ * runs against the fresh deadline alone. Without a retry timeout, the base
+ * is preserved unchanged.
  */
 function resolveAbortSignal<
   MODEL extends LanguageModel | EmbeddingModel | ImageModel,
 >(
   base: AbortSignal | undefined,
   currentRetry: Retry<MODEL> | undefined,
-  onRetryOverrides: OnRetryOverrides<MODEL> | undefined,
 ): AbortSignal | undefined {
-  if (onRetryOverrides?.timeout !== undefined) {
-    return AbortSignal.timeout(onRetryOverrides.timeout);
+  if (currentRetry?.timeout === undefined) {
+    return base;
   }
-  if (currentRetry?.timeout !== undefined) {
-    return AbortSignal.timeout(currentRetry.timeout);
+
+  const fresh = AbortSignal.timeout(currentRetry.timeout);
+  if (base !== undefined && !base.aborted) {
+    return AbortSignal.any([base, fresh]);
   }
-  return base;
+  return fresh;
 }
 
 /**
@@ -124,7 +128,6 @@ export function mergeLanguageModelCallOptions(input: {
     abortSignal: resolveAbortSignal<LanguageModel>(
       callOptions.abortSignal,
       currentRetry,
-      onRetryOverrides,
     ),
   };
 }
@@ -154,7 +157,6 @@ export function mergeEmbeddingModelCallOptions(input: {
     abortSignal: resolveAbortSignal<EmbeddingModel>(
       callOptions.abortSignal,
       currentRetry,
-      onRetryOverrides,
     ),
   };
 }
@@ -190,7 +192,6 @@ export function mergeImageModelCallOptions(input: {
     abortSignal: resolveAbortSignal<ImageModel>(
       callOptions.abortSignal,
       currentRetry,
-      onRetryOverrides,
     ),
   };
 }

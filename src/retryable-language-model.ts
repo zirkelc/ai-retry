@@ -18,11 +18,7 @@ import type {
   RetryErrorAttempt,
   RetryResultAttempt,
 } from './types.js';
-import {
-  isAbortError,
-  isGenerateResult,
-  isStreamContentPart,
-} from './utils.js';
+import { isGenerateResult, isStreamContentPart } from './utils.js';
 
 export class RetryableLanguageModel
   extends BaseRetryableModel<LanguageModel>
@@ -160,12 +156,6 @@ export class RetryableLanguageModel
 
         return { result, attempts, callOptions: retryCallOptions };
       } catch (error) {
-        // Don't retry if user manually aborted the request.
-        // TimeoutError from AbortSignal.timeout() will still be handled by retry handlers.
-        if (isAbortError(error)) {
-          throw error;
-        }
-
         const { retryModel, attempt } = await this.handleError(
           error,
           attempts,
@@ -173,6 +163,19 @@ export class RetryableLanguageModel
         );
 
         attempts.push(attempt);
+
+        /**
+         * If the inbound abort signal is already aborted and the chosen
+         * retry does not supply a fresh deadline, the retry would die
+         * instantly with the same abort. Rethrow rather than fire a
+         * misleading retry against a dead signal.
+         */
+        if (
+          input.callOptions.abortSignal?.aborted &&
+          retryModel.timeout === undefined
+        ) {
+          throw error;
+        }
 
         if (retryModel.delay) {
           /**
@@ -429,6 +432,19 @@ export class RetryableLanguageModel
              * Save the attempt
              */
             attempts.push(attempt);
+
+            /**
+             * If the inbound abort signal is already aborted and the chosen
+             * retry does not supply a fresh deadline, the retry would die
+             * instantly with the same abort. Rethrow rather than fire a
+             * misleading retry against a dead signal.
+             */
+            if (
+              callOptions.abortSignal?.aborted &&
+              retryModel.timeout === undefined
+            ) {
+              throw error;
+            }
 
             if (retryModel.delay) {
               /**
