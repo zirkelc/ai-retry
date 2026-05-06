@@ -4,7 +4,7 @@ import {
   buildResultContext,
   generateTextResult,
   MockLanguageModel,
-} from '../../test-utils.js';
+} from '../../../test-utils.js';
 import { result } from './result.js';
 
 describe('result', () => {

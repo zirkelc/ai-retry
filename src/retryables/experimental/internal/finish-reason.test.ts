@@ -1,13 +1,13 @@
 import { generateText } from 'ai';
 import { describe, expect, it } from 'vitest';
-import { createRetryable } from '../../create-retryable-model.js';
+import { createRetryable } from '../../../create-retryable-model.js';
 import {
   buildResultContext,
   generateEmptyResult,
   generateTextResult,
   MockLanguageModel,
-} from '../../test-utils.js';
-import type { LanguageModelGenerate } from '../../types.js';
+} from '../../../test-utils.js';
+import type { LanguageModelGenerate } from '../../../types.js';
 import { finishReason } from './finish-reason.js';
 
 const contentFilterResult: LanguageModelGenerate = {

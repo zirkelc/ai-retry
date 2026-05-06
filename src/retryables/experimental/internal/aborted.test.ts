@@ -4,8 +4,10 @@ import {
   buildErrorContext,
   MockLanguageModel,
   timeoutError,
-} from '../../test-utils.js';
-import { aborted } from './aborted.js';
+} from '../../../test-utils.js';
+import { createErrorAPI } from './create-error-api.js';
+
+const { aborted } = createErrorAPI<MockLanguageModel>();
 
 describe('aborted', () => {
   it(`should match AbortError`, async () => {

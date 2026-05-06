@@ -4,8 +4,10 @@ import {
   buildErrorContext,
   buildResultContext,
   MockLanguageModel,
-} from '../../test-utils.js';
-import { error } from './error.js';
+} from '../../../test-utils.js';
+import { createErrorAPI } from './create-error-api.js';
+
+const { error } = createErrorAPI<MockLanguageModel>();
 
 describe('error', () => {
   it(`should run the predicate against the current error`, async () => {

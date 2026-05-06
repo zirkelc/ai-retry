@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildErrorContext, MockLanguageModel } from '../../test-utils.js';
+import { buildErrorContext, MockLanguageModel } from '../../../test-utils.js';
 import { and } from './and.js';
 import { Condition } from './condition.js';
 

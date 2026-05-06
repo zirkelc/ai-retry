@@ -1,8 +1,8 @@
 import { generateText, Output } from 'ai';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { createRetryable } from '../../create-retryable-model.js';
-import { generateTextResult, MockLanguageModel } from '../../test-utils.js';
+import { createRetryable } from '../../../create-retryable-model.js';
+import { generateTextResult, MockLanguageModel } from '../../../test-utils.js';
 import { schemaInvalid } from './schema-invalid.js';
 
 const personSchema = z.object({

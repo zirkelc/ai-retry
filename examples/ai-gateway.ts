@@ -1,6 +1,6 @@
 import { openai } from '@ai-sdk/openai';
 import { embed, gateway, generateText } from 'ai';
-import { createRetryable, EmbeddingModel } from '../src/index.js';
+import { createRetryable, type EmbeddingModel } from '../src/index.js';
 
 const retryableLanguageModel = createRetryable({
   model: 'openai/gpt-4.1',

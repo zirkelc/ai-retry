@@ -4,8 +4,10 @@ import {
   buildErrorContext,
   MockLanguageModel,
   timeoutError,
-} from '../../test-utils.js';
-import { timeout } from './timeout.js';
+} from '../../../test-utils.js';
+import { createErrorAPI } from './create-error-api.js';
+
+const { timeout } = createErrorAPI<MockLanguageModel>();
 
 describe('timeout', () => {
   it(`should match TimeoutError`, async () => {

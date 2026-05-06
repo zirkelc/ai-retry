@@ -1,4 +1,4 @@
-import type { ResolvableLanguageModel } from '../../types.js';
+import type { ResolvableLanguageModel } from '../../../types.js';
 import type { Condition } from './condition.js';
 import { result } from './result.js';
 

@@ -2,7 +2,7 @@ import { APICallError } from 'ai';
 import {
   MAX_RETRY_AFTER_MS,
   parseRetryHeaders,
-} from '../../parse-retry-headers.js';
+} from '../../../parse-retry-headers.js';
 import type {
   EmbeddingModel,
   ImageModel,
@@ -10,8 +10,8 @@ import type {
   Retry,
   Retryable,
   RetryContext,
-} from '../../types.js';
-import { isErrorAttempt } from '../../utils.js';
+} from '../../../types.js';
+import { isErrorAttempt } from '../../../utils.js';
 
 /**
  * Any model the retryable system supports.
@@ -78,10 +78,22 @@ export class Condition<MODEL extends AnyModel> {
    * `Retry-After` and `Retry-After-Ms` response headers when present,
    * capped at 60 seconds, overriding any provided `delay`.
    *
+   * `maxAttempts` defaults to 2 (one original attempt + one retry).
+   * Lower values are rejected: `maxAttempts: 1` would count the original
+   * failed attempt against the budget and never actually retry. Use
+   * `.switch({ model: ... })` if you want a single attempt against a
+   * different model.
+   *
    * @example
    * error.isRetryable(true).retry({ delay: 1000, backoffFactor: 2 })
    */
   retry(options?: RetryOptions<MODEL>): Retryable<MODEL> {
+    if (options?.maxAttempts !== undefined && options.maxAttempts < 2) {
+      throw new Error(
+        `Condition.retry() requires maxAttempts >= 2 (got ${options.maxAttempts}); use .switch() for a single attempt against a different model.`,
+      );
+    }
+
     return async (ctx) => {
       if (!(await this.evaluate(ctx))) return undefined;
 
@@ -93,16 +105,17 @@ export class Condition<MODEL extends AnyModel> {
           const headerDelay = parseRetryHeaders(err.responseHeaders);
           if (headerDelay !== null) {
             return {
-              model,
+              maxAttempts: 2,
               ...options,
               delay: Math.min(headerDelay, MAX_RETRY_AFTER_MS),
               backoffFactor: 1,
+              model,
             };
           }
         }
       }
 
-      return { model, ...options };
+      return { maxAttempts: 2, ...options, model };
     };
   }
 

@@ -1,7 +1,7 @@
 import { safeParseJSON } from '@ai-sdk/provider-utils';
 import { fromJSONSchema } from 'zod';
-import type { ResolvableLanguageModel } from '../../types.js';
-import { isResultAttempt } from '../../utils.js';
+import type { ResolvableLanguageModel } from '../../../types.js';
+import { isResultAttempt } from '../../../utils.js';
 import type { Condition } from './condition.js';
 import { result } from './result.js';
 

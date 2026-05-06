@@ -2,8 +2,8 @@ import type {
   LanguageModelGenerate,
   ResolvableLanguageModel,
   RetryContext,
-} from '../../types.js';
-import { isResultAttempt } from '../../utils.js';
+} from '../../../types.js';
+import { isResultAttempt } from '../../../utils.js';
 import { Condition } from './condition.js';
 
 /**

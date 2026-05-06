@@ -1,13 +1,15 @@
 import { generateText } from 'ai';
 import { describe, expect, it } from 'vitest';
-import { createRetryable } from '../../create-retryable-model.js';
+import { createRetryable } from '../../../create-retryable-model.js';
 import {
   apiError,
   buildErrorContext,
   generateTextResult,
   MockLanguageModel,
-} from '../../test-utils.js';
-import { httpStatus } from './http-status.js';
+} from '../../../test-utils.js';
+import { createErrorAPI } from './create-error-api.js';
+
+const { httpStatus } = createErrorAPI<MockLanguageModel>();
 
 describe('httpStatus', () => {
   it(`should match by numeric status code`, async () => {

@@ -1,6 +1,6 @@
 import { NoImageGeneratedError } from 'ai';
 import { describe, expect, it } from 'vitest';
-import { buildImageErrorContext, MockImageModel } from '../../test-utils.js';
+import { buildImageErrorContext, MockImageModel } from '../../../test-utils.js';
 import { noImage } from './no-image.js';
 
 describe('noImage', () => {

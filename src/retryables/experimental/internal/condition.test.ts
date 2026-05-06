@@ -1,12 +1,12 @@
 import { generateText } from 'ai';
 import { describe, expect, it } from 'vitest';
-import { createRetryable } from '../../create-retryable-model.js';
+import { createRetryable } from '../../../create-retryable-model.js';
 import {
   apiError,
   buildErrorContext,
   generateTextResult,
   MockLanguageModel,
-} from '../../test-utils.js';
+} from '../../../test-utils.js';
 import { Condition } from './condition.js';
 
 describe('Condition', () => {
@@ -109,7 +109,11 @@ describe('Condition', () => {
       const retry = await retryable(ctx);
 
       // Assert
-      expect(retry).toEqual({ model: ctx.current.model, delay: 100 });
+      expect(retry).toEqual({
+        model: ctx.current.model,
+        maxAttempts: 2,
+        delay: 100,
+      });
     });
 
     it(`should honor the Retry-After header when present (seconds)`, async () => {
@@ -130,6 +134,7 @@ describe('Condition', () => {
       // Assert
       expect(retry).toEqual({
         model: ctx.current.model,
+        maxAttempts: 2,
         delay: 5000,
         backoffFactor: 1,
       });
@@ -153,6 +158,7 @@ describe('Condition', () => {
       // Assert
       expect(retry).toEqual({
         model: ctx.current.model,
+        maxAttempts: 2,
         delay: 60_000,
         backoffFactor: 1,
       });
@@ -172,6 +178,7 @@ describe('Condition', () => {
       // Assert
       expect(retry).toEqual({
         model: ctx.current.model,
+        maxAttempts: 2,
         delay: 250,
         backoffFactor: 2,
       });
@@ -188,6 +195,41 @@ describe('Condition', () => {
 
       // Assert
       expect(retry).toBeUndefined();
+    });
+
+    it(`should default maxAttempts to 2`, async () => {
+      // Arrange
+      const cond = new Condition<MockLanguageModel>(() => true);
+      const retryable = cond.retry();
+      const ctx = buildErrorContext(new Error('boom'));
+
+      // Act
+      const retry = await retryable(ctx);
+
+      // Assert
+      expect(retry).toEqual({ model: ctx.current.model, maxAttempts: 2 });
+    });
+
+    it(`should preserve a higher user-provided maxAttempts`, async () => {
+      // Arrange
+      const cond = new Condition<MockLanguageModel>(() => true);
+      const retryable = cond.retry({ maxAttempts: 5 });
+      const ctx = buildErrorContext(new Error('boom'));
+
+      // Act
+      const retry = await retryable(ctx);
+
+      // Assert
+      expect(retry).toEqual({ model: ctx.current.model, maxAttempts: 5 });
+    });
+
+    it(`should throw when maxAttempts is less than 2`, () => {
+      // Arrange
+      const cond = new Condition<MockLanguageModel>(() => true);
+
+      // Act + Assert
+      expect(() => cond.retry({ maxAttempts: 1 })).toThrow(/maxAttempts >= 2/);
+      expect(() => cond.retry({ maxAttempts: 0 })).toThrow(/maxAttempts >= 2/);
     });
   });
 
