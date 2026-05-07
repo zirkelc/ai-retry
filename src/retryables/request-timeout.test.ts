@@ -13,7 +13,7 @@ import { describe, expect, it } from 'vitest';
 import { createRetryable } from '../create-retryable-model.js';
 import {
   chunksToText,
-  type LanguageModelResultFn,
+  type LanguageModelGenerateFn,
   type LanguageModelStreamFn,
   MockEmbeddingModel,
   MockImageModel,
@@ -167,7 +167,7 @@ describe('requestTimeout', () => {
     it('should fallback in case of timeout error', async () => {
       // Arrange
       const baseModel = new MockLanguageModel({
-        doGenerate: timeoutError as LanguageModelResultFn,
+        doGenerate: timeoutError as LanguageModelGenerateFn,
       });
       const retryModel = new MockLanguageModel({ doGenerate: mockResult });
 
@@ -233,7 +233,7 @@ describe('requestTimeout', () => {
               );
             });
           });
-        }) as LanguageModelResultFn,
+        }) as LanguageModelGenerateFn,
       });
 
       // Retry model that captures its signal and verifies it's not aborted
@@ -248,7 +248,7 @@ describe('requestTimeout', () => {
             );
           }
           return mockResult;
-        }) as LanguageModelResultFn,
+        }) as LanguageModelGenerateFn,
       });
 
       // Act
@@ -283,7 +283,7 @@ describe('requestTimeout', () => {
       let retryModelSignal: AbortSignal | undefined;
 
       const baseModel = new MockLanguageModel({
-        doGenerate: timeoutError as LanguageModelResultFn,
+        doGenerate: timeoutError as LanguageModelGenerateFn,
       });
 
       const retryModel = new MockLanguageModel({
@@ -297,7 +297,7 @@ describe('requestTimeout', () => {
             );
           }
           return mockResult;
-        }) as LanguageModelResultFn,
+        }) as LanguageModelGenerateFn,
       });
 
       // Act
