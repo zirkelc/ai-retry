@@ -5,7 +5,7 @@ import {
   MockLanguageModel,
   timeoutError,
 } from '../../../test-utils.js';
-import { createErrorAPI } from './create-error-api.js';
+import { createErrorAPI } from './error.js';
 
 const { aborted } = createErrorAPI<MockLanguageModel>();
 

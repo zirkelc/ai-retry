@@ -7,7 +7,7 @@
  */
 
 import type { ImageModel } from '../../../types.js';
-import { createErrorAPI } from '../internal/create-error-api.js';
+import { createErrorAPI } from '../internal/error.js';
 
 export const { error, httpStatus, timeout, aborted } =
   createErrorAPI<ImageModel>();

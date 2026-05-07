@@ -5,7 +5,7 @@ import {
   buildResultContext,
   MockLanguageModel,
 } from '../../../test-utils.js';
-import { createErrorAPI } from './create-error-api.js';
+import { createErrorAPI } from './error.js';
 
 const { error } = createErrorAPI<MockLanguageModel>();
 

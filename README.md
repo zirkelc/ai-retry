@@ -595,7 +595,7 @@ console.log(result.object); // { name: "Alice", age: 30 }
 > import { ... } from 'ai-retry/retryables/experimental/embedding-model';
 > ```
 
-A `condition().action()` API for retryables. Conditions are built from small primitives (`error(fn)`, `result(fn)`), composed with `Condition.and` / `.or` / `.not`, and turned into a `Retryable` by one of two terminal actions: `.switch({ model })` or `.retry({ delay })`. The result drops into the same `retries: [...]` array as the stable helpers, so you can mix the two styles freely.
+A `condition().action()` API for retryables. Conditions are built from small primitives (`error(fn)`, `result(fn)`), composed with `.and` / `.or` / `.not`, and turned into a `Retryable` by one of two terminal actions: `.switch({ model })` or `.retry({ delay })`. The result drops into the same `retries: [...]` array as the stable helpers, so you can mix the two styles freely.
 
 ```typescript
 import { anthropic } from '@ai-sdk/anthropic';
@@ -625,56 +625,84 @@ const retryableModel = createRetryable({
 });
 ```
 
-#### Why three entry points
+#### Picking an entry point
 
-The helpers are split into per-model entry points (`language-model`, `image-model`, `embedding-model`) because TypeScript cannot infer the `MODEL` type parameter at the call site of `createRetryable({ model, retries: [...] })` and propagate it back into a generic helper like `error(...)`. Inference resolves the helper's generic eagerly using only its own arguments, before the surrounding `createRetryable` call has fixed `MODEL`.
+Pick the entry point that matches the model you pass to `createRetryable`. Each module exposes the helpers that make sense for that model family already typed for it, so you don't need to add type annotations yourself.
 
-Binding the constraint at the entry point side-steps the issue: each module instantiates the helper factory for one model family, so `error(...)` imported from `language-model` returns a `Condition<LanguageModel>` that fits an `openai('gpt-4o')` retry list with no explicit generics. The same source helpers are exposed by all three modules, just bound to different `MODEL` types. Pick the entry point that matches the model you pass to `createRetryable`.
+#### Low-level conditions
 
-#### High-level helpers
+The primitive builders `error(...)` and `result(...)` take a predicate and turn it into a condition; their namespaces bundle the most common field matchers on top.
 
-Each returns a `Condition` that you finalize with `.switch(...)` or `.retry(...)`. Availability per entry point:
+| Helper                            | Matches when                                                                          | Available in              |
+| --------------------------------- | ------------------------------------------------------------------------------------- | ------------------------- |
+| `error(predicate)`                | The current attempt failed and `predicate(err, ctx)` returns true                     | all three entry points    |
+| `error.isRetryable(flag)`         | `APICallError.isRetryable === flag` (default `true`)                                  | all three entry points    |
+| `error.statusCode(...patterns)`   | Numbers match exactly; regex matches the stringified code (e.g. `/^5\d\d$/` for 5xx)  | all three entry points    |
+| `error.message(...patterns)`      | Substring (case-insensitive) or regex match against the error message                 | all three entry points    |
+| `result(predicate)`               | The current attempt succeeded and `predicate(res, ctx)` returns true                  | `language-model` only     |
+| `result.finishReason(...reasons)` | The result's `finishReason.unified` matches one of the given values                   | `language-model` only     |
 
-| Helper                          | language-model | image-model | embedding-model |
-| ------------------------------- | :------------: | :---------: | :-------------: |
-| `error(predicate)`              |       ✓        |      ✓      |        ✓        |
-| `error.isRetryable(flag)`       |       ✓        |      ✓      |        ✓        |
-| `error.statusCode(...patterns)` |       ✓        |      ✓      |        ✓        |
-| `error.message(...patterns)`    |       ✓        |      ✓      |        ✓        |
-| `httpStatus(...patterns)`       |       ✓        |      ✓      |        ✓        |
-| `timeout()`                     |       ✓        |      ✓      |        ✓        |
-| `aborted()`                     |       ✓        |      ✓      |        ✓        |
-| `result(predicate)`             |       ✓        |      —      |        —        |
-| `finishReason(...reasons)`      |       ✓        |      —      |        —        |
-| `schemaInvalid()`               |       ✓        |      —      |        —        |
-| `noImage()`                     |       —        |      ✓      |        —        |
+```typescript
+import { APICallError } from 'ai';
+import { error } from 'ai-retry/retryables/experimental/language-model';
+
+error((e) => APICallError.isInstance(e) && e.statusCode === 418).switch({
+  model: fallback,
+});
+```
+
+#### High-level conditions
+
+Convenience matchers built on top of the low-level ones for the common cases. Each returns a condition that you finalize with `.switch(...)` or `.retry(...)`.
+
+| Helper                     | language-model | image-model | embedding-model |
+| -------------------------- | :------------: | :---------: | :-------------: |
+| `httpStatus(...patterns)`  |       ✓        |      ✓      |        ✓        |
+| `timeout()`                |       ✓        |      ✓      |        ✓        |
+| `aborted()`                |       ✓        |      ✓      |        ✓        |
+| `finishReason(...reasons)` |       ✓        |      —      |        —        |
+| `schemaInvalid()`          |       ✓        |      —      |        —        |
+| `noImage()`                |       —        |      ✓      |        —        |
 
 What each one matches:
 
-| Helper                          | Matches when                                                                                       |
-| ------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `error(predicate)`              | The current attempt failed and `predicate(err, ctx)` returns true                                  |
-| `error.isRetryable(flag)`       | `APICallError.isRetryable === flag` (default `true`)                                               |
-| `error.statusCode(...patterns)` | Numbers match exactly; regex matches the stringified code (e.g. `/^5\d\d$/` for 5xx)               |
-| `error.message(...patterns)`    | Substring (case-insensitive) or regex match against the error message                              |
-| `httpStatus(...patterns)`       | Numbers match the status code; strings match the message (substring); regex matches either        |
-| `timeout()`                     | `Error.name === 'TimeoutError'` (`AbortSignal.timeout()` fired)                                    |
-| `aborted()`                     | `Error.name === 'AbortError'` (manual `controller.abort()`)                                        |
-| `result(predicate)`             | The current attempt succeeded and `predicate(res, ctx)` returns true                               |
-| `finishReason(...reasons)`      | The result's `finishReason.unified` matches one of the given values                                |
-| `schemaInvalid()`               | The result text fails JSON-schema validation against the call's `responseFormat`                   |
-| `noImage()`                     | The image model threw `NoImageGeneratedError`                                                      |
+| Helper                     | Matches when                                                                                       |
+| -------------------------- | -------------------------------------------------------------------------------------------------- |
+| `httpStatus(...patterns)`  | Numbers match the status code; strings match the message (substring); regex matches either         |
+| `timeout()`                | `Error.name === 'TimeoutError'` (`AbortSignal.timeout()` fired)                                    |
+| `aborted()`                | `Error.name === 'AbortError'` (manual `controller.abort()`)                                        |
+| `finishReason(...reasons)` | The result's `finishReason.unified` matches one of the given values                                |
+| `schemaInvalid()`          | The result text fails JSON-schema validation against the call's `responseFormat`                   |
+| `noImage()`                | The image model threw `NoImageGeneratedError`                                                      |
+
+Each high-level helper is a thin wrapper around the low-level ones. For example, `timeout()` is roughly:
+
+```typescript
+function timeout() {
+  return error(
+    (err) => err instanceof Error && err.name === 'TimeoutError',
+  );
+}
+```
+
+and `finishReason(...)` just delegates to `result.finishReason(...)`:
+
+```typescript
+function finishReason(...reasons: Array<string>) {
+  return result.finishReason(...reasons);
+}
+```
 
 #### Actions
 
-Every `Condition` exposes two terminal actions that turn it into a `Retryable`:
+Every condition exposes two terminal actions that turn it into a `Retryable`:
 
 - **`.switch({ model, ...options })`** falls back to a different model when the condition matches. Optional fields (`maxAttempts`, `delay`, `backoffFactor`, `timeout`, `options`) are the same as on a normal `Retry` object. `maxAttempts` defaults to `1`.
 - **`.retry({ delay?, backoffFactor?, maxAttempts?, ... })`** retries the current model when the condition matches. Honors `Retry-After` and `Retry-After-Ms` response headers when present, capped at 60 seconds. `maxAttempts` defaults to `2` (one original attempt + one retry); values below `2` throw, since the retry budget is consumed by the original failure.
 
 #### Combinators
 
-Compose conditions with the methods on `Condition`:
+Compose conditions with `.and`, `.or`, `.not`:
 
 ```typescript
 import {
@@ -686,21 +714,6 @@ httpStatus(429).or(error.message('overloaded'));
 httpStatus(503).and(error.message('temporary'));
 error.isRetryable(true).not();
 ```
-
-#### Primitives
-
-`error(predicate)` and `result(predicate)` are the two lowest-level builders. Reach for them when no helper covers your case:
-
-```typescript
-import { APICallError } from 'ai';
-import { error } from 'ai-retry/retryables/experimental/language-model';
-
-error(
-  (e) => APICallError.isInstance(e) && e.statusCode === 418,
-).switch({ model: fallback });
-```
-
-`result(predicate)` is only available from `language-model`, since image and embedding results do not carry the same shape.
 
 #### Mapping from Built-in retryables
 

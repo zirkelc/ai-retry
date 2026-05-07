@@ -27,3 +27,21 @@ export function result<
     return predicate(ctx.current.result, ctx);
   });
 }
+
+/**
+ * The unified finish reason produced by the AI SDK.
+ */
+export type FinishReason = LanguageModelGenerate['finishReason']['unified'];
+
+/**
+ * Match the result's finish reason against one of the given values.
+ *
+ * @example
+ * result.finishReason('content-filter')
+ * result.finishReason('content-filter', 'length')
+ */
+result.finishReason = function finishReason<
+  MODEL extends ResolvableLanguageModel = ResolvableLanguageModel,
+>(...reasons: Array<FinishReason>): Condition<MODEL> {
+  return result<MODEL>((res) => reasons.includes(res.finishReason.unified));
+};
