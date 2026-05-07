@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.7.0](https://github.com/zirkelc/ai-retry/compare/v1.6.1...v1.7.0) (2026-05-07)
+
+
+### Features
+
+* **experimental:** add result.finishReason and polish docs ([35f33e8](https://github.com/zirkelc/ai-retry/commit/35f33e86d462ff57c2388f50c364500280eee8c7))
+* **experimental:** split conditions into per-model entry points ([7e53903](https://github.com/zirkelc/ai-retry/commit/7e53903d69c4ad4dc83a6f0ffd883c6a0e5b23d1))
+* result-based retries for streamText ([7c0270b](https://github.com/zirkelc/ai-retry/commit/7c0270bcd82acfdaf7cd39e67e577eadfbee295e))
+
+
+### Bug Fixes
+
+* tests ([4bc738f](https://github.com/zirkelc/ai-retry/commit/4bc738f5296e505b6b8ef73591e7fa2484b20aed))
+
 ## [1.6.1](https://github.com/zirkelc/ai-retry/compare/v1.6.0...v1.6.1) (2026-05-04)
 
 
