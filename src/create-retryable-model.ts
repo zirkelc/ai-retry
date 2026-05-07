@@ -1,7 +1,7 @@
 import { gateway } from 'ai';
-import { RetryableEmbeddingModel } from './retryable-embedding-model.js';
-import { RetryableImageModel } from './retryable-image-model.js';
-import { RetryableLanguageModel } from './retryable-language-model.js';
+import { RetryableEmbeddingModel } from './internal/retryable-embedding-model.js';
+import { RetryableImageModel } from './internal/retryable-image-model.js';
+import { RetryableLanguageModel } from './internal/retryable-language-model.js';
 import type {
   EmbeddingModel,
   GatewayLanguageModelId,
@@ -9,7 +9,7 @@ import type {
   LanguageModel,
   RetryableModelOptions,
 } from './types.js';
-import { isEmbeddingModel, isImageModel, isModel } from './utils.js';
+import { isEmbeddingModel, isImageModel, isModel } from './internal/guards.js';
 
 export function createRetryable<MODEL extends LanguageModel>(
   options: Omit<RetryableModelOptions<LanguageModel>, 'model'> & {

@@ -6,7 +6,7 @@ import type {
   Retryable,
   RetryableOptions,
 } from '../types.js';
-import { isErrorAttempt, isObject, isString } from '../utils.js';
+import { isErrorAttempt, isObject, isString } from '../internal/guards.js';
 
 /**
  * Fallback to a different model if the provider returns an overloaded error.

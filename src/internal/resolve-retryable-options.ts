@@ -3,7 +3,7 @@ import type {
   LanguageModel,
   RetryableOptions,
 } from '../types.js';
-import { isModel } from '../utils.js';
+import { isModel } from './guards.js';
 
 /**
  * Helper to resolve `RetryableOptions` from either a model and/or options object.

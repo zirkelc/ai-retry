@@ -9,7 +9,7 @@ import {
   isObject,
   isResultAttempt,
   isString,
-} from '../utils.js';
+} from '../internal/guards.js';
 
 /**
  * Fallback to a different model if the content filter was triggered.

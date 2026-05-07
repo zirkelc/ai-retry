@@ -5,7 +5,7 @@ import type {
   Retryable,
   RetryableOptions,
 } from '../types.js';
-import { isErrorAttempt, isTimeoutError } from '../utils.js';
+import { isErrorAttempt, isTimeoutError } from '../internal/guards.js';
 
 /**
  * Fallback to a different model after a timeout/abort error.

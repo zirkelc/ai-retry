@@ -6,7 +6,7 @@ import {
   generateEmptyResult,
   generateTextResult,
   MockLanguageModel,
-} from '../test-utils.js';
+} from '../internal/test-utils.js';
 import { schemaMismatch } from './schema-mismatch.js';
 
 const validJson = JSON.stringify({ name: `Alice`, age: 30 });

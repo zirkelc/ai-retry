@@ -19,7 +19,7 @@ import {
   MockEmbeddingModel,
   MockImageModel,
   MockLanguageModel,
-} from '../test-utils.js';
+} from '../internal/test-utils.js';
 import type {
   EmbeddingModelEmbed,
   ImageModelGenerate,

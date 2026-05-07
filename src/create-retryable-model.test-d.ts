@@ -1,6 +1,9 @@
 import { assertType, describe, expectTypeOf, it } from 'vitest';
 import { createRetryable } from './create-retryable-model.js';
-import { MockEmbeddingModel, MockLanguageModel } from './test-utils.js';
+import {
+  MockEmbeddingModel,
+  MockLanguageModel,
+} from './internal/test-utils.js';
 import type {
   EmbeddingModel,
   EmbeddingModelCallOptions,

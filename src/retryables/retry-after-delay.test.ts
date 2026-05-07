@@ -16,7 +16,7 @@ import {
   MockEmbeddingModel,
   MockImageModel,
   MockLanguageModel,
-} from '../test-utils.js';
+} from '../internal/test-utils.js';
 import type {
   EmbeddingModel,
   EmbeddingModelEmbed,
@@ -27,7 +27,7 @@ import type {
   LanguageModelStreamPart,
   Retryable,
 } from '../types.js';
-import { isErrorAttempt } from '../utils.js';
+import { isErrorAttempt } from '../internal/guards.js';
 import { retryAfterDelay } from './retry-after-delay.js';
 
 const mockResultText = 'Hello, world!';

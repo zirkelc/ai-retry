@@ -10,7 +10,7 @@ import {
 } from 'ai';
 import { describe, expect, it } from 'vitest';
 import { createRetryable } from '../create-retryable-model.js';
-import { chunksToText, MockLanguageModel } from '../test-utils.js';
+import { chunksToText, MockLanguageModel } from '../internal/test-utils.js';
 import type {
   LanguageModelGenerate,
   LanguageModelStreamPart,

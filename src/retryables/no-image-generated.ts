@@ -1,6 +1,6 @@
 import { NoImageGeneratedError } from 'ai';
 import type { ImageModel, Retryable, RetryableOptions } from '../types.js';
-import { isErrorAttempt } from '../utils.js';
+import { isErrorAttempt } from '../internal/guards.js';
 
 /**
  * Fallback to a different model if image generation fails with NoImageGeneratedError.

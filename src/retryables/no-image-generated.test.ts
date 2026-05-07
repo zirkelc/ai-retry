@@ -1,7 +1,7 @@
 import { APICallError, generateImage, NoImageGeneratedError } from 'ai';
 import { describe, expect, it, vi } from 'vitest';
 import { createRetryable } from '../create-retryable-model.js';
-import { MockImageModel } from '../test-utils.js';
+import { MockImageModel } from '../internal/test-utils.js';
 import type {
   ImageModel,
   ImageModelGenerate,

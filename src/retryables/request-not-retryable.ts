@@ -6,7 +6,7 @@ import type {
   Retryable,
   RetryableOptions,
 } from '../types.js';
-import { isErrorAttempt } from '../utils.js';
+import { isErrorAttempt } from '../internal/guards.js';
 
 /**
  * Fallback to a different model if the error is non-retryable.

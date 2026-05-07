@@ -2,7 +2,7 @@ import { anthropic } from '@ai-sdk/anthropic';
 import { openai } from '@ai-sdk/openai';
 import { APICallError, generateText } from 'ai';
 import { createRetryable } from 'ai-retry';
-import { error } from '../src/retryables/experimental/language-model/index.js';
+import { error } from '../src/experimental/language-model/index.js';
 import { requestTimeout } from '../src/retryables/request-timeout.js';
 
 /**

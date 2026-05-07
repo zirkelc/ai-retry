@@ -590,9 +590,23 @@ console.log(result.object); // { name: "Alice", age: 30 }
 > This API is experimental and may change. It is not exported from the package root; opt in via one of the per-model deep imports:
 >
 > ```ts
-> import { ... } from 'ai-retry/retryables/experimental/language-model';
-> import { ... } from 'ai-retry/retryables/experimental/image-model';
-> import { ... } from 'ai-retry/retryables/experimental/embedding-model';
+> import { ... } from 'ai-retry/experimental/language-model';
+> import { ... } from 'ai-retry/experimental/image-model';
+> import { ... } from 'ai-retry/experimental/embedding-model';
+> ```
+>
+> Each entry point also re-exports `createRetryable` already typed for that model family, so you can either import everything from one path:
+>
+> ```ts
+> import { createRetryable, error, httpStatus } from 'ai-retry/experimental/language-model';
+> ```
+>
+> or pull retryables from the dedicated `/retryables` subpath:
+>
+> ```ts
+> import { error, httpStatus } from 'ai-retry/experimental/language-model/retryables';
+> // or
+> import * as retryables from 'ai-retry/experimental/language-model/retryables';
 > ```
 
 A `condition().action()` API for retryables. Conditions are built from small primitives (`error(fn)`, `result(fn)`), composed with `.and` / `.or` / `.not`, and turned into a `Retryable` by one of two terminal actions: `.switch({ model })` or `.retry({ delay })`. The result drops into the same `retries: [...]` array as the stable helpers, so you can mix the two styles freely.
@@ -601,12 +615,12 @@ A `condition().action()` API for retryables. Conditions are built from small pri
 import { anthropic } from '@ai-sdk/anthropic';
 import { openai } from '@ai-sdk/openai';
 import { generateText } from 'ai';
-import { createRetryable } from 'ai-retry';
 import {
+  createRetryable,
   error,
   finishReason,
   httpStatus,
-} from 'ai-retry/retryables/experimental/language-model';
+} from 'ai-retry/experimental/language-model';
 
 const retryableModel = createRetryable({
   model: openai('gpt-4'),
@@ -644,7 +658,7 @@ The primitive builders `error(...)` and `result(...)` take a predicate and turn 
 
 ```typescript
 import { APICallError } from 'ai';
-import { error } from 'ai-retry/retryables/experimental/language-model';
+import { error } from 'ai-retry/experimental/language-model';
 
 error((e) => APICallError.isInstance(e) && e.statusCode === 418).switch({
   model: fallback,
@@ -708,7 +722,7 @@ Compose conditions with `.and`, `.or`, `.not`:
 import {
   error,
   httpStatus,
-} from 'ai-retry/retryables/experimental/language-model';
+} from 'ai-retry/experimental/language-model';
 
 httpStatus(429).or(error.message('overloaded'));
 httpStatus(503).and(error.message('temporary'));
@@ -717,7 +731,7 @@ error.isRetryable(true).not();
 
 #### Mapping from Built-in retryables
 
-Each stable retryable has an equivalent in the new shape (imports from `ai-retry/retryables/experimental/language-model` unless noted):
+Each stable retryable has an equivalent in the new shape (imports from `ai-retry/experimental/language-model` unless noted):
 
 | Built-in                                        | Composable form                                                                                       |
 | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------- |

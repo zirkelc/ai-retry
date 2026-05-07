@@ -1,6 +1,6 @@
 import { describe, expectTypeOf, it } from 'vitest';
 import { createRetryable } from '../create-retryable-model.js';
-import { MockImageModel } from '../test-utils.js';
+import { MockImageModel } from '../internal/test-utils.js';
 import type { Retryable } from '../types.js';
 import { noImageGenerated } from './no-image-generated.js';
 

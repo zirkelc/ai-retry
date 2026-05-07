@@ -5,7 +5,7 @@ import type {
   Retryable,
   RetryableOptions,
 } from '../types.js';
-import { isResultAttempt } from '../utils.js';
+import { isResultAttempt } from '../internal/guards.js';
 
 /**
  * Fallback to a different model if the response does not match the expected JSON schema.

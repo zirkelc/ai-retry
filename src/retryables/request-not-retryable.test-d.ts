@@ -4,7 +4,7 @@ import {
   MockEmbeddingModel,
   MockImageModel,
   MockLanguageModel,
-} from '../test-utils.js';
+} from '../internal/test-utils.js';
 import type { Retryable } from '../types.js';
 import { requestNotRetryable } from './request-not-retryable.js';
 

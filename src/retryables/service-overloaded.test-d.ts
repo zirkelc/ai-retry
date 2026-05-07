@@ -4,7 +4,7 @@ import {
   MockEmbeddingModel,
   MockImageModel,
   MockLanguageModel,
-} from '../test-utils.js';
+} from '../internal/test-utils.js';
 import type { EmbeddingModel, LanguageModel, Retryable } from '../types.js';
 import { serviceOverloaded } from './service-overloaded.js';
 
