@@ -2,7 +2,7 @@ import type {
   EmbeddingModel,
   ImageModel,
   LanguageModel,
-  LanguageModelGenerate,
+  LanguageModelResult,
   LanguageModelStream,
   LanguageModelStreamPart,
   RetryAttempt,
@@ -49,12 +49,12 @@ export const isImageModel = (model: unknown): model is ImageModel =>
   !('doEmbed' in model);
 
 export const isStreamResult = (
-  result: LanguageModelGenerate | LanguageModelStream,
+  result: LanguageModelResult | LanguageModelStream,
 ): result is LanguageModelStream => 'stream' in result;
 
 export const isGenerateResult = (
-  result: LanguageModelGenerate | LanguageModelStream,
-): result is LanguageModelGenerate => 'content' in result;
+  result: LanguageModelResult | LanguageModelStream,
+): result is LanguageModelResult => 'content' in result;
 
 /**
  * Type guard to check if a retry attempt is an error attempt

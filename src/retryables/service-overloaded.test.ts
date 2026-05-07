@@ -23,14 +23,14 @@ import {
 import type {
   EmbeddingModelEmbed,
   ImageModelGenerate,
-  LanguageModelGenerate,
+  LanguageModelResult,
   LanguageModelStreamPart,
 } from '../types.js';
 import { serviceOverloaded } from './service-overloaded.js';
 
 const mockResultText = 'Hello, world!';
 
-const mockResult: LanguageModelGenerate = {
+const mockResult: LanguageModelResult = {
   finishReason: { unified: 'stop', raw: undefined },
   usage: {
     inputTokens: { total: 10, noCache: 0, cacheRead: 0, cacheWrite: 0 },

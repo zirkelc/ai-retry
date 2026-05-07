@@ -1,5 +1,5 @@
 import type {
-  LanguageModelGenerate,
+  LanguageModelResult,
   ResolvableLanguageModel,
   RetryContext,
 } from '../../types.js';
@@ -18,7 +18,7 @@ export function result<
   MODEL extends ResolvableLanguageModel = ResolvableLanguageModel,
 >(
   predicate: (
-    res: LanguageModelGenerate,
+    res: LanguageModelResult,
     ctx: RetryContext<MODEL>,
   ) => boolean | Promise<boolean>,
 ): Condition<MODEL> {
@@ -31,7 +31,7 @@ export function result<
 /**
  * The unified finish reason produced by the AI SDK.
  */
-export type FinishReason = LanguageModelGenerate['finishReason']['unified'];
+export type FinishReason = LanguageModelResult['finishReason']['unified'];
 
 /**
  * Match the result's finish reason against one of the given values.

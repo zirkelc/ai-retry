@@ -14,7 +14,7 @@ import {
 import type {
   LanguageModel,
   LanguageModelCallOptions,
-  LanguageModelGenerate,
+  LanguageModelResult,
   LanguageModelStreamPart,
   Retryable,
   RetryableModelOptions,
@@ -30,7 +30,7 @@ const prompt = 'Hello!';
 
 const mockResultText = 'Hello, world!';
 
-const mockResult: LanguageModelGenerate = {
+const mockResult: LanguageModelResult = {
   finishReason: { unified: 'stop', raw: undefined },
   usage: {
     inputTokens: { total: 10, noCache: 0, cacheRead: 0, cacheWrite: 0 },
@@ -40,7 +40,7 @@ const mockResult: LanguageModelGenerate = {
   warnings: [],
 };
 
-const contentFilterResult: LanguageModelGenerate = {
+const contentFilterResult: LanguageModelResult = {
   finishReason: { unified: 'content-filter', raw: undefined },
   usage: {
     inputTokens: { total: 10, noCache: 0, cacheRead: 0, cacheWrite: 0 },
@@ -74,6 +74,30 @@ const mockStreamChunks: LanguageModelStreamPart[] = [
   {
     type: 'finish',
     finishReason: { unified: 'stop', raw: undefined },
+    usage: testUsage,
+    providerMetadata: {
+      testProvider: { testKey: 'testValue' },
+    },
+  },
+];
+
+/**
+ * Stream that finishes with `content-filter` before any text deltas are
+ * emitted. The retry layer evaluates result-based retryables against a
+ * synthetic result built from the finish part when no content has been
+ * streamed yet.
+ */
+const contentFilterStreamChunks: LanguageModelStreamPart[] = [
+  { type: 'stream-start', warnings: [] },
+  {
+    type: 'response-metadata',
+    id: 'id-0',
+    modelId: 'mock-model-id',
+    timestamp: new Date(0),
+  },
+  {
+    type: 'finish',
+    finishReason: { unified: 'content-filter', raw: undefined },
     usage: testUsage,
     providerMetadata: {
       testProvider: { testKey: 'testValue' },
@@ -2544,6 +2568,142 @@ describe('streamText', () => {
       `);
 
       vi.useRealTimers();
+    });
+
+    describe('result-based retries', () => {
+      it('should retry with results', async () => {
+        // Arrange
+        const baseModel = new MockLanguageModel({
+          doStream: {
+            stream: convertArrayToReadableStream(contentFilterStreamChunks),
+          },
+        });
+        const fallbackModel = new MockLanguageModel({
+          doStream: {
+            stream: convertArrayToReadableStream(mockStreamChunks),
+          },
+        });
+        const fallbackRetryable: Retryable<LanguageModel> = (context) => {
+          if (
+            isResultAttempt(context.current) &&
+            context.current.result.finishReason.unified === 'content-filter'
+          ) {
+            return { model: fallbackModel, maxAttempts: 1 };
+          }
+          return undefined;
+        };
+
+        // Act
+        const result = streamText({
+          model: createRetryable({
+            model: baseModel,
+            retries: [fallbackRetryable],
+          }),
+          prompt,
+        });
+        const chunks = await convertAsyncIterableToArray(result.fullStream);
+
+        // Assert
+        expect(baseModel.doStream).toHaveBeenCalledTimes(1);
+        expect(fallbackModel.doStream).toHaveBeenCalledTimes(1);
+        expect(chunksToText(chunks)).toBe(mockResultText);
+      });
+
+      it('should ignore plain language models for result-based attempts', async () => {
+        // Arrange
+        const baseModel = new MockLanguageModel({
+          doStream: {
+            stream: convertArrayToReadableStream(contentFilterStreamChunks),
+          },
+        });
+        const fallbackModel1 = new MockLanguageModel({
+          doStream: {
+            stream: convertArrayToReadableStream(mockStreamChunks),
+          },
+        });
+        const fallbackModel2 = new MockLanguageModel({
+          doStream: {
+            stream: convertArrayToReadableStream(mockStreamChunks),
+          },
+        });
+
+        const fallbackRetryable: Retryable<LanguageModel> = (context) => {
+          if (
+            isResultAttempt(context.current) &&
+            context.current.result.finishReason.unified === 'content-filter'
+          ) {
+            return { model: fallbackModel2, maxAttempts: 1 };
+          }
+          return undefined;
+        };
+
+        // Act
+        const result = streamText({
+          model: createRetryable({
+            model: baseModel,
+            retries: [
+              fallbackModel1, // Language model should be skipped
+              fallbackRetryable,
+            ],
+          }),
+          prompt,
+        });
+        const chunks = await convertAsyncIterableToArray(result.fullStream);
+
+        // Assert
+        expect(baseModel.doStream).toHaveBeenCalledTimes(1);
+        expect(fallbackModel1.doStream).toHaveBeenCalledTimes(0);
+        expect(fallbackModel2.doStream).toHaveBeenCalledTimes(1);
+        expect(chunksToText(chunks)).toBe(mockResultText);
+      });
+
+      it('should ignore static retries for result-based attempts', async () => {
+        // Arrange
+        const baseModel = new MockLanguageModel({
+          doStream: {
+            stream: convertArrayToReadableStream(contentFilterStreamChunks),
+          },
+        });
+        const fallbackModel1 = new MockLanguageModel({
+          doStream: {
+            stream: convertArrayToReadableStream(mockStreamChunks),
+          },
+        });
+        const fallbackModel2 = new MockLanguageModel({
+          doStream: {
+            stream: convertArrayToReadableStream(mockStreamChunks),
+          },
+        });
+
+        const fallbackRetryable: Retryable<LanguageModel> = (context) => {
+          if (
+            isResultAttempt(context.current) &&
+            context.current.result.finishReason.unified === 'content-filter'
+          ) {
+            return { model: fallbackModel2, maxAttempts: 1 };
+          }
+          return undefined;
+        };
+
+        // Act
+        const result = streamText({
+          model: createRetryable({
+            model: baseModel,
+            retries: [
+              { model: fallbackModel1 }, // Static retry should be skipped
+              fallbackRetryable,
+            ],
+          }),
+          prompt,
+        });
+        const chunks = await convertAsyncIterableToArray(result.fullStream);
+
+        // Assert
+        expect(baseModel.doStream).toHaveBeenCalledTimes(1);
+        expect(fallbackModel1.doStream).toHaveBeenCalledTimes(0);
+        expect(fallbackModel2.doStream).toHaveBeenCalledTimes(1);
+        expect(chunksToText(chunks)).toBe(mockResultText);
+      });
     });
   });
 

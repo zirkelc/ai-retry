@@ -13,7 +13,7 @@ import { describe, expect, it } from 'vitest';
 import { createRetryable } from '../create-retryable-model.js';
 import {
   chunksToText,
-  type LanguageModelGenerateFn,
+  type LanguageModelResultFn,
   type LanguageModelStreamFn,
   MockEmbeddingModel,
   MockImageModel,
@@ -24,14 +24,14 @@ import type {
   EmbeddingModelEmbed,
   ImageModelGenerate,
   LanguageModelCallOptions,
-  LanguageModelGenerate,
+  LanguageModelResult,
   LanguageModelStreamPart,
 } from '../types.js';
 import { requestTimeout } from './request-timeout.js';
 
 const mockResultText = 'Hello, world!';
 
-const mockResult: LanguageModelGenerate = {
+const mockResult: LanguageModelResult = {
   finishReason: { unified: 'stop', raw: undefined },
   usage: {
     inputTokens: { total: 10, noCache: 0, cacheRead: 0, cacheWrite: 0 },
@@ -167,7 +167,7 @@ describe('requestTimeout', () => {
     it('should fallback in case of timeout error', async () => {
       // Arrange
       const baseModel = new MockLanguageModel({
-        doGenerate: timeoutError as LanguageModelGenerateFn,
+        doGenerate: timeoutError as LanguageModelResultFn,
       });
       const retryModel = new MockLanguageModel({ doGenerate: mockResult });
 
@@ -233,7 +233,7 @@ describe('requestTimeout', () => {
               );
             });
           });
-        }) as LanguageModelGenerateFn,
+        }) as LanguageModelResultFn,
       });
 
       // Retry model that captures its signal and verifies it's not aborted
@@ -248,7 +248,7 @@ describe('requestTimeout', () => {
             );
           }
           return mockResult;
-        }) as LanguageModelGenerateFn,
+        }) as LanguageModelResultFn,
       });
 
       // Act
@@ -283,7 +283,7 @@ describe('requestTimeout', () => {
       let retryModelSignal: AbortSignal | undefined;
 
       const baseModel = new MockLanguageModel({
-        doGenerate: timeoutError as LanguageModelGenerateFn,
+        doGenerate: timeoutError as LanguageModelResultFn,
       });
 
       const retryModel = new MockLanguageModel({
@@ -297,7 +297,7 @@ describe('requestTimeout', () => {
             );
           }
           return mockResult;
-        }) as LanguageModelGenerateFn,
+        }) as LanguageModelResultFn,
       });
 
       // Act

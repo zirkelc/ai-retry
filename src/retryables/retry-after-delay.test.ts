@@ -23,7 +23,7 @@ import type {
   ImageModel,
   ImageModelGenerate,
   LanguageModel,
-  LanguageModelGenerate,
+  LanguageModelResult,
   LanguageModelStreamPart,
   Retryable,
 } from '../types.js';
@@ -32,7 +32,7 @@ import { retryAfterDelay } from './retry-after-delay.js';
 
 const mockResultText = 'Hello, world!';
 
-const mockResult: LanguageModelGenerate = {
+const mockResult: LanguageModelResult = {
   finishReason: { unified: 'stop', raw: undefined },
   usage: {
     inputTokens: { total: 10, noCache: 0, cacheRead: 0, cacheWrite: 0 },

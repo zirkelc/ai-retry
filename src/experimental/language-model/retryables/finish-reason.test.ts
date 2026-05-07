@@ -5,12 +5,12 @@ import {
   generateTextResult,
   MockLanguageModel,
 } from '../../../internal/test-utils.js';
-import type { LanguageModelGenerate } from '../../../types.js';
+import type { LanguageModelResult } from '../../../types.js';
 import { finishReason } from './index.js';
 
 const okText = 'Hello, world!';
 
-const contentFilteredResult: LanguageModelGenerate = {
+const contentFilteredResult: LanguageModelResult = {
   finishReason: { unified: 'content-filter', raw: undefined },
   usage: {
     inputTokens: { total: 10, noCache: 0, cacheRead: 0, cacheWrite: 0 },

@@ -7,10 +7,10 @@ import {
   generateTextResult,
   MockLanguageModel,
 } from '../../internal/test-utils.js';
-import type { LanguageModelGenerate } from '../../types.js';
+import type { LanguageModelResult } from '../../types.js';
 import { finishReason } from './finish-reason.js';
 
-const contentFilterResult: LanguageModelGenerate = {
+const contentFilterResult: LanguageModelResult = {
   ...generateEmptyResult,
   finishReason: { unified: 'content-filter', raw: undefined },
 };

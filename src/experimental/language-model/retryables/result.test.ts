@@ -11,7 +11,7 @@ import {
   MockLanguageModel,
 } from '../../../internal/test-utils.js';
 import type {
-  LanguageModelGenerate,
+  LanguageModelResult,
   LanguageModelStreamPart,
 } from '../../../types.js';
 import { result } from './index.js';
@@ -34,7 +34,7 @@ const okStream: LanguageModelStreamPart[] = [
   },
 ];
 
-const containsFlagged = (res: LanguageModelGenerate): boolean =>
+const containsFlagged = (res: LanguageModelResult): boolean =>
   res.content.some(
     (part) => part.type === 'text' && part.text.includes('flagged'),
   );

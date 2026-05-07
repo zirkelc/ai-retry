@@ -249,7 +249,7 @@ const retryableModel = createRetryable({
 });
 ```
 
-Result-based retryables are only available for generate calls like `generateText` and `generateObject`. They are not available for streaming calls like `streamText` and `streamObject`.
+Result-based retryables apply to language models for both generate (`generateText`, `generateObject`) and streaming (`streamText`, `streamObject`) calls. For streams, the retry decision happens when the upstream `finish` part arrives and only fires if no content has been emitted yet, so behavior like `finishReason: 'content-filter'` on an otherwise empty response can still trigger a fallback. Once any content chunk has been forwarded, the stream is committed and result-based retries are skipped.
 
 #### Fallbacks
 
@@ -389,8 +389,8 @@ There are several built-in dynamic retryables available for common use cases:
 
 Automatically switch to a different model when content filtering blocks your request.
 
-> [!WARNING]  
-> This retryable currently does not work with streaming requests, because the content filter is only indicated in the final response.
+> [!NOTE]
+> For streaming requests this retryable can only fire if the content filter trips before any content has been emitted. Once a text chunk flows through, the stream is committed and the fallback is skipped.
 
 ```typescript
 import { contentFilterTriggered } from 'ai-retry/retryables';
@@ -1208,7 +1208,7 @@ interface SuccessAttempt {
   type: 'success';
   model: LanguageModelV3 | EmbeddingModelV3 | ImageModelV3;
   result:
-    | LanguageModelGenerate
+    | LanguageModelResult
     | LanguageModelStream
     | EmbeddingModelEmbed
     | ImageModelGenerate;
@@ -1237,12 +1237,12 @@ type RetryAttempt =
     }
   | {
       type: 'result';
-      result: LanguageModelV3Generate;
+      result: LanguageModelResult;
       model: LanguageModelV3;
       options: LanguageModelV3CallOptions;
     };
 
-// Note: Result-based retries only apply to language models, not embedding or image models
+// Note: Result-based retries only apply to language models (both generate and stream paths). They do not apply to embedding or image models. For streaming, retries are only possible before any content has been emitted; once a text-delta flows through, the stream is committed.
 
 // Type guards for discriminating attempts
 function isErrorAttempt(attempt: RetryAttempt): attempt is RetryErrorAttempt;

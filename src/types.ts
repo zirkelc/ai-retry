@@ -4,6 +4,7 @@ import type {
   ImageModelV3CallOptions,
   LanguageModelV3,
   LanguageModelV3CallOptions,
+  LanguageModelV3GenerateResult,
   LanguageModelV3Prompt,
   LanguageModelV3StreamPart,
   SharedV3ProviderOptions,
@@ -48,6 +49,11 @@ export type ResolvedModel<
   : MODEL extends EmbeddingModel
     ? EmbeddingModel
     : ImageModel;
+
+/**
+ * Result from a generateText call.
+ */
+export type LanguageModelResult = LanguageModelV3GenerateResult;
 
 /**
  * Call options that can be overridden during retry for language models.
@@ -121,7 +127,7 @@ export type CallOptions<
  */
 export type Result<MODEL extends LanguageModel | EmbeddingModel | ImageModel> =
   MODEL extends LanguageModel
-    ? LanguageModelGenerate | LanguageModelStream
+    ? LanguageModelResult | LanguageModelStream
     : MODEL extends EmbeddingModel
       ? EmbeddingModelEmbed
       : ImageModelGenerate;
@@ -147,7 +153,7 @@ export type RetryErrorAttempt<
  */
 export type RetryResultAttempt = {
   type: 'result';
-  result: LanguageModelGenerate;
+  result: LanguageModelResult;
   error?: undefined;
   model: LanguageModel;
   /**

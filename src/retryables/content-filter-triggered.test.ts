@@ -11,15 +11,12 @@ import {
 import { describe, expect, it } from 'vitest';
 import { createRetryable } from '../create-retryable-model.js';
 import { chunksToText, MockLanguageModel } from '../internal/test-utils.js';
-import type {
-  LanguageModelGenerate,
-  LanguageModelStreamPart,
-} from '../types.js';
+import type { LanguageModelResult, LanguageModelStreamPart } from '../types.js';
 import { contentFilterTriggered } from './content-filter-triggered.js';
 
 const mockResultText = 'Hello, world!';
 
-const mockResult: LanguageModelGenerate = {
+const mockResult: LanguageModelResult = {
   finishReason: { unified: 'stop', raw: undefined },
   usage: {
     inputTokens: { total: 10, noCache: 0, cacheRead: 0, cacheWrite: 0 },
@@ -29,7 +26,7 @@ const mockResult: LanguageModelGenerate = {
   warnings: [],
 };
 
-const contentFilterResult: LanguageModelGenerate = {
+const contentFilterResult: LanguageModelResult = {
   finishReason: { unified: 'content-filter', raw: undefined },
   usage: {
     inputTokens: { total: 10, noCache: 0, cacheRead: 0, cacheWrite: 0 },
@@ -256,6 +253,42 @@ describe('contentFilterTriggered', () => {
     it('should retry in case of content filter error', async () => {
       // Arrange
       const baseModel = new MockLanguageModel({ doStream: apiCallError });
+      const retryModel = new MockLanguageModel({
+        doStream: {
+          stream: convertArrayToReadableStream(mockStreamChunks),
+        },
+      });
+      let error: unknown;
+
+      // Act
+      const result = streamText({
+        model: createRetryable({
+          model: baseModel,
+          retries: [contentFilterTriggered(retryModel)],
+        }),
+        prompt: 'Hello!',
+        maxRetries: 0,
+        onError(data) {
+          error = data.error;
+        },
+      });
+
+      const chunks = await convertAsyncIterableToArray(result.fullStream);
+
+      // Assert
+      expect(baseModel.doStream).toHaveBeenCalledTimes(1);
+      expect(retryModel.doStream).toHaveBeenCalledTimes(1);
+      expect(error).toBeUndefined();
+      expect(chunksToText(chunks)).toBe(mockResultText);
+    });
+
+    it('should retry when finish part reports content-filter before any content', async () => {
+      // Arrange
+      const baseModel = new MockLanguageModel({
+        doStream: {
+          stream: convertArrayToReadableStream(contentFilterChunks),
+        },
+      });
       const retryModel = new MockLanguageModel({
         doStream: {
           stream: convertArrayToReadableStream(mockStreamChunks),
