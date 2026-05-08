@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.1](https://github.com/zirkelc/ai-retry/compare/v1.7.0...v1.7.1) (2026-05-08)
+
+
+### Bug Fixes
+
+* surface mid-stream errors as stream parts when no retryable matches ([3d61efd](https://github.com/zirkelc/ai-retry/commit/3d61efd4b0321c3a5d1c28c4c00a1904694ec56e)), closes [#42](https://github.com/zirkelc/ai-retry/issues/42)
+
 ## [1.7.0](https://github.com/zirkelc/ai-retry/compare/v1.6.1...v1.7.0) (2026-05-07)
 
 
