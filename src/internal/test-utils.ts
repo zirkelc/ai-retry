@@ -171,6 +171,12 @@ export const chunksToText = (chunks: TextStreamPart<any>[]): string => {
     .join('');
 };
 
+export const finishReason = (
+  chunks: TextStreamPart<any>[],
+): string | undefined => {
+  return chunks.find((chunk) => chunk.type === 'finish')?.finishReason;
+};
+
 export const errorFromChunks = (
   chunks: TextStreamPart<any>[],
 ): unknown | null => {

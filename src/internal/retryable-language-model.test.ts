@@ -8,6 +8,7 @@ import { createRetryable } from '../create-retryable-model.js';
 import {
   chunksToText,
   errorFromChunks,
+  finishReason,
   MockLanguageModel,
   mockStreamOptions,
 } from './test-utils.js';
@@ -95,6 +96,35 @@ const contentFilterStreamChunks: LanguageModelStreamPart[] = [
     modelId: 'mock-model-id',
     timestamp: new Date(0),
   },
+  {
+    type: 'finish',
+    finishReason: { unified: 'content-filter', raw: undefined },
+    usage: testUsage,
+    providerMetadata: {
+      testProvider: { testKey: 'testValue' },
+    },
+  },
+];
+
+const refusalText = "I'm sorry, but I cannot assist with that request.";
+
+/**
+ * Stream that emits content and *then* finishes with `content-filter`.
+ * Once any content has been forwarded downstream, retry would duplicate
+ * output, so the finish part flows through unchanged and no retryable is
+ * evaluated.
+ */
+const contentFilterAfterContentStreamChunks: LanguageModelStreamPart[] = [
+  { type: 'stream-start', warnings: [] },
+  {
+    type: 'response-metadata',
+    id: 'id-0',
+    modelId: 'mock-model-id',
+    timestamp: new Date(0),
+  },
+  { type: 'text-start', id: '1' },
+  { type: 'text-delta', id: '1', delta: refusalText },
+  { type: 'text-end', id: '1' },
   {
     type: 'finish',
     finishReason: { unified: 'content-filter', raw: undefined },
@@ -2081,30 +2111,31 @@ describe('streamText', () => {
   });
 
   describe('retries', () => {
-    it('should retry when error occurs at stream creation', async () => {
-      const baseModel = new MockLanguageModel({ doStream: retryableError });
+    describe('error-based retries', () => {
+      it('should retry when error occurs at stream creation', async () => {
+        const baseModel = new MockLanguageModel({ doStream: retryableError });
 
-      const fallbackModel = new MockLanguageModel({
-        doStream: {
-          stream: convertArrayToReadableStream(mockStreamChunks),
-        },
-      });
+        const fallbackModel = new MockLanguageModel({
+          doStream: {
+            stream: convertArrayToReadableStream(mockStreamChunks),
+          },
+        });
 
-      const retryableModel = createRetryable({
-        model: baseModel,
-        retries: [fallbackModel],
-      });
+        const retryableModel = createRetryable({
+          model: baseModel,
+          retries: [fallbackModel],
+        });
 
-      const result = streamText({
-        model: retryableModel,
-        prompt,
-      });
+        const result = streamText({
+          model: retryableModel,
+          prompt,
+        });
 
-      const chunks = await convertAsyncIterableToArray(result.fullStream);
+        const chunks = await convertAsyncIterableToArray(result.fullStream);
 
-      expect(baseModel.doStream).toHaveBeenCalledTimes(1);
-      expect(fallbackModel.doStream).toHaveBeenCalledTimes(1);
-      expect(chunks).toMatchInlineSnapshot(`
+        expect(baseModel.doStream).toHaveBeenCalledTimes(1);
+        expect(fallbackModel.doStream).toHaveBeenCalledTimes(1);
+        expect(chunks).toMatchInlineSnapshot(`
         [
           {
             "type": "start",
@@ -2196,42 +2227,42 @@ describe('streamText', () => {
           },
         ]
       `);
-    });
-
-    it('should retry when error occurs at the stream start', async () => {
-      const baseModel = new MockLanguageModel({
-        doStream: {
-          stream: convertArrayToReadableStream([
-            { type: 'stream-start', warnings: [] },
-            {
-              type: 'error',
-              error: { type: 'overloaded_error', message: 'Overloaded' },
-            },
-          ]),
-        },
       });
 
-      const fallbackModel = new MockLanguageModel({
-        doStream: {
-          stream: convertArrayToReadableStream(mockStreamChunks),
-        },
-      });
+      it('should retry when error occurs at the stream start', async () => {
+        const baseModel = new MockLanguageModel({
+          doStream: {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              {
+                type: 'error',
+                error: { type: 'overloaded_error', message: 'Overloaded' },
+              },
+            ]),
+          },
+        });
 
-      const retryableModel = createRetryable({
-        model: baseModel,
-        retries: [fallbackModel],
-      });
+        const fallbackModel = new MockLanguageModel({
+          doStream: {
+            stream: convertArrayToReadableStream(mockStreamChunks),
+          },
+        });
 
-      const result = streamText({
-        model: retryableModel,
-        prompt,
-      });
+        const retryableModel = createRetryable({
+          model: baseModel,
+          retries: [fallbackModel],
+        });
 
-      const chunks = await convertAsyncIterableToArray(result.fullStream);
+        const result = streamText({
+          model: retryableModel,
+          prompt,
+        });
 
-      expect(baseModel.doStream).toHaveBeenCalledTimes(1);
-      expect(fallbackModel.doStream).toHaveBeenCalledTimes(1);
-      expect(chunks).toMatchInlineSnapshot(`
+        const chunks = await convertAsyncIterableToArray(result.fullStream);
+
+        expect(baseModel.doStream).toHaveBeenCalledTimes(1);
+        expect(fallbackModel.doStream).toHaveBeenCalledTimes(1);
+        expect(chunks).toMatchInlineSnapshot(`
         [
           {
             "type": "start",
@@ -2323,46 +2354,46 @@ describe('streamText', () => {
           },
         ]
       `);
-    });
-
-    it('should retry when consective errors occur', async () => {
-      const baseModel = new MockLanguageModel({
-        doStream: {
-          stream: convertArrayToReadableStream([
-            { type: 'stream-start', warnings: [] },
-            {
-              type: 'error',
-              error: { type: 'overloaded_error', message: 'Overloaded' },
-            },
-          ]),
-        },
       });
 
-      const fallbackModel1 = new MockLanguageModel({
-        doStream: retryableError,
-      });
-      const fallbackModel2 = new MockLanguageModel({
-        doStream: {
-          stream: convertArrayToReadableStream(mockStreamChunks),
-        },
-      });
+      it('should retry when consective errors occur', async () => {
+        const baseModel = new MockLanguageModel({
+          doStream: {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              {
+                type: 'error',
+                error: { type: 'overloaded_error', message: 'Overloaded' },
+              },
+            ]),
+          },
+        });
 
-      const retryableModel = createRetryable({
-        model: baseModel,
-        retries: [fallbackModel1, fallbackModel2],
-      });
+        const fallbackModel1 = new MockLanguageModel({
+          doStream: retryableError,
+        });
+        const fallbackModel2 = new MockLanguageModel({
+          doStream: {
+            stream: convertArrayToReadableStream(mockStreamChunks),
+          },
+        });
 
-      const result = streamText({
-        model: retryableModel,
-        prompt,
-      });
+        const retryableModel = createRetryable({
+          model: baseModel,
+          retries: [fallbackModel1, fallbackModel2],
+        });
 
-      const chunks = await convertAsyncIterableToArray(result.fullStream);
+        const result = streamText({
+          model: retryableModel,
+          prompt,
+        });
 
-      expect(baseModel.doStream).toHaveBeenCalledTimes(1);
-      expect(fallbackModel1.doStream).toHaveBeenCalledTimes(1);
-      expect(fallbackModel2.doStream).toHaveBeenCalledTimes(1);
-      expect(chunks).toMatchInlineSnapshot(`
+        const chunks = await convertAsyncIterableToArray(result.fullStream);
+
+        expect(baseModel.doStream).toHaveBeenCalledTimes(1);
+        expect(fallbackModel1.doStream).toHaveBeenCalledTimes(1);
+        expect(fallbackModel2.doStream).toHaveBeenCalledTimes(1);
+        expect(chunks).toMatchInlineSnapshot(`
         [
           {
             "type": "start",
@@ -2454,45 +2485,45 @@ describe('streamText', () => {
           },
         ]
       `);
-    });
-
-    it('should NOT retry when error occurs during streaming', async () => {
-      vi.useFakeTimers();
-      vi.setSystemTime(0);
-
-      const baseModel = new MockLanguageModel({
-        doStream: {
-          stream: convertArrayToReadableStream([
-            { type: 'stream-start', warnings: [] },
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: 'Hello' },
-            { type: 'error', error: new Error('Overloaded') },
-          ]),
-        },
       });
 
-      const fallbackModel = new MockLanguageModel({
-        doStream: {
-          stream: convertArrayToReadableStream(mockStreamChunks),
-        },
-      });
+      it('should NOT retry when error occurs during streaming', async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(0);
 
-      const retryableModel = createRetryable({
-        model: baseModel,
-        retries: [fallbackModel],
-      });
+        const baseModel = new MockLanguageModel({
+          doStream: {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'text-start', id: '1' },
+              { type: 'text-delta', id: '1', delta: 'Hello' },
+              { type: 'error', error: new Error('Overloaded') },
+            ]),
+          },
+        });
 
-      const result = streamText({
-        model: retryableModel,
-        prompt,
-        ...mockStreamOptions,
-      });
+        const fallbackModel = new MockLanguageModel({
+          doStream: {
+            stream: convertArrayToReadableStream(mockStreamChunks),
+          },
+        });
 
-      const chunks = await convertAsyncIterableToArray(result.fullStream);
+        const retryableModel = createRetryable({
+          model: baseModel,
+          retries: [fallbackModel],
+        });
 
-      expect(baseModel.doStream).toHaveBeenCalledTimes(1);
-      expect(fallbackModel.doStream).toHaveBeenCalledTimes(0);
-      expect(chunks).toMatchInlineSnapshot(`
+        const result = streamText({
+          model: retryableModel,
+          prompt,
+          ...mockStreamOptions,
+        });
+
+        const chunks = await convertAsyncIterableToArray(result.fullStream);
+
+        expect(baseModel.doStream).toHaveBeenCalledTimes(1);
+        expect(fallbackModel.doStream).toHaveBeenCalledTimes(0);
+        expect(chunks).toMatchInlineSnapshot(`
         [
           {
             "type": "start",
@@ -2567,55 +2598,55 @@ describe('streamText', () => {
         ]
       `);
 
-      vi.useRealTimers();
-    });
-
-    it('should propagate error as stream part when no retryable matches at stream start', async () => {
-      // Arrange
-      vi.useFakeTimers();
-      vi.setSystemTime(0);
-
-      const error = new Error('Overloaded');
-
-      const baseModel = new MockLanguageModel({
-        doStream: {
-          stream: convertArrayToReadableStream([
-            { type: 'stream-start', warnings: [] },
-            { type: 'error', error },
-          ]),
-        },
+        vi.useRealTimers();
       });
 
-      const noopRetryable: Retryable<LanguageModel> = () => undefined;
+      it('should propagate error as stream part when no retryable matches at stream start', async () => {
+        // Arrange
+        vi.useFakeTimers();
+        vi.setSystemTime(0);
 
-      const retryableModel = createRetryable({
-        model: baseModel,
-        retries: [noopRetryable],
-      });
+        const error = new Error('Overloaded');
 
-      const onErrorSpy = vi.fn();
+        const baseModel = new MockLanguageModel({
+          doStream: {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'error', error },
+            ]),
+          },
+        });
 
-      // Act
-      const result = streamText({
-        model: retryableModel,
-        prompt,
-        onError: onErrorSpy,
-        ...mockStreamOptions,
-      });
+        const noopRetryable: Retryable<LanguageModel> = () => undefined;
 
-      const chunks = await convertAsyncIterableToArray(result.fullStream);
+        const retryableModel = createRetryable({
+          model: baseModel,
+          retries: [noopRetryable],
+        });
 
-      // Assert
-      expect(baseModel.doStream).toHaveBeenCalledTimes(1);
+        const onErrorSpy = vi.fn();
 
-      const errorChunk = chunks.find((c) => c.type === 'error');
-      expect(errorChunk).toEqual({ type: 'error', error });
+        // Act
+        const result = streamText({
+          model: retryableModel,
+          prompt,
+          onError: onErrorSpy,
+          ...mockStreamOptions,
+        });
 
-      expect(onErrorSpy).toHaveBeenCalledTimes(1);
-      const onErrorArg = onErrorSpy.mock.calls[0]![0];
-      expect(onErrorArg).toEqual({ error });
+        const chunks = await convertAsyncIterableToArray(result.fullStream);
 
-      expect(chunks).toMatchInlineSnapshot(`
+        // Assert
+        expect(baseModel.doStream).toHaveBeenCalledTimes(1);
+
+        const errorChunk = chunks.find((c) => c.type === 'error');
+        expect(errorChunk).toEqual({ type: 'error', error });
+
+        expect(onErrorSpy).toHaveBeenCalledTimes(1);
+        const onErrorArg = onErrorSpy.mock.calls[0]![0];
+        expect(onErrorArg).toEqual({ error });
+
+        expect(chunks).toMatchInlineSnapshot(`
         [
           {
             "type": "start",
@@ -2680,7 +2711,8 @@ describe('streamText', () => {
         ]
       `);
 
-      vi.useRealTimers();
+        vi.useRealTimers();
+      });
     });
 
     describe('result-based retries', () => {
@@ -2714,12 +2746,228 @@ describe('streamText', () => {
           }),
           prompt,
         });
+
         const chunks = await convertAsyncIterableToArray(result.fullStream);
 
         // Assert
         expect(baseModel.doStream).toHaveBeenCalledTimes(1);
         expect(fallbackModel.doStream).toHaveBeenCalledTimes(1);
-        expect(chunksToText(chunks)).toBe(mockResultText);
+        expect(finishReason(chunks)).not.toBe('content-filter');
+        expect(finishReason(chunks)).toBe('stop');
+        expect(chunks).toMatchInlineSnapshot(`
+          [
+            {
+              "type": "start",
+            },
+            {
+              "request": {},
+              "type": "start-step",
+              "warnings": [],
+            },
+            {
+              "id": "1",
+              "type": "text-start",
+            },
+            {
+              "id": "1",
+              "providerMetadata": undefined,
+              "text": "Hello",
+              "type": "text-delta",
+            },
+            {
+              "id": "1",
+              "providerMetadata": undefined,
+              "text": ", ",
+              "type": "text-delta",
+            },
+            {
+              "id": "1",
+              "providerMetadata": undefined,
+              "text": "world!",
+              "type": "text-delta",
+            },
+            {
+              "id": "1",
+              "type": "text-end",
+            },
+            {
+              "finishReason": "stop",
+              "providerMetadata": {
+                "testProvider": {
+                  "testKey": "testValue",
+                },
+              },
+              "rawFinishReason": undefined,
+              "response": {
+                "headers": undefined,
+                "id": "id-0",
+                "modelId": "mock-model-id",
+                "timestamp": 1970-01-01T00:00:00.000Z,
+              },
+              "type": "finish-step",
+              "usage": {
+                "cachedInputTokens": 0,
+                "inputTokenDetails": {
+                  "cacheReadTokens": 0,
+                  "cacheWriteTokens": 0,
+                  "noCacheTokens": 0,
+                },
+                "inputTokens": 3,
+                "outputTokenDetails": {
+                  "reasoningTokens": 0,
+                  "textTokens": 0,
+                },
+                "outputTokens": 10,
+                "raw": undefined,
+                "reasoningTokens": 0,
+                "totalTokens": 13,
+              },
+            },
+            {
+              "finishReason": "stop",
+              "rawFinishReason": undefined,
+              "totalUsage": {
+                "cachedInputTokens": 0,
+                "inputTokenDetails": {
+                  "cacheReadTokens": 0,
+                  "cacheWriteTokens": 0,
+                  "noCacheTokens": 0,
+                },
+                "inputTokens": 3,
+                "outputTokenDetails": {
+                  "reasoningTokens": 0,
+                  "textTokens": 0,
+                },
+                "outputTokens": 10,
+                "reasoningTokens": 0,
+                "totalTokens": 13,
+              },
+              "type": "finish",
+            },
+          ]
+        `);
+      });
+
+      it('should NOT retry when content was already streamed before content-filter finish', async () => {
+        // Arrange
+        const baseModel = new MockLanguageModel({
+          doStream: {
+            stream: convertArrayToReadableStream(
+              contentFilterAfterContentStreamChunks,
+            ),
+          },
+        });
+        const fallbackModel = new MockLanguageModel({
+          doStream: {
+            stream: convertArrayToReadableStream(mockStreamChunks),
+          },
+        });
+        const fallbackRetryable: Retryable<LanguageModel> = (context) => {
+          if (
+            isResultAttempt(context.current) &&
+            context.current.result.finishReason.unified === 'content-filter'
+          ) {
+            return { model: fallbackModel, maxAttempts: 1 };
+          }
+          return undefined;
+        };
+
+        // Act
+        const result = streamText({
+          model: createRetryable({
+            model: baseModel,
+            retries: [fallbackRetryable],
+          }),
+          prompt,
+        });
+
+        const chunks = await convertAsyncIterableToArray(result.fullStream);
+
+        // Assert
+        expect(baseModel.doStream).toHaveBeenCalledTimes(1);
+        expect(fallbackModel.doStream).toHaveBeenCalledTimes(0);
+        expect(chunksToText(chunks)).toBe(refusalText);
+        expect(finishReason(chunks)).toBe('content-filter');
+        expect(chunks).toMatchInlineSnapshot(`
+          [
+            {
+              "type": "start",
+            },
+            {
+              "request": {},
+              "type": "start-step",
+              "warnings": [],
+            },
+            {
+              "id": "1",
+              "type": "text-start",
+            },
+            {
+              "id": "1",
+              "providerMetadata": undefined,
+              "text": "I'm sorry, but I cannot assist with that request.",
+              "type": "text-delta",
+            },
+            {
+              "id": "1",
+              "type": "text-end",
+            },
+            {
+              "finishReason": "content-filter",
+              "providerMetadata": {
+                "testProvider": {
+                  "testKey": "testValue",
+                },
+              },
+              "rawFinishReason": undefined,
+              "response": {
+                "headers": undefined,
+                "id": "id-0",
+                "modelId": "mock-model-id",
+                "timestamp": 1970-01-01T00:00:00.000Z,
+              },
+              "type": "finish-step",
+              "usage": {
+                "cachedInputTokens": 0,
+                "inputTokenDetails": {
+                  "cacheReadTokens": 0,
+                  "cacheWriteTokens": 0,
+                  "noCacheTokens": 0,
+                },
+                "inputTokens": 3,
+                "outputTokenDetails": {
+                  "reasoningTokens": 0,
+                  "textTokens": 0,
+                },
+                "outputTokens": 10,
+                "raw": undefined,
+                "reasoningTokens": 0,
+                "totalTokens": 13,
+              },
+            },
+            {
+              "finishReason": "content-filter",
+              "rawFinishReason": undefined,
+              "totalUsage": {
+                "cachedInputTokens": 0,
+                "inputTokenDetails": {
+                  "cacheReadTokens": 0,
+                  "cacheWriteTokens": 0,
+                  "noCacheTokens": 0,
+                },
+                "inputTokens": 3,
+                "outputTokenDetails": {
+                  "reasoningTokens": 0,
+                  "textTokens": 0,
+                },
+                "outputTokens": 10,
+                "reasoningTokens": 0,
+                "totalTokens": 13,
+              },
+              "type": "finish",
+            },
+          ]
+        `);
       });
 
       it('should ignore plain language models for result-based attempts', async () => {
@@ -2767,7 +3015,98 @@ describe('streamText', () => {
         expect(baseModel.doStream).toHaveBeenCalledTimes(1);
         expect(fallbackModel1.doStream).toHaveBeenCalledTimes(0);
         expect(fallbackModel2.doStream).toHaveBeenCalledTimes(1);
-        expect(chunksToText(chunks)).toBe(mockResultText);
+        expect(chunks).toMatchInlineSnapshot(`
+          [
+            {
+              "type": "start",
+            },
+            {
+              "request": {},
+              "type": "start-step",
+              "warnings": [],
+            },
+            {
+              "id": "1",
+              "type": "text-start",
+            },
+            {
+              "id": "1",
+              "providerMetadata": undefined,
+              "text": "Hello",
+              "type": "text-delta",
+            },
+            {
+              "id": "1",
+              "providerMetadata": undefined,
+              "text": ", ",
+              "type": "text-delta",
+            },
+            {
+              "id": "1",
+              "providerMetadata": undefined,
+              "text": "world!",
+              "type": "text-delta",
+            },
+            {
+              "id": "1",
+              "type": "text-end",
+            },
+            {
+              "finishReason": "stop",
+              "providerMetadata": {
+                "testProvider": {
+                  "testKey": "testValue",
+                },
+              },
+              "rawFinishReason": undefined,
+              "response": {
+                "headers": undefined,
+                "id": "id-0",
+                "modelId": "mock-model-id",
+                "timestamp": 1970-01-01T00:00:00.000Z,
+              },
+              "type": "finish-step",
+              "usage": {
+                "cachedInputTokens": 0,
+                "inputTokenDetails": {
+                  "cacheReadTokens": 0,
+                  "cacheWriteTokens": 0,
+                  "noCacheTokens": 0,
+                },
+                "inputTokens": 3,
+                "outputTokenDetails": {
+                  "reasoningTokens": 0,
+                  "textTokens": 0,
+                },
+                "outputTokens": 10,
+                "raw": undefined,
+                "reasoningTokens": 0,
+                "totalTokens": 13,
+              },
+            },
+            {
+              "finishReason": "stop",
+              "rawFinishReason": undefined,
+              "totalUsage": {
+                "cachedInputTokens": 0,
+                "inputTokenDetails": {
+                  "cacheReadTokens": 0,
+                  "cacheWriteTokens": 0,
+                  "noCacheTokens": 0,
+                },
+                "inputTokens": 3,
+                "outputTokenDetails": {
+                  "reasoningTokens": 0,
+                  "textTokens": 0,
+                },
+                "outputTokens": 10,
+                "reasoningTokens": 0,
+                "totalTokens": 13,
+              },
+              "type": "finish",
+            },
+          ]
+        `);
       });
 
       it('should ignore static retries for result-based attempts', async () => {
@@ -2815,7 +3154,98 @@ describe('streamText', () => {
         expect(baseModel.doStream).toHaveBeenCalledTimes(1);
         expect(fallbackModel1.doStream).toHaveBeenCalledTimes(0);
         expect(fallbackModel2.doStream).toHaveBeenCalledTimes(1);
-        expect(chunksToText(chunks)).toBe(mockResultText);
+        expect(chunks).toMatchInlineSnapshot(`
+          [
+            {
+              "type": "start",
+            },
+            {
+              "request": {},
+              "type": "start-step",
+              "warnings": [],
+            },
+            {
+              "id": "1",
+              "type": "text-start",
+            },
+            {
+              "id": "1",
+              "providerMetadata": undefined,
+              "text": "Hello",
+              "type": "text-delta",
+            },
+            {
+              "id": "1",
+              "providerMetadata": undefined,
+              "text": ", ",
+              "type": "text-delta",
+            },
+            {
+              "id": "1",
+              "providerMetadata": undefined,
+              "text": "world!",
+              "type": "text-delta",
+            },
+            {
+              "id": "1",
+              "type": "text-end",
+            },
+            {
+              "finishReason": "stop",
+              "providerMetadata": {
+                "testProvider": {
+                  "testKey": "testValue",
+                },
+              },
+              "rawFinishReason": undefined,
+              "response": {
+                "headers": undefined,
+                "id": "id-0",
+                "modelId": "mock-model-id",
+                "timestamp": 1970-01-01T00:00:00.000Z,
+              },
+              "type": "finish-step",
+              "usage": {
+                "cachedInputTokens": 0,
+                "inputTokenDetails": {
+                  "cacheReadTokens": 0,
+                  "cacheWriteTokens": 0,
+                  "noCacheTokens": 0,
+                },
+                "inputTokens": 3,
+                "outputTokenDetails": {
+                  "reasoningTokens": 0,
+                  "textTokens": 0,
+                },
+                "outputTokens": 10,
+                "raw": undefined,
+                "reasoningTokens": 0,
+                "totalTokens": 13,
+              },
+            },
+            {
+              "finishReason": "stop",
+              "rawFinishReason": undefined,
+              "totalUsage": {
+                "cachedInputTokens": 0,
+                "inputTokenDetails": {
+                  "cacheReadTokens": 0,
+                  "cacheWriteTokens": 0,
+                  "noCacheTokens": 0,
+                },
+                "inputTokens": 3,
+                "outputTokenDetails": {
+                  "reasoningTokens": 0,
+                  "textTokens": 0,
+                },
+                "outputTokens": 10,
+                "reasoningTokens": 0,
+                "totalTokens": 13,
+              },
+              "type": "finish",
+            },
+          ]
+        `);
       });
     });
   });
