@@ -8,7 +8,9 @@ import {
   MockLanguageModel,
 } from '../../internal/test-utils.js';
 import type { LanguageModelResult } from '../../types.js';
-import { finishReason } from './finish-reason.js';
+import { createResultAPI } from './result.js';
+
+const { finishReason } = createResultAPI<MockLanguageModel>();
 
 const contentFilterResult: LanguageModelResult = {
   ...generateEmptyResult,

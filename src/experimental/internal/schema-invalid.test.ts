@@ -6,7 +6,9 @@ import {
   generateTextResult,
   MockLanguageModel,
 } from '../../internal/test-utils.js';
-import { schemaInvalid } from './schema-invalid.js';
+import { createResultAPI } from './result.js';
+
+const { schemaInvalid } = createResultAPI<MockLanguageModel>();
 
 const personSchema = z.object({
   name: z.string(),

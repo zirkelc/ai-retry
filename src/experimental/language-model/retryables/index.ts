@@ -8,9 +8,9 @@
 
 import type { LanguageModel } from '../../../types.js';
 import { createErrorAPI } from '../../internal/error.js';
+import { createResultAPI } from '../../internal/result.js';
 
 export const { error, httpStatus, timeout, aborted } =
   createErrorAPI<LanguageModel>();
-export { result } from '../../internal/result.js';
-export { finishReason } from '../../internal/finish-reason.js';
-export { schemaInvalid } from '../../internal/schema-invalid.js';
+export const { result, finishReason, schemaInvalid } =
+  createResultAPI<LanguageModel>();
