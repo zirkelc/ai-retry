@@ -2570,6 +2570,119 @@ describe('streamText', () => {
       vi.useRealTimers();
     });
 
+    it('should propagate error as stream part when no retryable matches at stream start', async () => {
+      // Arrange
+      vi.useFakeTimers();
+      vi.setSystemTime(0);
+
+      const error = new Error('Overloaded');
+
+      const baseModel = new MockLanguageModel({
+        doStream: {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'error', error },
+          ]),
+        },
+      });
+
+      const noopRetryable: Retryable<LanguageModel> = () => undefined;
+
+      const retryableModel = createRetryable({
+        model: baseModel,
+        retries: [noopRetryable],
+      });
+
+      const onErrorSpy = vi.fn();
+
+      // Act
+      const result = streamText({
+        model: retryableModel,
+        prompt,
+        onError: onErrorSpy,
+        ...mockStreamOptions,
+      });
+
+      const chunks = await convertAsyncIterableToArray(result.fullStream);
+
+      // Assert
+      expect(baseModel.doStream).toHaveBeenCalledTimes(1);
+
+      const errorChunk = chunks.find((c) => c.type === 'error');
+      expect(errorChunk).toEqual({ type: 'error', error });
+
+      expect(onErrorSpy).toHaveBeenCalledTimes(1);
+      const onErrorArg = onErrorSpy.mock.calls[0]![0];
+      expect(onErrorArg).toEqual({ error });
+
+      expect(chunks).toMatchInlineSnapshot(`
+        [
+          {
+            "type": "start",
+          },
+          {
+            "request": {},
+            "type": "start-step",
+            "warnings": [],
+          },
+          {
+            "error": [Error: Overloaded],
+            "type": "error",
+          },
+          {
+            "finishReason": "error",
+            "providerMetadata": undefined,
+            "rawFinishReason": undefined,
+            "response": {
+              "headers": undefined,
+              "id": "aitxt-mock-id",
+              "modelId": "mock-model-142",
+              "timestamp": 1970-01-01T00:00:00.000Z,
+            },
+            "type": "finish-step",
+            "usage": {
+              "inputTokenDetails": {
+                "cacheReadTokens": undefined,
+                "cacheWriteTokens": undefined,
+                "noCacheTokens": undefined,
+              },
+              "inputTokens": undefined,
+              "outputTokenDetails": {
+                "reasoningTokens": undefined,
+                "textTokens": undefined,
+              },
+              "outputTokens": undefined,
+              "raw": undefined,
+              "totalTokens": undefined,
+            },
+          },
+          {
+            "finishReason": "error",
+            "rawFinishReason": undefined,
+            "totalUsage": {
+              "cachedInputTokens": undefined,
+              "inputTokenDetails": {
+                "cacheReadTokens": undefined,
+                "cacheWriteTokens": undefined,
+                "noCacheTokens": undefined,
+              },
+              "inputTokens": undefined,
+              "outputTokenDetails": {
+                "reasoningTokens": undefined,
+                "textTokens": undefined,
+              },
+              "outputTokens": undefined,
+              "reasoningTokens": undefined,
+              "totalTokens": undefined,
+            },
+            "type": "finish",
+          },
+        ]
+      `);
+
+      vi.useRealTimers();
+    });
+
     describe('result-based retries', () => {
       it('should retry with results', async () => {
         // Arrange

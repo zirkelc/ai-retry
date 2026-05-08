@@ -598,13 +598,20 @@ console.log(result.object); // { name: "Alice", age: 30 }
 > Each entry point also re-exports `createRetryable` already typed for that model family, so you can either import everything from one path:
 >
 > ```ts
-> import { createRetryable, error, httpStatus } from 'ai-retry/experimental/language-model';
+> import {
+>   createRetryable,
+>   error,
+>   httpStatus,
+> } from 'ai-retry/experimental/language-model';
 > ```
 >
 > or pull retryables from the dedicated `/retryables` subpath:
 >
 > ```ts
-> import { error, httpStatus } from 'ai-retry/experimental/language-model/retryables';
+> import {
+>   error,
+>   httpStatus,
+> } from 'ai-retry/experimental/language-model/retryables';
 > // or
 > import * as retryables from 'ai-retry/experimental/language-model/retryables';
 > ```
@@ -647,14 +654,14 @@ Pick the entry point that matches the model you pass to `createRetryable`. Each 
 
 The primitive builders `error(...)` and `result(...)` take a predicate and turn it into a condition; their namespaces bundle the most common field matchers on top.
 
-| Helper                            | Matches when                                                                          | Available in              |
-| --------------------------------- | ------------------------------------------------------------------------------------- | ------------------------- |
-| `error(predicate)`                | The current attempt failed and `predicate(err, ctx)` returns true                     | all three entry points    |
-| `error.isRetryable(flag)`         | `APICallError.isRetryable === flag` (default `true`)                                  | all three entry points    |
-| `error.statusCode(...patterns)`   | Numbers match exactly; regex matches the stringified code (e.g. `/^5\d\d$/` for 5xx)  | all three entry points    |
-| `error.message(...patterns)`      | Substring (case-insensitive) or regex match against the error message                 | all three entry points    |
-| `result(predicate)`               | The current attempt succeeded and `predicate(res, ctx)` returns true                  | `language-model` only     |
-| `result.finishReason(...reasons)` | The result's `finishReason.unified` matches one of the given values                   | `language-model` only     |
+| Helper                            | Matches when                                                                         | Available in           |
+| --------------------------------- | ------------------------------------------------------------------------------------ | ---------------------- |
+| `error(predicate)`                | The current attempt failed and `predicate(err, ctx)` returns true                    | all three entry points |
+| `error.isRetryable(flag)`         | `APICallError.isRetryable === flag` (default `true`)                                 | all three entry points |
+| `error.statusCode(...patterns)`   | Numbers match exactly; regex matches the stringified code (e.g. `/^5\d\d$/` for 5xx) | all three entry points |
+| `error.message(...patterns)`      | Substring (case-insensitive) or regex match against the error message                | all three entry points |
+| `result(predicate)`               | The current attempt succeeded and `predicate(res, ctx)` returns true                 | `language-model` only  |
+| `result.finishReason(...reasons)` | The result's `finishReason.unified` matches one of the given values                  | `language-model` only  |
 
 ```typescript
 import { APICallError } from 'ai';
@@ -680,22 +687,20 @@ Convenience matchers built on top of the low-level ones for the common cases. Ea
 
 What each one matches:
 
-| Helper                     | Matches when                                                                                       |
-| -------------------------- | -------------------------------------------------------------------------------------------------- |
-| `httpStatus(...patterns)`  | Numbers match the status code; strings match the message (substring); regex matches either         |
-| `timeout()`                | `Error.name === 'TimeoutError'` (`AbortSignal.timeout()` fired)                                    |
-| `aborted()`                | `Error.name === 'AbortError'` (manual `controller.abort()`)                                        |
-| `finishReason(...reasons)` | The result's `finishReason.unified` matches one of the given values                                |
-| `schemaInvalid()`          | The result text fails JSON-schema validation against the call's `responseFormat`                   |
-| `noImage()`                | The image model threw `NoImageGeneratedError`                                                      |
+| Helper                     | Matches when                                                                               |
+| -------------------------- | ------------------------------------------------------------------------------------------ |
+| `httpStatus(...patterns)`  | Numbers match the status code; strings match the message (substring); regex matches either |
+| `timeout()`                | `Error.name === 'TimeoutError'` (`AbortSignal.timeout()` fired)                            |
+| `aborted()`                | `Error.name === 'AbortError'` (manual `controller.abort()`)                                |
+| `finishReason(...reasons)` | The result's `finishReason.unified` matches one of the given values                        |
+| `schemaInvalid()`          | The result text fails JSON-schema validation against the call's `responseFormat`           |
+| `noImage()`                | The image model threw `NoImageGeneratedError`                                              |
 
 Each high-level helper is a thin wrapper around the low-level ones. For example, `timeout()` is roughly:
 
 ```typescript
 function timeout() {
-  return error(
-    (err) => err instanceof Error && err.name === 'TimeoutError',
-  );
+  return error((err) => err instanceof Error && err.name === 'TimeoutError');
 }
 ```
 
@@ -719,10 +724,7 @@ Every condition exposes two terminal actions that turn it into a `Retryable`:
 Compose conditions with `.and`, `.or`, `.not`:
 
 ```typescript
-import {
-  error,
-  httpStatus,
-} from 'ai-retry/experimental/language-model';
+import { error, httpStatus } from 'ai-retry/experimental/language-model';
 
 httpStatus(429).or(error.message('overloaded'));
 httpStatus(503).and(error.message('temporary'));
@@ -733,16 +735,16 @@ error.isRetryable(true).not();
 
 Each stable retryable has an equivalent in the new shape (imports from `ai-retry/experimental/language-model` unless noted):
 
-| Built-in                                        | Composable form                                                                                       |
-| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `contentFilterTriggered(m)`                     | `error(/* check e.data.error.code === 'content_filter' */).or(finishReason('content-filter')).switch({ model: m })` |
-| `requestTimeout(m)`                             | `timeout().switch({ model: m, timeout: 60_000 })`                                                     |
-| `requestNotRetryable(m)`                        | `error.isRetryable(false).switch({ model: m })`                                                       |
-| `schemaMismatch(m)`                             | `schemaInvalid().switch({ model: m })`                                                                |
-| `serviceOverloaded(m)`                          | `httpStatus(529, 'overloaded').switch({ model: m })`                                                  |
-| `serviceUnavailable(m)`                         | `error.statusCode(503).switch({ model: m })`                                                          |
-| `noImageGenerated(m)`                           | `noImage().switch({ model: m })` (from `image-model`)                                                 |
-| `retryAfterDelay({ delay, backoffFactor })`     | `error.isRetryable(true).retry({ delay, backoffFactor })`                                             |
+| Built-in                                    | Composable form                                                                                                     |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `contentFilterTriggered(m)`                 | `error(/* check e.data.error.code === 'content_filter' */).or(finishReason('content-filter')).switch({ model: m })` |
+| `requestTimeout(m)`                         | `timeout().switch({ model: m, timeout: 60_000 })`                                                                   |
+| `requestNotRetryable(m)`                    | `error.isRetryable(false).switch({ model: m })`                                                                     |
+| `schemaMismatch(m)`                         | `schemaInvalid().switch({ model: m })`                                                                              |
+| `serviceOverloaded(m)`                      | `httpStatus(529, 'overloaded').switch({ model: m })`                                                                |
+| `serviceUnavailable(m)`                     | `error.statusCode(503).switch({ model: m })`                                                                        |
+| `noImageGenerated(m)`                       | `noImage().switch({ model: m })` (from `image-model`)                                                               |
+| `retryAfterDelay({ delay, backoffFactor })` | `error.isRetryable(true).retry({ delay, backoffFactor })`                                                           |
 
 > [!NOTE]
 > `error.isRetryable(true)` matches whatever the AI SDK's `APICallError` marks retryable. By default that's status codes 408, 409, 429, and any 5xx, plus network errors and provider-specific overrides (e.g. Anthropic flips it on `error.type === 'overloaded_error'`). It picks up more cases than a manual status-code list.

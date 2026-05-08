@@ -156,13 +156,17 @@ export class RetryableLanguageModel
 
         return { result, attempts, callOptions: retryCallOptions };
       } catch (error) {
-        const { retryModel, attempt } = await this.handleError(
+        const { retryModel, attempt, finalError } = await this.handleError(
           error,
           attempts,
           retryCallOptions,
         );
 
         attempts.push(attempt);
+
+        if (!retryModel) {
+          throw finalError;
+        }
 
         /**
          * If the inbound abort signal is already aborted and the chosen
@@ -233,7 +237,13 @@ export class RetryableLanguageModel
   }
 
   /**
-   * Handle an error and determine if a retry is needed
+   * Handle an error and determine if a retry is needed.
+   *
+   * Returns a `finalError` (and undefined `retryModel`) when no retry
+   * matched, so callers can decide how to surface it: throwing for the
+   * generate path, or enqueuing a `{ type: 'error' }` stream part for
+   * the stream path. If multiple attempts were made, the original error
+   * is wrapped in a `RetryError`.
    */
   private async handleError(
     error: unknown,
@@ -247,9 +257,6 @@ export class RetryableLanguageModel
       options: callOptions,
     };
 
-    /**
-     * Save the current attempt
-     */
     const updatedAttempts = [...attempts, errorAttempt];
 
     const context: RetryContext<LanguageModel> = {
@@ -261,19 +268,13 @@ export class RetryableLanguageModel
 
     const retryModel = await findRetryModel(this.options.retries, context);
 
-    /**
-     * Handler didn't return any models to try next, rethrow the error.
-     * If we retried the request, wrap the error into a `RetryError` for better visibility.
-     */
-    if (!retryModel) {
-      if (updatedAttempts.length > 1) {
-        throw prepareRetryError(error, updatedAttempts);
-      }
+    const finalError = retryModel
+      ? undefined
+      : updatedAttempts.length > 1
+        ? prepareRetryError(error, updatedAttempts)
+        : error;
 
-      throw error;
-    }
-
-    return { retryModel, attempt: errorAttempt };
+    return { retryModel, attempt: errorAttempt, finalError };
   }
 
   async doGenerate(
@@ -543,9 +544,8 @@ export class RetryableLanguageModel
 
             /**
              * Check if the error from the stream can be retried.
-             * Otherwise it will rethrow the error.
              */
-            const { retryModel, attempt } = await this.handleError(
+            const { retryModel, attempt, finalError } = await this.handleError(
               error,
               attempts,
               retryCallOptions,
@@ -557,16 +557,30 @@ export class RetryableLanguageModel
             attempts.push(attempt);
 
             /**
+             * No retry matched. Surface the error as a stream part so
+             * `streamText`'s `onError` fires for the consumer. Throwing
+             * here would escape `start()` and become a stream rejection,
+             * which silently bypasses `onError`.
+             */
+            if (!retryModel) {
+              controller.enqueue({ type: 'error', error: finalError });
+              controller.close();
+              return;
+            }
+
+            /**
              * If the inbound abort signal is already aborted and the chosen
              * retry does not supply a fresh deadline, the retry would die
-             * instantly with the same abort. Rethrow rather than fire a
-             * misleading retry against a dead signal.
+             * instantly with the same abort. Surface the error rather than
+             * fire a misleading retry against a dead signal.
              */
             if (
               callOptions.abortSignal?.aborted &&
               retryModel.timeout === undefined
             ) {
-              throw error;
+              controller.enqueue({ type: 'error', error });
+              controller.close();
+              return;
             }
 
             if (retryModel.delay) {
