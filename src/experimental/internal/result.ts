@@ -28,8 +28,12 @@ export function createResultAPI<BOUND extends ResolvableLanguageModel>() {
    * The predicate runs only when the current attempt succeeded; error
    * attempts return false.
    *
+   * **Important:** returns a `Condition`, not a `Retryable`. Call
+   * `.switch()` or `.retry()` to plug it into `retries: [...]`.
+   *
    * @example
    * result<MODEL>((res) => res.finishReason.unified === 'length')
+   *   .switch({ model: fallback })
    */
   function result<MODEL extends BOUND = BOUND>(
     predicate: (
@@ -46,9 +50,12 @@ export function createResultAPI<BOUND extends ResolvableLanguageModel>() {
   /**
    * Match the result's finish reason against one of the given values.
    *
+   * **Important:** returns a `Condition`, not a `Retryable`. Call
+   * `.switch()` or `.retry()` to plug it into `retries: [...]`.
+   *
    * @example
-   * result.finishReason('content-filter')
-   * result.finishReason('content-filter', 'length')
+   * result.finishReason('content-filter').switch({ model: fallback })
+   * result.finishReason('length').retry({ maxAttempts: 3 })
    */
   result.finishReason = function finishReason<MODEL extends BOUND = BOUND>(
     ...reasons: Array<FinishReason>
@@ -58,11 +65,13 @@ export function createResultAPI<BOUND extends ResolvableLanguageModel>() {
 
   /**
    * Match the result's finish reason against one of the given values.
-   * Thin wrapper around `result.finishReason(...)`.
+   *
+   * **Important:** returns a `Condition`, not a `Retryable`. Call
+   * `.switch()` or `.retry()` to plug it into `retries: [...]`.
    *
    * @example
-   * finishReason('content-filter')
-   * finishReason('content-filter', 'length')
+   * finishReason('content-filter').switch({ model: fallback })
+   * finishReason('length').retry({ maxAttempts: 3 })
    */
   function finishReason<MODEL extends BOUND = BOUND>(
     ...reasons: Array<FinishReason>
@@ -75,8 +84,12 @@ export function createResultAPI<BOUND extends ResolvableLanguageModel>() {
    * is read from the call's `responseFormat`, which `Output.object()`
    * sets automatically. No-op when no schema is configured.
    *
+   * **Important:** returns a `Condition`, not a `Retryable`. Call
+   * `.switch()` or `.retry()` to plug it into `retries: [...]`.
+   *
    * @example
    * schemaInvalid().switch({ model: fallback })
+   * schemaInvalid().retry({ maxAttempts: 3 })
    */
   function schemaInvalid<MODEL extends BOUND = BOUND>(): Condition<MODEL> {
     return result<MODEL>(async (res, ctx) => {

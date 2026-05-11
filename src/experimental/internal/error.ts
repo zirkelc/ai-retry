@@ -24,10 +24,13 @@ export function createErrorAPI<BOUND extends AnyModel>() {
    * predicate runs only when the current attempt failed with an error;
    * result attempts return false.
    *
+   * **Important:** returns a `Condition`, not a `Retryable`. Call
+   * `.switch()` or `.retry()` to plug it into `retries: [...]`.
+   *
    * @example
    * error<MODEL, APICallError>(
    *   (e) => APICallError.isInstance(e) && e.statusCode === 418,
-   * )
+   * ).switch({ model: fallback })
    */
   function error<MODEL extends BOUND = BOUND, E = unknown>(
     predicate: (err: E, ctx: RetryContext<MODEL>) => boolean | Promise<boolean>,
@@ -40,6 +43,9 @@ export function createErrorAPI<BOUND extends AnyModel>() {
 
   /**
    * Match when the error explicitly carries `isRetryable === flag`.
+   *
+   * **Important:** returns a `Condition`, not a `Retryable`. Call
+   * `.switch()` or `.retry()` to plug it into `retries: [...]`.
    *
    * @example
    * error.isRetryable(true).retry({ delay: 1000 })
@@ -57,9 +63,12 @@ export function createErrorAPI<BOUND extends AnyModel>() {
    * Match by HTTP status code. Numbers match exactly; regular expressions
    * match against the stringified code, useful for range checks.
    *
+   * **Important:** returns a `Condition`, not a `Retryable`. Call
+   * `.switch()` or `.retry()` to plug it into `retries: [...]`.
+   *
    * @example
-   * error.statusCode(429, 503)
-   * error.statusCode(/^5\d\d$/)
+   * error.statusCode(429, 503).retry({ delay: 1000 })
+   * error.statusCode(/^5\d\d$/).switch({ model: fallback })
    */
   error.statusCode = function statusCode<MODEL extends BOUND = BOUND>(
     ...patterns: Array<number | RegExp>
@@ -80,10 +89,12 @@ export function createErrorAPI<BOUND extends AnyModel>() {
    * message are lowercased before matching. Regular expressions match
    * as written; use the `i` flag for case-insensitive regex matching.
    *
+   * **Important:** returns a `Condition`, not a `Retryable`. Call
+   * `.switch()` or `.retry()` to plug it into `retries: [...]`.
+   *
    * @example
-   * error.message('overloaded')
-   * error.message(/rate.?limit/i)
-   * error.message('overloaded', /rate.?limit/i)
+   * error.message('overloaded').switch({ model: fallback })
+   * error.message(/rate.?limit/i).retry({ delay: 1000 })
    */
   error.message = function message<MODEL extends BOUND = BOUND>(
     ...patterns: Array<string | RegExp>
@@ -106,11 +117,12 @@ export function createErrorAPI<BOUND extends AnyModel>() {
    * message. Mix any combination in a single call; matches when any
    * pattern matches.
    *
+   * **Important:** returns a `Condition`, not a `Retryable`. Call
+   * `.switch()` or `.retry()` to plug it into `retries: [...]`.
+   *
    * @example
-   * httpStatus(529)
-   * httpStatus(529, 'overloaded')
-   * httpStatus(/^5\d\d$/)
-   * httpStatus(529, 'overloaded', /rate.?limit/i)
+   * httpStatus(529).switch({ model: fallback })
+   * httpStatus(529, 'overloaded').retry({ delay: 1000 })
    */
   function httpStatus<MODEL extends BOUND = BOUND>(
     ...patterns: Array<StatusPattern>
@@ -134,8 +146,12 @@ export function createErrorAPI<BOUND extends AnyModel>() {
    * which `AbortSignal.timeout()` produces when the timeout fires.
    * Distinct from `aborted()`, which matches manual aborts.
    *
+   * **Important:** returns a `Condition`, not a `Retryable`. Call
+   * `.switch()` or `.retry()` to plug it into `retries: [...]`.
+   *
    * @example
    * timeout().switch({ model: fallback, timeout: 60_000 })
+   * timeout().retry({ delay: 1000 })
    */
   function timeout<MODEL extends BOUND = BOUND>(): Condition<MODEL> {
     return error<MODEL>(
@@ -147,6 +163,9 @@ export function createErrorAPI<BOUND extends AnyModel>() {
    * Match a manual abort: an `Error` with `name === 'AbortError'`, which
    * `controller.abort()` produces. Distinct from `timeout()`, which
    * matches `AbortSignal.timeout()` firing.
+   *
+   * **Important:** returns a `Condition`, not a `Retryable`. Call
+   * `.switch()` or `.retry()` to plug it into `retries: [...]`.
    *
    * @example
    * aborted().switch({ model: fallback })
