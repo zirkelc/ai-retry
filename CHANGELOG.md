@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.7.2](https://github.com/zirkelc/ai-retry/compare/v1.7.1...v1.7.2) (2026-05-11)
+
+
+### Code Refactoring
+
+* **experimental:** bound result API factory mirroring error ([840913c](https://github.com/zirkelc/ai-retry/commit/840913cc27b9f79e8e4ecf7e33fdff59db3453ca))
+
+
+### Tests
+
+* **streamText:** cover content-filter finish after streamed content ([f19ce54](https://github.com/zirkelc/ai-retry/commit/f19ce547943d6e5ca926cacc70827ed5bf6d689f))
+
+
+### Continuous Integration
+
+* **release-please:** switch to manifest config, drop v6 branch ([8ba1a34](https://github.com/zirkelc/ai-retry/commit/8ba1a347d3eefa7e9a595be4212057b959b7415e))
+
 ## [1.7.1](https://github.com/zirkelc/ai-retry/compare/v1.7.0...v1.7.1) (2026-05-08)
 
 
