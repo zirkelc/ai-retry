@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.3](https://github.com/zirkelc/ai-retry/compare/v1.7.2...v1.7.3) (2026-05-11)
+
+
+### Bug Fixes
+
+* **experimental:** accept gateway-string fallbacks in conditions ([59c89b1](https://github.com/zirkelc/ai-retry/commit/59c89b15e3acbbe3598ad13cc6095d6c82e6695e))
+
 ## [1.7.2](https://github.com/zirkelc/ai-retry/compare/v1.7.1...v1.7.2) (2026-05-11)
 
 
