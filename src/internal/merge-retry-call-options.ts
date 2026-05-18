@@ -9,6 +9,7 @@ import type {
   ProviderOptions,
   Retry,
 } from '../types.js';
+import { isTimeoutError } from './guards.js';
 
 /**
  * Resolve `providerOptions` for the upcoming attempt.
@@ -53,10 +54,12 @@ function resolveProviderOptions<
  *
  * If `currentRetry.timeout` is set, a fresh `AbortSignal.timeout(...)` is
  * created. When the base signal is still alive, the fresh deadline is
- * composed with it via `AbortSignal.any` so the user can still cancel
- * mid-retry. When the base is already aborted, it is dropped so the retry
- * runs against the fresh deadline alone. Without a retry timeout, the base
- * is preserved unchanged.
+ * composed with the base so user cancellation still propagates mid-retry,
+ * but a base `TimeoutError` (`AbortSignal.timeout` used as a wall-clock
+ * budget) is ignored so it cannot truncate the retry's own deadline. When
+ * the base is already aborted with a `TimeoutError`, it is dropped; with any
+ * other reason it propagates. Without a retry timeout, the base is preserved
+ * unchanged.
  */
 function resolveAbortSignal<
   MODEL extends LanguageModel | EmbeddingModel | ImageModel,
@@ -69,10 +72,27 @@ function resolveAbortSignal<
   }
 
   const fresh = AbortSignal.timeout(currentRetry.timeout);
-  if (base !== undefined && !base.aborted) {
-    return AbortSignal.any([base, fresh]);
+  if (base === undefined) {
+    return fresh;
   }
-  return fresh;
+
+  if (base.aborted) {
+    return isTimeoutError(base.reason) ? fresh : base;
+  }
+
+  const controller = new AbortController();
+  fresh.addEventListener('abort', () => controller.abort(fresh.reason), {
+    once: true,
+  });
+  base.addEventListener(
+    'abort',
+    () => {
+      if (isTimeoutError(base.reason)) return;
+      controller.abort(base.reason);
+    },
+    { once: true },
+  );
+  return controller.signal;
 }
 
 /**

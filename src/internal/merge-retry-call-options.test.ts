@@ -222,10 +222,32 @@ describe('mergeLanguageModelCallOptions', () => {
       expect(result.abortSignal?.aborted).toBe(true);
     });
 
-    it('should drop already-aborted base signal when timeout is set', () => {
+    it('should drop already-aborted base TimeoutError when retry timeout is set', async () => {
+      // Arrange
+      /**
+       * Base is an `AbortSignal.timeout` that has already fired (a wall-clock
+       * budget the caller passed in that has expired).
+       */
+      const baseSignal = AbortSignal.timeout(0);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+
+      // Act
+      const result = mergeLanguageModelCallOptions({
+        callOptions: { ...baseLanguageCallOptions, abortSignal: baseSignal },
+        currentRetry: { model: {} as LanguageModel, timeout: 30_000 },
+      });
+
+      // Assert
+      expect(baseSignal.aborted).toBe(true);
+      expect(result.abortSignal).toBeDefined();
+      expect(result.abortSignal).not.toBe(baseSignal);
+      expect(result.abortSignal?.aborted).toBe(false);
+    });
+
+    it('should propagate already-aborted base non-TimeoutError when retry timeout is set', () => {
       // Arrange
       const controller = new AbortController();
-      controller.abort();
+      controller.abort(new Error('user cancel'));
 
       // Act
       const result = mergeLanguageModelCallOptions({
@@ -237,9 +259,63 @@ describe('mergeLanguageModelCallOptions', () => {
       });
 
       // Assert
-      expect(result.abortSignal).toBeDefined();
-      expect(result.abortSignal).not.toBe(controller.signal);
+      /**
+       * User cancellation must still propagate even when the retry has its
+       * own timeout. Only deadline-style aborts (TimeoutError) are dropped.
+       */
+      expect(result.abortSignal?.aborted).toBe(true);
+    });
+
+    it('should not propagate base TimeoutError firing mid-retry to composed signal', async () => {
+      // Arrange
+      /**
+       * Base is a wall-clock budget that is about to expire. Caller passed
+       * `abortSignal: AbortSignal.timeout(N)` to bound the overall call, not
+       * to truncate the per-retry deadline.
+       */
+      const baseSignal = AbortSignal.timeout(10);
+
+      // Act
+      /**
+       * Retry slot configures its own per-attempt deadline that is much
+       * longer than the base's residual budget.
+       */
+      const result = mergeLanguageModelCallOptions({
+        callOptions: { ...baseLanguageCallOptions, abortSignal: baseSignal },
+        currentRetry: { model: {} as LanguageModel, timeout: 30_000 },
+      });
+
+      /** Wait past the base deadline, well before the fresh deadline. */
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Assert
+      expect(baseSignal.aborted).toBe(true);
+      /**
+       * A parent `AbortSignal.timeout()` firing is a deadline expiry, not a
+       * user cancellation. It must not abort the retry, whose own per-attempt
+       * timeout is the deadline the user explicitly configured.
+       */
       expect(result.abortSignal?.aborted).toBe(false);
+    });
+
+    it('should propagate user cancellation from base even with retry timeout', () => {
+      // Arrange
+      const controller = new AbortController();
+
+      // Act
+      const result = mergeLanguageModelCallOptions({
+        callOptions: {
+          ...baseLanguageCallOptions,
+          abortSignal: controller.signal,
+        },
+        currentRetry: { model: {} as LanguageModel, timeout: 30_000 },
+      });
+
+      /** User cancels with a non-TimeoutError reason. */
+      controller.abort(new Error('user cancel'));
+
+      // Assert
+      expect(result.abortSignal?.aborted).toBe(true);
     });
   });
 });

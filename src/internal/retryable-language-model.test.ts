@@ -1473,7 +1473,9 @@ describe('generateText', () => {
 
         // Create an already-aborted signal (simulates timeout that already fired)
         const controller = new AbortController();
-        controller.abort();
+        controller.abort(
+          new DOMException('The operation timed out', 'TimeoutError'),
+        );
 
         // Act
         await generateText({
@@ -3877,7 +3879,9 @@ describe('streamText', () => {
 
         // Create an already-aborted signal (simulates timeout that already fired)
         const controller = new AbortController();
-        controller.abort();
+        controller.abort(
+          new DOMException('The operation timed out', 'TimeoutError'),
+        );
 
         // Act
         const result = streamText({
