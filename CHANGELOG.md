@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.7.4](https://github.com/zirkelc/ai-retry/compare/v1.7.3...v1.7.4) (2026-05-18)
+
+
+### Bug Fixes
+
+* don't let parent AbortSignal.timeout truncate retry deadlines ([f5ae11c](https://github.com/zirkelc/ai-retry/commit/f5ae11c595cea9c76bdabad09c18a8a769577f43)), closes [#46](https://github.com/zirkelc/ai-retry/issues/46)
+
+
+### Documentation
+
+* **experimental:** add terminal-action note to every condition helper ([567713c](https://github.com/zirkelc/ai-retry/commit/567713c3c1bd433109f72a749effac184d809082))
+
 ## [1.7.3](https://github.com/zirkelc/ai-retry/compare/v1.7.2...v1.7.3) (2026-05-11)
 
 
