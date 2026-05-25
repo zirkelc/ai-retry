@@ -10,31 +10,16 @@ import {
 } from 'ai';
 import { describe, expect, it } from 'vitest';
 import { createRetryable } from '../create-retryable-model.js';
-import { chunksToText, MockLanguageModel } from '../internal/test-utils.js';
-import type { LanguageModelResult, LanguageModelStreamPart } from '../types.js';
+import {
+  chunksToText,
+  contentFilterResult,
+  MockLanguageModel,
+  mockResult,
+  mockResultText,
+  mockStreamChunks,
+} from '../internal/test-utils.js';
+import type { LanguageModelStreamPart } from '../types.js';
 import { contentFilterTriggered } from './content-filter-triggered.js';
-
-const mockResultText = 'Hello, world!';
-
-const mockResult: LanguageModelResult = {
-  finishReason: { unified: 'stop', raw: undefined },
-  usage: {
-    inputTokens: { total: 10, noCache: 0, cacheRead: 0, cacheWrite: 0 },
-    outputTokens: { total: 20, text: 0, reasoning: 0 },
-  },
-  content: [{ type: 'text', text: mockResultText }],
-  warnings: [],
-};
-
-const contentFilterResult: LanguageModelResult = {
-  finishReason: { unified: 'content-filter', raw: undefined },
-  usage: {
-    inputTokens: { total: 10, noCache: 0, cacheRead: 0, cacheWrite: 0 },
-    outputTokens: { total: 20, text: 0, reasoning: 0 },
-  },
-  content: [],
-  warnings: [],
-};
 
 const contentFilterChunks: LanguageModelStreamPart[] = [
   {
@@ -79,32 +64,6 @@ const apiCallError = new APICallError({
     },
   },
 });
-
-const mockStreamChunks: LanguageModelStreamPart[] = [
-  {
-    type: 'stream-start',
-    warnings: [],
-  },
-  {
-    type: 'response-metadata',
-    id: 'id-0',
-    modelId: 'mock-model-id',
-    timestamp: new Date(0),
-  },
-  { type: 'text-start', id: '1' },
-  { type: 'text-delta', id: '1', delta: 'Hello' },
-  { type: 'text-delta', id: '1', delta: ', ' },
-  { type: 'text-delta', id: '1', delta: 'world!' },
-  { type: 'text-end', id: '1' },
-  {
-    type: 'finish',
-    finishReason: { unified: 'stop', raw: undefined },
-    usage: {
-      inputTokens: { total: 10, noCache: 0, cacheRead: 0, cacheWrite: 0 },
-      outputTokens: { total: 20, text: 0, reasoning: 0 },
-    },
-  },
-];
 
 describe('contentFilterTriggered', () => {
   describe('generateText', () => {

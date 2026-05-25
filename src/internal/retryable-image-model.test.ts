@@ -10,10 +10,16 @@ import { noImageGenerated } from '../retryables/no-image-generated.js';
 import { requestTimeout } from '../retryables/request-timeout.js';
 import { serviceOverloaded } from '../retryables/service-overloaded.js';
 import { serviceUnavailable } from '../retryables/service-unavailable.js';
-import { MockImageModel } from './test-utils.js';
+import {
+  mockImageResult,
+  MockImageModel,
+  nonRetryableError,
+  retryableError,
+  serviceUnavailableError,
+  serviceOverloadedError,
+} from './test-utils.js';
 import type {
   ImageModel,
-  ImageModelGenerate,
   OnRetryOverrides,
   Retryable,
   RetryableModelOptions,
@@ -24,81 +30,6 @@ import { isErrorAttempt } from './guards.js';
 type OnError = Required<RetryableModelOptions<ImageModel>>['onError'];
 type OnRetry = Required<RetryableModelOptions<ImageModel>>['onRetry'];
 type OnSuccess = Required<RetryableModelOptions<ImageModel>>['onSuccess'];
-
-/** Valid base64 PNG image (1x1 transparent pixel) */
-const validBase64Image = `iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==`;
-
-const mockImageResult: ImageModelGenerate = {
-  images: [validBase64Image],
-  warnings: [],
-  response: {
-    timestamp: new Date(),
-    modelId: `mock-model`,
-    headers: undefined,
-  },
-};
-
-const retryableError = new APICallError({
-  message: `Rate limit exceeded`,
-  url: ``,
-  requestBodyValues: {},
-  statusCode: 429,
-  responseHeaders: {},
-  responseBody: `{"error": {"message": "Rate limit exceeded", "code": "rate_limit_exceeded"}}`,
-  isRetryable: true,
-  data: {
-    error: {
-      message: `Rate limit exceeded`,
-      code: `rate_limit_exceeded`,
-    },
-  },
-});
-
-const nonRetryableError = new APICallError({
-  message: `Invalid API key`,
-  url: ``,
-  requestBodyValues: {},
-  statusCode: 401,
-  responseHeaders: {},
-  responseBody: `{"error": {"message": "Invalid API key", "code": "invalid_api_key"}}`,
-  isRetryable: false,
-  data: {
-    error: {
-      message: `Invalid API key`,
-      code: `invalid_api_key`,
-    },
-  },
-});
-
-const serviceOverloadedError = new APICallError({
-  message: `Service overloaded`,
-  url: ``,
-  requestBodyValues: {},
-  statusCode: 529,
-  responseHeaders: {},
-  responseBody: `{"error": {"message": "Service overloaded"}}`,
-  isRetryable: true,
-  data: {
-    error: {
-      message: `Service overloaded`,
-    },
-  },
-});
-
-const serviceUnavailableError = new APICallError({
-  message: `Service unavailable`,
-  url: ``,
-  requestBodyValues: {},
-  statusCode: 503,
-  responseHeaders: {},
-  responseBody: `{"error": {"message": "Service unavailable"}}`,
-  isRetryable: true,
-  data: {
-    error: {
-      message: `Service unavailable`,
-    },
-  },
-});
 
 const noImageError = new NoImageGeneratedError({
   message: `No image generated`,

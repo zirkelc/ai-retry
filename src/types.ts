@@ -9,6 +9,7 @@ import type {
   LanguageModelV3StreamPart,
   SharedV3ProviderOptions,
 } from '@ai-sdk/provider';
+import type { AttributeValue, Tracer } from '@opentelemetry/api';
 import type { gateway } from 'ai';
 
 type Literals<T> = T extends string
@@ -216,6 +217,39 @@ export type SuccessContext<
 };
 
 /**
+ * Telemetry configuration for retry instrumentation.
+ *
+ * Mirrors the AI SDK's `experimental_telemetry` shape so the two can be
+ * configured the same way. When enabled, each request emits an OpenTelemetry
+ * span for the operation with a child span per attempt. Spans created here
+ * nest under any active span (e.g. the AI SDK's `ai.generateText.doGenerate`)
+ * via OpenTelemetry context propagation.
+ *
+ * Requires the optional peer dependency `@opentelemetry/api` to be installed.
+ */
+export interface RetryTelemetrySettings {
+  /**
+   * Enable or disable retry telemetry. Disabled by default while experimental.
+   */
+  isEnabled?: boolean;
+  /**
+   * A custom tracer to use for the telemetry data. Defaults to the global
+   * tracer (`trace.getTracer('ai-retry')`), which is a no-op until an
+   * OpenTelemetry SDK is registered.
+   */
+  tracer?: Tracer;
+  /**
+   * Identifier for this function. Used to group telemetry data by function.
+   */
+  functionId?: string;
+  /**
+   * Additional information to include in the telemetry data. Recorded on the
+   * operation span as `ai_retry.metadata.<key>` attributes.
+   */
+  metadata?: Record<string, AttributeValue>;
+}
+
+/**
  * Options for creating a retryable model.
  */
 export interface RetryableModelOptions<
@@ -230,6 +264,14 @@ export interface RetryableModelOptions<
    * @default 'after-request'
    */
   reset?: Reset;
+
+  /**
+   * Experimental. Can change in patch versions without warning.
+   *
+   * Telemetry configuration. When enabled, emits OpenTelemetry spans for
+   * retry operations and attempts. Requires `@opentelemetry/api`.
+   */
+  experimental_telemetry?: RetryTelemetrySettings;
 
   // TODO: future iteration could let `onError` similarly decide whether a retry actually fires (today it is purely observational).
   onError?: (context: RetryContext<MODEL>) => void;

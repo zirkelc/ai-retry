@@ -1,29 +1,12 @@
 import { APICallError, generateImage, NoImageGeneratedError } from 'ai';
 import { describe, expect, it, vi } from 'vitest';
 import { createRetryable } from '../create-retryable-model.js';
-import { MockImageModel } from '../internal/test-utils.js';
-import type {
-  ImageModel,
-  ImageModelGenerate,
-  RetryableModelOptions,
-} from '../types.js';
+import { MockImageModel, mockImageResult } from '../internal/test-utils.js';
+import type { ImageModel, RetryableModelOptions } from '../types.js';
 import { noImageGenerated } from './no-image-generated.js';
 
 type OnError = Required<RetryableModelOptions<ImageModel>>['onError'];
 type OnRetry = Required<RetryableModelOptions<ImageModel>>['onRetry'];
-
-/** Valid base64 PNG image (1x1 transparent pixel) */
-const validBase64Image = `iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==`;
-
-const mockImageResult: ImageModelGenerate = {
-  images: [validBase64Image],
-  warnings: [],
-  response: {
-    timestamp: new Date(),
-    modelId: `mock-model`,
-    headers: undefined,
-  },
-};
 
 const noImageError = new NoImageGeneratedError({
   message: `No image generated`,

@@ -3,19 +3,13 @@ import { describe, expect, it } from 'vitest';
 import { createRetryable } from '../../create-retryable-model.js';
 import {
   buildResultContext,
-  generateEmptyResult,
+  contentFilterResult,
   generateTextResult,
   MockLanguageModel,
 } from '../../internal/test-utils.js';
-import type { LanguageModelResult } from '../../types.js';
 import { createResultAPI } from './result.js';
 
 const { finishReason } = createResultAPI<MockLanguageModel>();
-
-const contentFilterResult: LanguageModelResult = {
-  ...generateEmptyResult,
-  finishReason: { unified: 'content-filter', raw: undefined },
-};
 
 describe('finishReason', () => {
   it(`should match a single reason`, async () => {

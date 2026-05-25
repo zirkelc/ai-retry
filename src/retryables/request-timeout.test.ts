@@ -16,49 +16,19 @@ import {
   type LanguageModelGenerateFn,
   type LanguageModelStreamFn,
   MockEmbeddingModel,
+  mockEmbeddings,
   MockImageModel,
+  mockImageResult,
   MockLanguageModel,
+  mockResult,
+  mockResultText,
+  mockStreamChunks,
 } from '../internal/test-utils.js';
 import type {
   EmbeddingModelCallOptions,
-  EmbeddingModelEmbed,
-  ImageModelGenerate,
   LanguageModelCallOptions,
-  LanguageModelResult,
-  LanguageModelStreamPart,
 } from '../types.js';
 import { requestTimeout } from './request-timeout.js';
-
-const mockResultText = 'Hello, world!';
-
-const mockResult: LanguageModelResult = {
-  finishReason: { unified: 'stop', raw: undefined },
-  usage: {
-    inputTokens: { total: 10, noCache: 0, cacheRead: 0, cacheWrite: 0 },
-    outputTokens: { total: 20, text: 0, reasoning: 0 },
-  },
-  content: [{ type: 'text', text: mockResultText }],
-  warnings: [],
-};
-
-const mockEmbeddings: EmbeddingModelEmbed = {
-  embeddings: [[0.1, 0.2, 0.3]],
-  usage: { tokens: 5 },
-  warnings: [],
-};
-
-/** Valid base64 PNG image (1x1 transparent pixel) */
-const validBase64Image = `iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==`;
-
-const mockImageResult: ImageModelGenerate = {
-  images: [validBase64Image],
-  warnings: [],
-  response: {
-    timestamp: new Date(),
-    modelId: `mock-model`,
-    headers: undefined,
-  },
-};
 
 const embeddingTimeoutError = async (opts: EmbeddingModelCallOptions) => {
   // Check if abortSignal is aborted and throw appropriate error
@@ -116,32 +86,6 @@ const genericError = new APICallError({
     },
   },
 });
-
-const mockStreamChunks: LanguageModelStreamPart[] = [
-  {
-    type: 'stream-start',
-    warnings: [],
-  },
-  {
-    type: 'response-metadata',
-    id: 'id-0',
-    modelId: 'mock-model-id',
-    timestamp: new Date(0),
-  },
-  { type: 'text-start', id: '1' },
-  { type: 'text-delta', id: '1', delta: 'Hello' },
-  { type: 'text-delta', id: '1', delta: ', ' },
-  { type: 'text-delta', id: '1', delta: 'world!' },
-  { type: 'text-end', id: '1' },
-  {
-    type: 'finish',
-    finishReason: { unified: 'stop', raw: undefined },
-    usage: {
-      inputTokens: { total: 10, noCache: 0, cacheRead: 0, cacheWrite: 0 },
-      outputTokens: { total: 20, text: 0, reasoning: 0 },
-    },
-  },
-];
 
 describe('requestTimeout', () => {
   describe('generateText', () => {

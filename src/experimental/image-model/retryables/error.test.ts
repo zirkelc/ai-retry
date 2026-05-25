@@ -1,12 +1,13 @@
 import { APICallError, generateImage } from 'ai';
 import { describe, expect, it } from 'vitest';
 import { createRetryable } from '../../../create-retryable-model.js';
-import { apiError, MockImageModel } from '../../../internal/test-utils.js';
+import {
+  apiError,
+  MockImageModel,
+  validBase64Image,
+} from '../../../internal/test-utils.js';
 import type { ImageModelGenerate } from '../../../types.js';
 import { error, httpStatus } from './index.js';
-
-const validBase64Image =
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
 
 const okImage: ImageModelGenerate = {
   images: [validBase64Image],

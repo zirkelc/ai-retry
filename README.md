@@ -1092,6 +1092,85 @@ const retryableModel = createRetryable({
 });
 ```
 
+### Telemetry
+
+> [!NOTE]
+> Experimental: Span names and attributes may change in patch versions.
+
+`ai-retry` can emit [OpenTelemetry](https://opentelemetry.io/) spans for each request and every retry attempt. The spans are created on the active OpenTelemetry context, so they nest automatically under the AI SDK's own spans (e.g. `ai.generateText.doGenerate`) when you also enable `experimental_telemetry` on `generateText`/`streamText`. A single trace then shows the individual attempts — which model each used, why it was retried, and the backoff between them — that the SDK's own span otherwise hides.
+
+#### Setup
+
+Telemetry uses the optional peer dependency `@opentelemetry/api` (already present if you use the AI SDK). Register an OpenTelemetry SDK once at startup, then opt in per model:
+
+```typescript
+import { createRetryable } from 'ai-retry';
+
+const retryableModel = createRetryable({
+  model: openai('gpt-4o'),
+  retries: [anthropic('claude-sonnet-4-5')],
+  experimental_telemetry: { isEnabled: true },
+});
+```
+
+The settings mirror the AI SDK's `experimental_telemetry` shape:
+
+```ts
+interface RetryTelemetrySettings {
+  isEnabled?: boolean; // off by default while experimental
+  tracer?: Tracer; // defaults to trace.getTracer('ai-retry')
+  functionId?: string; // groups telemetry by function
+  metadata?: Record<string, AttributeValue>;
+}
+```
+
+Spans are emitted only when `isEnabled` is `true`. By default the global tracer is used, which is a no-op until an OpenTelemetry SDK is registered — so enabling it in code that runs without an SDK has no effect and no cost.
+
+> [!NOTE]
+> Prompts and generated content are **not** recorded — only metadata (models, outcomes, errors, timing). The AI SDK's own telemetry records the prompt/response on its spans when you enable `recordInputs`/`recordOutputs`.
+
+#### Spans
+
+Each request creates one operation span (`ai_retry.doGenerate`, `ai_retry.doStream`, or `ai_retry.doEmbed`) with one child `ai_retry.attempt` span per attempt:
+
+```
+ai_retry.doGenerate            outcome=success, attempts=2
+├─ ai_retry.attempt #1         outcome=retry,   type=error   (529 → fallback)
+└─ ai_retry.attempt #2         outcome=success, type=result
+```
+
+**Operation span** attributes:
+
+| Attribute                                                | Description                                             |
+| -------------------------------------------------------- | ------------------------------------------------------- |
+| `ai_retry.operation`                                     | `doGenerate`, `doStream`, or `doEmbed`                  |
+| `ai_retry.outcome`                                       | `success` or `failure`                                  |
+| `ai_retry.attempts`                                      | total number of attempts                                |
+| `ai_retry.model.start`                                   | the model the request started with (`provider/modelId`) |
+| `ai_retry.model.final`                                   | the model that produced the final outcome               |
+| `ai_retry.error.{name,message,cause.name,cause.message}` | the failing error (on failure)                          |
+| `ai_retry.function.id`, `ai_retry.metadata.*`            | from the telemetry settings                             |
+
+**Attempt span** (`ai_retry.attempt`) attributes:
+
+| Attribute                                                        | Description                               |
+| ---------------------------------------------------------------- | ----------------------------------------- |
+| `ai_retry.attempt.number`                                        | 1-based attempt index                     |
+| `ai_retry.attempt.model`                                         | model used (`provider/modelId`)           |
+| `ai_retry.attempt.outcome`                                       | `success`, `retry`, or `failure`          |
+| `ai_retry.attempt.type`                                          | `result` or `error`                       |
+| `ai_retry.attempt.finish_reason`                                 | finish reason (result attempts)           |
+| `ai_retry.attempt.delay_ms`                                      | backoff scheduled before the next attempt |
+| `ai_retry.attempt.timeout_ms`                                    | timeout budget, when the retry set one    |
+| `ai_retry.attempt.error.{name,message,cause.name,cause.message}` | the error (error attempts)                |
+
+Attempt spans also carry the standard `gen_ai.request.model` / `gen_ai.provider.name` attributes so observability tools (Langfuse, etc.) recognize and render them.
+
+> [!NOTE]
+> **Streaming:** retries only happen before the first content chunk (see [Streaming](#streaming)), so a `ai_retry.doStream` attempt is marked `success` once content begins flowing; mid-stream retries appear as additional attempt spans.
+
+See [`examples/telemetry`](./examples/telemetry) for a runnable example that exports to Langfuse.
+
 ### Streaming
 
 Errors during streaming requests can occur in two ways:
@@ -1118,6 +1197,7 @@ interface RetryableModelOptions<
   retries: Array<Retryable<MODEL> | MODEL>;
   disabled?: boolean | (() => boolean);
   reset?: Reset;
+  experimental_telemetry?: RetryTelemetrySettings;
   onError?: (context: RetryContext<MODEL>) => void;
   onRetry?: (
     context: RetryContext<MODEL>,
@@ -1132,6 +1212,7 @@ interface RetryableModelOptions<
 - `retries`: Array of retryables (functions, models, or retry objects) to attempt on failure.
 - `disabled`: Disable all retry logic. Can be a boolean or function returning boolean. Default: `false` (retries enabled).
 - `reset`: Controls when to reset back to the base model after a successful retry. Default: `after-request`.
+- `experimental_telemetry`: OpenTelemetry instrumentation for retries. Off by default. See [Telemetry](#telemetry).
 - `onError`: Callback invoked when an error occurs.
 - `onRetry`: Callback invoked before attempting a retry. May optionally return an `OnRetryOverrides` object (or a `Promise` of one) to override `options.*` for the upcoming attempt only. See [Dynamic Call Options via `onRetry`](#dynamic-call-options-via-onretry).
 - `onSuccess`: Callback invoked after a successful request. Receives the model that handled the request and all previous attempts.

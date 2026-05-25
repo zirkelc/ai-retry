@@ -4,6 +4,7 @@ import { calculateExponentialBackoff } from './calculate-exponential-backoff.js'
 import { countModelAttempts } from './count-model-attempts.js';
 import { findRetryModel } from './find-retry-model.js';
 import { mergeLanguageModelCallOptions } from './merge-retry-call-options.js';
+import { createRetryTelemetry, type RetryTelemetry } from './telemetry.js';
 import { prepareRetryError } from './prepare-retry-error.js';
 import type {
   LanguageModel,
@@ -48,10 +49,16 @@ export class RetryableLanguageModel
     callOptions: LanguageModelCallOptions;
     attempts?: Array<RetryAttempt<LanguageModel>>;
     currentRetry?: Retry<LanguageModel>;
+    recorder?: RetryTelemetry;
   }): Promise<{
     result: RESULT;
     attempts: Array<RetryAttempt<LanguageModel>>;
     callOptions: LanguageModelCallOptions;
+    /**
+     * For stream results: the still-open attempt span number, to be closed by
+     * the caller once the consumption outcome is known. Undefined otherwise.
+     */
+    pendingAttempt?: number;
   }> {
     /**
      * Track all attempts.
@@ -102,6 +109,19 @@ export class RetryableLanguageModel
         onRetryOverrides,
       });
 
+      /**
+       * The model and 1-based index for this attempt, captured for telemetry
+       * before the call is issued.
+       */
+      const attemptModel = this.currentModel;
+      const attemptNumber = attempts.length + 1;
+      input.recorder?.startAttempt({
+        attempt: attemptNumber,
+        provider: attemptModel.provider,
+        modelId: attemptModel.modelId,
+        timeoutMs: currentRetry?.timeout,
+      });
+
       try {
         /**
          * Call the function that may need to be retried
@@ -121,24 +141,31 @@ export class RetryableLanguageModel
           attempts.push(attempt);
 
           if (retryModel) {
+            /**
+             * Calculate exponential backoff delay based on the number of
+             * attempts for this specific model: baseDelay * backoffFactor^attempts.
+             */
+            let calculatedDelay: number | undefined;
             if (retryModel.delay) {
-              /**
-               * Calculate exponential backoff delay based on the number of attempts for this specific model.
-               * The delay grows exponentially: baseDelay * backoffFactor^attempts
-               * Example: With delay=1000ms and backoffFactor=2:
-               * - Attempt 1: 1000ms
-               * - Attempt 2: 2000ms
-               * - Attempt 3: 4000ms
-               */
               const modelAttemptsCount = countModelAttempts(
                 retryModel.model,
                 attempts,
               );
-              const calculatedDelay = calculateExponentialBackoff(
+              calculatedDelay = calculateExponentialBackoff(
                 retryModel.delay,
                 retryModel.backoffFactor,
                 modelAttemptsCount,
               );
+            }
+
+            input.recorder?.endAttempt({
+              attempt: attemptNumber,
+              outcome: 'retry',
+              finishReason: result.finishReason.unified,
+              delayMs: calculatedDelay,
+            });
+
+            if (calculatedDelay !== undefined) {
               await delay(calculatedDelay, {
                 abortSignal: retryCallOptions.abortSignal,
               });
@@ -152,9 +179,27 @@ export class RetryableLanguageModel
              */
             continue;
           }
+
+          input.recorder?.endAttempt({
+            attempt: attemptNumber,
+            outcome: 'success',
+            finishReason: result.finishReason.unified,
+          });
+          return { result, attempts, callOptions: retryCallOptions };
         }
 
-        return { result, attempts, callOptions: retryCallOptions };
+        /**
+         * Stream results are not terminal here: the outcome depends on
+         * consumption (the stream may still error or hit a retryable finish
+         * before content flows). Leave the attempt span open and hand its
+         * number back so the stream wrapper can close it once known.
+         */
+        return {
+          result,
+          attempts,
+          callOptions: retryCallOptions,
+          pendingAttempt: attemptNumber,
+        };
       } catch (error) {
         const { retryModel, attempt, finalError } = await this.handleError(
           error,
@@ -165,6 +210,11 @@ export class RetryableLanguageModel
         attempts.push(attempt);
 
         if (!retryModel) {
+          input.recorder?.endAttempt({
+            attempt: attemptNumber,
+            outcome: 'failure',
+            error,
+          });
           throw finalError;
         }
 
@@ -178,23 +228,39 @@ export class RetryableLanguageModel
           input.callOptions.abortSignal?.aborted &&
           retryModel.timeout === undefined
         ) {
+          input.recorder?.endAttempt({
+            attempt: attemptNumber,
+            outcome: 'failure',
+            error,
+          });
           throw error;
         }
 
+        /**
+         * Calculate exponential backoff delay based on the number of attempts
+         * for this specific model: baseDelay * backoffFactor^attempts.
+         */
+        let calculatedDelay: number | undefined;
         if (retryModel.delay) {
-          /**
-           * Calculate exponential backoff delay based on the number of attempts for this specific model.
-           * The delay grows exponentially: baseDelay * backoffFactor^attempts
-           */
           const modelAttemptsCount = countModelAttempts(
             retryModel.model,
             attempts,
           );
-          const calculatedDelay = calculateExponentialBackoff(
+          calculatedDelay = calculateExponentialBackoff(
             retryModel.delay,
             retryModel.backoffFactor,
             modelAttemptsCount,
           );
+        }
+
+        input.recorder?.endAttempt({
+          attempt: attemptNumber,
+          outcome: 'retry',
+          error,
+          delayMs: calculatedDelay,
+        });
+
+        if (calculatedDelay !== undefined) {
           await delay(calculatedDelay, {
             abortSignal: retryCallOptions.abortSignal,
           });
@@ -293,30 +359,53 @@ export class RetryableLanguageModel
       return this.currentModel.doGenerate(callOptions);
     }
 
-    const {
-      result,
-      attempts,
-      callOptions: finalCallOptions,
-    } = await this.withRetry({
-      fn: async (retryCallOptions) => {
-        return this.currentModel.doGenerate(retryCallOptions);
+    const recorder = await createRetryTelemetry(
+      this.options.experimental_telemetry,
+      {
+        operation: 'doGenerate',
+        genAiOperation: 'chat',
+        provider: startModel.provider,
+        modelId: startModel.modelId,
       },
-      callOptions: callOptions,
-    });
+    );
 
-    this.updateStickyModel(startModel);
-
-    this.options.onSuccess?.({
-      current: {
-        type: 'success',
-        model: this.currentModel,
+    let operationError: unknown;
+    try {
+      const {
         result,
-        options: finalCallOptions,
-      },
-      attempts,
-    });
+        attempts,
+        callOptions: finalCallOptions,
+      } = await this.withRetry({
+        fn: async (retryCallOptions) => {
+          return this.currentModel.doGenerate(retryCallOptions);
+        },
+        callOptions: callOptions,
+        recorder,
+      });
 
-    return result;
+      this.updateStickyModel(startModel);
+
+      this.options.onSuccess?.({
+        current: {
+          type: 'success',
+          model: this.currentModel,
+          result,
+          options: finalCallOptions,
+        },
+        attempts,
+      });
+
+      return result;
+    } catch (error) {
+      operationError = error;
+      throw error;
+    } finally {
+      recorder?.endOperation({
+        provider: this.currentModel.provider,
+        modelId: this.currentModel.modelId,
+        error: operationError,
+      });
+    }
   }
 
   async doStream(
@@ -335,19 +424,51 @@ export class RetryableLanguageModel
       return this.currentModel.doStream(callOptions);
     }
 
+    const recorder = await createRetryTelemetry(
+      this.options.experimental_telemetry,
+      {
+        operation: 'doStream',
+        genAiOperation: 'chat',
+        provider: startModel.provider,
+        modelId: startModel.modelId,
+      },
+    );
+
     /**
      * Perform the initial call to doStream with retry logic to handle errors before any data is streamed.
      */
-    let {
-      result,
-      attempts,
-      callOptions: finalCallOptions,
-    } = await this.withRetry({
-      fn: async (retryCallOptions) => {
-        return this.currentModel.doStream(retryCallOptions);
-      },
-      callOptions: callOptions,
-    });
+    let result: LanguageModelStream;
+    let attempts: Array<RetryAttempt<LanguageModel>>;
+    let finalCallOptions: LanguageModelCallOptions;
+    /**
+     * The open attempt span for the stream currently being consumed, closed
+     * once its outcome (success, retry, or failure) is known.
+     */
+    let pendingAttempt: number | undefined;
+    try {
+      const initial = await this.withRetry({
+        fn: async (retryCallOptions) => {
+          return this.currentModel.doStream(retryCallOptions);
+        },
+        callOptions: callOptions,
+        recorder,
+      });
+      result = initial.result;
+      attempts = initial.attempts;
+      finalCallOptions = initial.callOptions;
+      pendingAttempt = initial.pendingAttempt;
+    } catch (error) {
+      /**
+       * Every pre-stream attempt failed; record the operation failure before
+       * the error propagates to the caller.
+       */
+      recorder?.endOperation({
+        provider: this.currentModel.provider,
+        modelId: this.currentModel.modelId,
+        error,
+      });
+      throw error;
+    }
 
     /**
      * Track the current retry model for computing call options in the stream handler
@@ -366,153 +487,307 @@ export class RetryableLanguageModel
           | undefined;
         let isStreaming = false;
 
-        while (true) {
-          /**
-           * Captured metadata from upstream stream parts, used to synthesize
-           * a `LanguageModelResult` if a `finish` part triggers a retry
-           * evaluation. Reset for each (re-)stream.
-           */
-          let capturedWarnings: LanguageModelResult['warnings'] = [];
-          let capturedResponseMetadata: NonNullable<
-            LanguageModelResult['response']
-          > = {};
+        /** Set when the operation ends in failure, for the operation span. */
+        let operationError: unknown;
+        try {
+          while (true) {
+            /**
+             * Captured metadata from upstream stream parts, used to synthesize
+             * a `LanguageModelResult` if a `finish` part triggers a retry
+             * evaluation. Reset for each (re-)stream.
+             */
+            let capturedWarnings: LanguageModelResult['warnings'] = [];
+            let capturedResponseMetadata: NonNullable<
+              LanguageModelResult['response']
+            > = {};
 
-          /**
-           * Set when a `finish` part triggers a retry decision. Causes the
-           * inner read loop to exit without enqueuing the finish part, and
-           * the outer loop to re-stream against the next model.
-           */
-          let retryFromFinish: Retry<LanguageModel> | undefined;
+            /**
+             * Set when a `finish` part triggers a retry decision. Causes the
+             * inner read loop to exit without enqueuing the finish part, and
+             * the outer loop to re-stream against the next model.
+             */
+            let retryFromFinish: Retry<LanguageModel> | undefined;
 
-          try {
-            reader = result.stream.getReader();
+            /** Unified finish reason of the last finish part seen this stream. */
+            let streamFinishReason: string | undefined;
 
-            while (true) {
-              const { done, value } = await reader.read();
-              if (done) break;
+            try {
+              reader = result.stream.getReader();
 
-              /**
-               * If the stream part is an error and no data has been streamed yet, we can retry
-               * Throw the error to trigger the retry logic in withRetry
-               */
-              if (value.type === 'error') {
-                if (!isStreaming) {
-                  // If no data has been streamed yet, we can retry
-                  throw value.error;
-                }
-              }
+              while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
 
-              /**
-               * Capture warnings and response metadata so they can be
-               * folded into a synthetic generate result if a `finish` part
-               * triggers a retry evaluation later in the stream.
-               */
-              if (value.type === 'stream-start') {
-                capturedWarnings = value.warnings;
-              }
-              if (value.type === 'response-metadata') {
-                capturedResponseMetadata = {
-                  ...capturedResponseMetadata,
-                  ...(value.id !== undefined ? { id: value.id } : {}),
-                  ...(value.modelId !== undefined
-                    ? { modelId: value.modelId }
-                    : {}),
-                  ...(value.timestamp !== undefined
-                    ? { timestamp: value.timestamp }
-                    : {}),
-                };
-              }
-
-              /**
-               * If the stream part is a `finish` and no data has been
-               * streamed yet, evaluate retryables against a synthetic
-               * generate result built from the finish payload plus any
-               * metadata captured so far. If a retry model is selected,
-               * drop this finish part and re-stream. Once content has been
-               * forwarded, retry is unsafe and the finish part flows
-               * through unchanged.
-               */
-              if (value.type === 'finish' && !isStreaming) {
-                const finishCallOptions = mergeLanguageModelCallOptions({
-                  callOptions,
-                  currentRetry,
-                });
-
-                const synthetic: LanguageModelResult = {
-                  content: [],
-                  finishReason: value.finishReason,
-                  usage: value.usage,
-                  warnings: capturedWarnings,
-                  request: result.request,
-                  response: {
-                    ...capturedResponseMetadata,
-                    ...result.response,
-                  },
-                  providerMetadata: value.providerMetadata,
-                };
-
-                const { retryModel, attempt } = await this.handleResult(
-                  synthetic,
-                  attempts,
-                  finishCallOptions,
-                );
-
-                attempts.push(attempt);
-
-                if (retryModel) {
-                  /**
-                   * If the inbound abort signal is already aborted and the
-                   * chosen retry does not supply a fresh deadline, skip the
-                   * retry and let the finish part flow downstream. Unlike
-                   * the error path there is no underlying error to rethrow.
-                   */
-                  const abortedNoTimeout =
-                    callOptions.abortSignal?.aborted &&
-                    retryModel.timeout === undefined;
-
-                  if (!abortedNoTimeout) {
-                    retryFromFinish = retryModel;
-                    break;
+                /**
+                 * If the stream part is an error and no data has been streamed yet, we can retry
+                 * Throw the error to trigger the retry logic in withRetry
+                 */
+                if (value.type === 'error') {
+                  if (!isStreaming) {
+                    // If no data has been streamed yet, we can retry
+                    throw value.error;
                   }
                 }
-              }
 
-              /**
-               * Mark that streaming has started once we receive actual content
-               */
-              if (isStreamContentPart(value)) {
-                isStreaming = true;
-              }
-
-              /**
-               * Enqueue the chunk to the consumer of the stream
-               */
-              controller.enqueue(value);
-            }
-
-            if (retryFromFinish) {
-              if (retryFromFinish.delay) {
                 /**
-                 * Calculate exponential backoff delay based on the number
-                 * of attempts for this specific model.
+                 * Capture warnings and response metadata so they can be
+                 * folded into a synthetic generate result if a `finish` part
+                 * triggers a retry evaluation later in the stream.
                  */
+                if (value.type === 'stream-start') {
+                  capturedWarnings = value.warnings;
+                }
+                if (value.type === 'response-metadata') {
+                  capturedResponseMetadata = {
+                    ...capturedResponseMetadata,
+                    ...(value.id !== undefined ? { id: value.id } : {}),
+                    ...(value.modelId !== undefined
+                      ? { modelId: value.modelId }
+                      : {}),
+                    ...(value.timestamp !== undefined
+                      ? { timestamp: value.timestamp }
+                      : {}),
+                  };
+                }
+
+                if (value.type === 'finish') {
+                  streamFinishReason = value.finishReason.unified;
+                }
+
+                /**
+                 * If the stream part is a `finish` and no data has been
+                 * streamed yet, evaluate retryables against a synthetic
+                 * generate result built from the finish payload plus any
+                 * metadata captured so far. If a retry model is selected,
+                 * drop this finish part and re-stream. Once content has been
+                 * forwarded, retry is unsafe and the finish part flows
+                 * through unchanged.
+                 */
+                if (value.type === 'finish' && !isStreaming) {
+                  const finishCallOptions = mergeLanguageModelCallOptions({
+                    callOptions,
+                    currentRetry,
+                  });
+
+                  const synthetic: LanguageModelResult = {
+                    content: [],
+                    finishReason: value.finishReason,
+                    usage: value.usage,
+                    warnings: capturedWarnings,
+                    request: result.request,
+                    response: {
+                      ...capturedResponseMetadata,
+                      ...result.response,
+                    },
+                    providerMetadata: value.providerMetadata,
+                  };
+
+                  const { retryModel, attempt } = await this.handleResult(
+                    synthetic,
+                    attempts,
+                    finishCallOptions,
+                  );
+
+                  attempts.push(attempt);
+
+                  if (retryModel) {
+                    /**
+                     * If the inbound abort signal is already aborted and the
+                     * chosen retry does not supply a fresh deadline, skip the
+                     * retry and let the finish part flow downstream. Unlike
+                     * the error path there is no underlying error to rethrow.
+                     */
+                    const abortedNoTimeout =
+                      callOptions.abortSignal?.aborted &&
+                      retryModel.timeout === undefined;
+
+                    if (!abortedNoTimeout) {
+                      retryFromFinish = retryModel;
+                      break;
+                    }
+                  }
+                }
+
+                /**
+                 * Mark that streaming has started once we receive actual content
+                 */
+                if (isStreamContentPart(value)) {
+                  isStreaming = true;
+                }
+
+                /**
+                 * Enqueue the chunk to the consumer of the stream
+                 */
+                controller.enqueue(value);
+              }
+
+              if (retryFromFinish) {
+                /**
+                 * Calculate exponential backoff delay based on the number of
+                 * attempts for this specific model.
+                 */
+                let calculatedDelay: number | undefined;
+                if (retryFromFinish.delay) {
+                  const modelAttemptsCount = countModelAttempts(
+                    retryFromFinish.model,
+                    attempts,
+                  );
+                  calculatedDelay = calculateExponentialBackoff(
+                    retryFromFinish.delay,
+                    retryFromFinish.backoffFactor,
+                    modelAttemptsCount,
+                  );
+                }
+
+                if (pendingAttempt !== undefined) {
+                  recorder?.endAttempt({
+                    attempt: pendingAttempt,
+                    outcome: 'retry',
+                    finishReason: streamFinishReason,
+                    delayMs: calculatedDelay,
+                  });
+                }
+
+                if (calculatedDelay !== undefined) {
+                  await delay(calculatedDelay, {
+                    abortSignal: callOptions.abortSignal,
+                  });
+                }
+
+                this.currentModel = retryFromFinish.model;
+                currentRetry = retryFromFinish;
+
+                const retriedResult = await this.withRetry({
+                  fn: async (retryCallOptions) => {
+                    return this.currentModel.doStream(retryCallOptions);
+                  },
+                  callOptions: callOptions,
+                  attempts,
+                  currentRetry,
+                  recorder,
+                });
+
+                await reader?.cancel();
+
+                result = retriedResult.result;
+                attempts = retriedResult.attempts;
+                finalCallOptions = retriedResult.callOptions;
+                pendingAttempt = retriedResult.pendingAttempt;
+
+                continue;
+              }
+
+              if (pendingAttempt !== undefined) {
+                recorder?.endAttempt({
+                  attempt: pendingAttempt,
+                  outcome: 'success',
+                  finishReason: streamFinishReason,
+                });
+              }
+              controller.close();
+              break;
+            } catch (error) {
+              /**
+               * Get the retry call options for the failed attempt
+               */
+              const retryCallOptions = mergeLanguageModelCallOptions({
+                callOptions,
+                currentRetry,
+              });
+
+              /**
+               * Check if the error from the stream can be retried.
+               */
+              const { retryModel, attempt, finalError } =
+                await this.handleError(error, attempts, retryCallOptions);
+
+              /**
+               * Save the attempt
+               */
+              attempts.push(attempt);
+
+              /**
+               * No retry matched. Surface the error as a stream part so
+               * `streamText`'s `onError` fires for the consumer. Throwing
+               * here would escape `start()` and become a stream rejection,
+               * which silently bypasses `onError`.
+               */
+              if (!retryModel) {
+                if (pendingAttempt !== undefined) {
+                  recorder?.endAttempt({
+                    attempt: pendingAttempt,
+                    outcome: 'failure',
+                    error,
+                  });
+                }
+                operationError = finalError;
+                controller.enqueue({ type: 'error', error: finalError });
+                controller.close();
+                return;
+              }
+
+              /**
+               * If the inbound abort signal is already aborted and the chosen
+               * retry does not supply a fresh deadline, the retry would die
+               * instantly with the same abort. Surface the error rather than
+               * fire a misleading retry against a dead signal.
+               */
+              if (
+                callOptions.abortSignal?.aborted &&
+                retryModel.timeout === undefined
+              ) {
+                if (pendingAttempt !== undefined) {
+                  recorder?.endAttempt({
+                    attempt: pendingAttempt,
+                    outcome: 'failure',
+                    error,
+                  });
+                }
+                operationError = error;
+                controller.enqueue({ type: 'error', error });
+                controller.close();
+                return;
+              }
+
+              /**
+               * Calculate exponential backoff delay based on the number of
+               * attempts for this specific model: baseDelay * backoffFactor^attempts.
+               */
+              let calculatedDelay: number | undefined;
+              if (retryModel.delay) {
                 const modelAttemptsCount = countModelAttempts(
-                  retryFromFinish.model,
+                  retryModel.model,
                   attempts,
                 );
-                const calculatedDelay = calculateExponentialBackoff(
-                  retryFromFinish.delay,
-                  retryFromFinish.backoffFactor,
+                calculatedDelay = calculateExponentialBackoff(
+                  retryModel.delay,
+                  retryModel.backoffFactor,
                   modelAttemptsCount,
                 );
-                await delay(calculatedDelay, {
-                  abortSignal: callOptions.abortSignal,
+              }
+
+              if (pendingAttempt !== undefined) {
+                recorder?.endAttempt({
+                  attempt: pendingAttempt,
+                  outcome: 'retry',
+                  error,
+                  delayMs: calculatedDelay,
                 });
               }
 
-              this.currentModel = retryFromFinish.model;
-              currentRetry = retryFromFinish;
+              if (calculatedDelay !== undefined) {
+                await delay(calculatedDelay, {
+                  abortSignal: retryCallOptions.abortSignal,
+                });
+              }
 
+              this.currentModel = retryModel.model;
+              currentRetry = retryModel;
+
+              /**
+               * Retry the request by calling doStream again.
+               * This will create a new stream.
+               */
               const retriedResult = await this.withRetry({
                 fn: async (retryCallOptions) => {
                   return this.currentModel.doStream(retryCallOptions);
@@ -520,134 +795,47 @@ export class RetryableLanguageModel
                 callOptions: callOptions,
                 attempts,
                 currentRetry,
+                recorder,
               });
 
+              /**
+               * Cancel the previous reader and stream if we are retrying
+               */
               await reader?.cancel();
 
               result = retriedResult.result;
               attempts = retriedResult.attempts;
               finalCallOptions = retriedResult.callOptions;
-
-              continue;
+              pendingAttempt = retriedResult.pendingAttempt;
+            } finally {
+              reader?.releaseLock();
             }
-
-            controller.close();
-            break;
-          } catch (error) {
-            /**
-             * Get the retry call options for the failed attempt
-             */
-            const retryCallOptions = mergeLanguageModelCallOptions({
-              callOptions,
-              currentRetry,
-            });
-
-            /**
-             * Check if the error from the stream can be retried.
-             */
-            const { retryModel, attempt, finalError } = await this.handleError(
-              error,
-              attempts,
-              retryCallOptions,
-            );
-
-            /**
-             * Save the attempt
-             */
-            attempts.push(attempt);
-
-            /**
-             * No retry matched. Surface the error as a stream part so
-             * `streamText`'s `onError` fires for the consumer. Throwing
-             * here would escape `start()` and become a stream rejection,
-             * which silently bypasses `onError`.
-             */
-            if (!retryModel) {
-              controller.enqueue({ type: 'error', error: finalError });
-              controller.close();
-              return;
-            }
-
-            /**
-             * If the inbound abort signal is already aborted and the chosen
-             * retry does not supply a fresh deadline, the retry would die
-             * instantly with the same abort. Surface the error rather than
-             * fire a misleading retry against a dead signal.
-             */
-            if (
-              callOptions.abortSignal?.aborted &&
-              retryModel.timeout === undefined
-            ) {
-              controller.enqueue({ type: 'error', error });
-              controller.close();
-              return;
-            }
-
-            if (retryModel.delay) {
-              /**
-               * Calculate exponential backoff delay based on the number of attempts for this specific model.
-               * The delay grows exponentially: baseDelay * backoffFactor^attempts
-               */
-              const modelAttemptsCount = countModelAttempts(
-                retryModel.model,
-                attempts,
-              );
-              const calculatedDelay = calculateExponentialBackoff(
-                retryModel.delay,
-                retryModel.backoffFactor,
-                modelAttemptsCount,
-              );
-              await delay(calculatedDelay, {
-                abortSignal: retryCallOptions.abortSignal,
-              });
-            }
-
-            this.currentModel = retryModel.model;
-            currentRetry = retryModel;
-
-            /**
-             * Retry the request by calling doStream again.
-             * This will create a new stream.
-             */
-            const retriedResult = await this.withRetry({
-              fn: async (retryCallOptions) => {
-                return this.currentModel.doStream(retryCallOptions);
-              },
-              callOptions: callOptions,
-              attempts,
-              currentRetry,
-            });
-
-            /**
-             * Cancel the previous reader and stream if we are retrying
-             */
-            await reader?.cancel();
-
-            result = retriedResult.result;
-            attempts = retriedResult.attempts;
-            finalCallOptions = retriedResult.callOptions;
-          } finally {
-            reader?.releaseLock();
           }
+
+          /**
+           * Stream completed successfully — finalize sticky model and fire
+           * onSuccess. Deferred to here (rather than after the initial
+           * withRetry resolves) so the final model and full attempts list
+           * are observed, including any mid-stream retries.
+           */
+          this.updateStickyModel(startModel);
+
+          this.options.onSuccess?.({
+            current: {
+              type: 'success',
+              model: this.currentModel,
+              result,
+              options: finalCallOptions,
+            },
+            attempts,
+          });
+        } finally {
+          recorder?.endOperation({
+            provider: this.currentModel.provider,
+            modelId: this.currentModel.modelId,
+            error: operationError,
+          });
         }
-
-        /**
-         * Stream completed successfully — finalize sticky model and fire
-         * onSuccess. Deferred to here (rather than after the initial
-         * withRetry resolves) so the final model and full attempts list
-         * are observed, including any mid-stream retries.
-         */
-        this.updateStickyModel(startModel);
-
-        this.options.onSuccess?.({
-          current: {
-            type: 'success',
-            model: this.currentModel,
-            result,
-            options: finalCallOptions,
-          },
-          attempts,
-        });
       },
     });
 

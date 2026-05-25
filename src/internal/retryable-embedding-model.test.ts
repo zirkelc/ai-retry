@@ -1,10 +1,14 @@
 import { APICallError, embed, RetryError } from 'ai';
 import { describe, expect, it, vi } from 'vitest';
 import { createRetryable } from '../create-retryable-model.js';
-import { MockEmbeddingModel } from './test-utils.js';
+import {
+  mockEmbeddings,
+  MockEmbeddingModel,
+  nonRetryableError,
+  retryableError,
+} from './test-utils.js';
 import type {
   EmbeddingModel,
-  EmbeddingModelEmbed,
   Retryable,
   RetryableModelOptions,
   RetryContext,
@@ -14,46 +18,6 @@ import { isErrorAttempt } from './guards.js';
 type OnError = Required<RetryableModelOptions<EmbeddingModel>>['onError'];
 type OnRetry = Required<RetryableModelOptions<EmbeddingModel>>['onRetry'];
 type OnSuccess = Required<RetryableModelOptions<EmbeddingModel>>['onSuccess'];
-
-const mockEmbeddings: EmbeddingModelEmbed = {
-  embeddings: [[0.1, 0.2, 0.3]],
-  usage: { tokens: 5 },
-  warnings: [],
-};
-
-const retryableError = new APICallError({
-  message: 'Rate limit exceeded',
-  url: '',
-  requestBodyValues: {},
-  statusCode: 429,
-  responseHeaders: {},
-  responseBody:
-    '{"error": {"message": "Rate limit exceeded", "code": "rate_limit_exceeded"}}',
-  isRetryable: true,
-  data: {
-    error: {
-      message: 'Rate limit exceeded',
-      code: 'rate_limit_exceeded',
-    },
-  },
-});
-
-const nonRetryableError = new APICallError({
-  message: 'Invalid API key',
-  url: '',
-  requestBodyValues: {},
-  statusCode: 401,
-  responseHeaders: {},
-  responseBody:
-    '{"error": {"message": "Invalid API key", "code": "invalid_api_key"}}',
-  isRetryable: false,
-  data: {
-    error: {
-      message: 'Invalid API key',
-      code: 'invalid_api_key',
-    },
-  },
-});
 
 describe('embed', () => {
   it('should embed successfully when no errors occur', async () => {

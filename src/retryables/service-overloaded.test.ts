@@ -17,28 +17,15 @@ import { createRetryable } from '../create-retryable-model.js';
 import {
   chunksToText,
   MockEmbeddingModel,
+  mockEmbeddings,
   MockImageModel,
+  mockImageResult,
   MockLanguageModel,
+  mockResult,
+  mockResultText,
+  mockStreamChunks,
 } from '../internal/test-utils.js';
-import type {
-  EmbeddingModelEmbed,
-  ImageModelGenerate,
-  LanguageModelResult,
-  LanguageModelStreamPart,
-} from '../types.js';
 import { serviceOverloaded } from './service-overloaded.js';
-
-const mockResultText = 'Hello, world!';
-
-const mockResult: LanguageModelResult = {
-  finishReason: { unified: 'stop', raw: undefined },
-  usage: {
-    inputTokens: { total: 10, noCache: 0, cacheRead: 0, cacheWrite: 0 },
-    outputTokens: { total: 20, text: 0, reasoning: 0 },
-  },
-  content: [{ type: 'text', text: mockResultText }],
-  warnings: [],
-};
 
 const overloadedError = new APICallError({
   message: 'Overloaded',
@@ -50,32 +37,6 @@ const overloadedError = new APICallError({
   isRetryable: false,
   data: {},
 });
-
-const mockStreamChunks: LanguageModelStreamPart[] = [
-  {
-    type: 'stream-start',
-    warnings: [],
-  },
-  {
-    type: 'response-metadata',
-    id: 'id-0',
-    modelId: 'mock-model-id',
-    timestamp: new Date(0),
-  },
-  { type: 'text-start', id: '1' },
-  { type: 'text-delta', id: '1', delta: 'Hello' },
-  { type: 'text-delta', id: '1', delta: ', ' },
-  { type: 'text-delta', id: '1', delta: 'world!' },
-  { type: 'text-end', id: '1' },
-  {
-    type: 'finish',
-    finishReason: { unified: 'stop', raw: undefined },
-    usage: {
-      inputTokens: { total: 10, noCache: 0, cacheRead: 0, cacheWrite: 0 },
-      outputTokens: { total: 20, text: 0, reasoning: 0 },
-    },
-  },
-];
 
 const errorChunk = (error: Record<string, any>): string =>
   `data: {"type":"error","error":${JSON.stringify(error)}}\n\n`;
@@ -94,24 +55,6 @@ const textChunks = {
     `data:{"type":"response.output_item.done","output_index":0,"item":{"id":"msg_67c9a8787f4c8190b49c858d4c1cf20c","type":"message","status":"completed","role":"assistant","content":[{"type":"output_text","text":"Hello, World!","annotations":[],"logprobs": []}]}}\n\n`,
     `data:{"type":"response.completed","response":{"id":"resp_67c9a878139c8190aa2e3105411b408b","object":"response","created_at":1741269112,"status":"completed","error":null,"incomplete_details":null,"input":[],"instructions":null,"max_output_tokens":null,"model":"gpt-4o-2024-07-18","output":[{"id":"msg_67c9a8787f4c8190b49c858d4c1cf20c","type":"message","status":"completed","role":"assistant","content":[{"type":"output_text","text":"Hello, World!","annotations":[]}]}],"parallel_tool_calls":true,"previous_response_id":null,"reasoning":{"effort":null,"summary":null},"store":true,"temperature":0.3,"text":{"format":{"type":"text"}},"tool_choice":"auto","tools":[],"top_p":1,"truncation":"disabled","usage":{"input_tokens":543,"input_tokens_details":{"cached_tokens":234},"output_tokens":478,"output_tokens_details":{"reasoning_tokens":123},"total_tokens":512},"user":null,"metadata":{}}}\n\n`,
   ],
-};
-
-const mockEmbeddings: EmbeddingModelEmbed = {
-  embeddings: [[0.1, 0.2, 0.3]],
-  warnings: [],
-};
-
-/** Valid base64 PNG image (1x1 transparent pixel) */
-const validBase64Image = `iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==`;
-
-const mockImageResult: ImageModelGenerate = {
-  images: [validBase64Image],
-  warnings: [],
-  response: {
-    timestamp: new Date(),
-    modelId: `mock-model`,
-    headers: undefined,
-  },
 };
 
 describe('serviceOverloaded', () => {

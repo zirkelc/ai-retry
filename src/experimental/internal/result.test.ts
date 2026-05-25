@@ -2,19 +2,13 @@ import { describe, expect, it } from 'vitest';
 import {
   buildErrorContext,
   buildResultContext,
-  generateEmptyResult,
+  contentFilterResult,
   generateTextResult,
   MockLanguageModel,
 } from '../../internal/test-utils.js';
-import type { LanguageModelResult } from '../../types.js';
 import { createResultAPI } from './result.js';
 
 const { result } = createResultAPI<MockLanguageModel>();
-
-const contentFilterResult: LanguageModelResult = {
-  ...generateEmptyResult,
-  finishReason: { unified: 'content-filter', raw: undefined },
-};
 
 describe('result', () => {
   it(`should run the predicate against the current result`, async () => {

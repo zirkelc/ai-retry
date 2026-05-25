@@ -7,15 +7,20 @@ import { describe, expect, it, vi } from 'vitest';
 import { createRetryable } from '../create-retryable-model.js';
 import {
   chunksToText,
+  contentFilterResult,
   errorFromChunks,
   finishReason,
   MockLanguageModel,
+  mockResult,
+  mockResultText,
   mockStreamOptions,
+  nonRetryableError,
+  retryableError,
+  testUsage,
 } from './test-utils.js';
 import type {
   LanguageModel,
   LanguageModelCallOptions,
-  LanguageModelResult,
   LanguageModelStreamPart,
   Retryable,
   RetryableModelOptions,
@@ -28,33 +33,6 @@ type OnRetry = Required<RetryableModelOptions<LanguageModel>>['onRetry'];
 type OnSuccess = Required<RetryableModelOptions<LanguageModel>>['onSuccess'];
 
 const prompt = 'Hello!';
-
-const mockResultText = 'Hello, world!';
-
-const mockResult: LanguageModelResult = {
-  finishReason: { unified: 'stop', raw: undefined },
-  usage: {
-    inputTokens: { total: 10, noCache: 0, cacheRead: 0, cacheWrite: 0 },
-    outputTokens: { total: 20, text: 0, reasoning: 0 },
-  },
-  content: [{ type: 'text', text: mockResultText }],
-  warnings: [],
-};
-
-const contentFilterResult: LanguageModelResult = {
-  finishReason: { unified: 'content-filter', raw: undefined },
-  usage: {
-    inputTokens: { total: 10, noCache: 0, cacheRead: 0, cacheWrite: 0 },
-    outputTokens: { total: 20, text: 0, reasoning: 0 },
-  },
-  content: [],
-  warnings: [],
-};
-
-const testUsage = {
-  inputTokens: { total: 3, noCache: 0, cacheRead: 0, cacheWrite: 0 },
-  outputTokens: { total: 10, text: 0, reasoning: 0 },
-};
 
 const mockStreamChunks: LanguageModelStreamPart[] = [
   {
@@ -134,40 +112,6 @@ const contentFilterAfterContentStreamChunks: LanguageModelStreamPart[] = [
     },
   },
 ];
-
-const retryableError = new APICallError({
-  message: 'Rate limit exceeded',
-  url: '',
-  requestBodyValues: {},
-  statusCode: 429,
-  responseHeaders: {},
-  responseBody:
-    '{"error": {"message": "Rate limit exceeded", "code": "rate_limit_exceeded"}}',
-  isRetryable: true,
-  data: {
-    error: {
-      message: 'Rate limit exceeded',
-      code: 'rate_limit_exceeded',
-    },
-  },
-});
-
-const nonRetryableError = new APICallError({
-  message: 'Invalid API key',
-  url: '',
-  requestBodyValues: {},
-  statusCode: 401,
-  responseHeaders: {},
-  responseBody:
-    '{"error": {"message": "Invalid API key", "code": "invalid_api_key"}}',
-  isRetryable: false,
-  data: {
-    error: {
-      message: 'Invalid API key',
-      code: 'invalid_api_key',
-    },
-  },
-});
 
 describe('generateText', () => {
   it('should generate text successfully when no errors occur', async () => {
