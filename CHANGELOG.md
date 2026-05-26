@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.8.0](https://github.com/zirkelc/ai-retry/compare/v1.7.4...v1.8.0) (2026-05-25)
+
+
+### Features
+
+* **telemetry:** add OpenTelemetry instrumentation for retries ([ed4647f](https://github.com/zirkelc/ai-retry/commit/ed4647f5ad63598300e9c1e2d6a067e3c9140e52))
+
 ## [1.7.4](https://github.com/zirkelc/ai-retry/compare/v1.7.3...v1.7.4) (2026-05-18)
 
 
