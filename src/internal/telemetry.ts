@@ -131,13 +131,27 @@ function loadOtelApi(): Promise<OtelApi> {
 }
 
 /**
- * Coarse error label for the `*.error.name` / `*.error.cause.name` attributes.
- * Matches the SDK's habit of using the error class name (e.g. `AI_APICallError`,
- * `TimeoutError`).
+ * Normalize an unknown thrown value into the fields recorded on error spans:
+ * - `name`: the error class name (e.g. `AI_APICallError`, `TimeoutError`), or
+ *   `typeof` for non-`Error` values.
+ * - `message`: the error message.
+ * - `status`: HTTP status code, when the error carries one (e.g. `APICallError`).
  */
-function errorType(error: unknown): string {
-  if (error instanceof Error) return error.name;
-  return typeof error;
+function describeError(error: unknown): {
+  name: string;
+  message: string;
+  status?: number;
+} {
+  const name = error instanceof Error ? error.name : typeof error;
+  const message = error instanceof Error ? error.message : String(error);
+  const status =
+    typeof error === 'object' &&
+    error !== null &&
+    'statusCode' in error &&
+    typeof error.statusCode === 'number'
+      ? error.statusCode
+      : undefined;
+  return { name, message, status };
 }
 
 /**
@@ -266,23 +280,28 @@ class OpenTelemetrySink implements TelemetrySink {
   #recordError(span: Span, error: unknown, errorAttribute: string): void {
     const exception = error instanceof Error ? error : new Error(String(error));
 
-    span.setAttribute(`${errorAttribute}.name`, errorType(error));
-    span.setAttribute(`${errorAttribute}.message`, exception.message);
+    const info = describeError(error);
+    span.setAttribute(`${errorAttribute}.name`, info.name);
+    span.setAttribute(`${errorAttribute}.message`, info.message);
+    if (info.status !== undefined) {
+      span.setAttribute(`${errorAttribute}.status`, info.status);
+    }
 
     /** One level of the error chain — the underlying cause, when present. */
     const cause = error instanceof Error ? error.cause : undefined;
     if (cause !== undefined) {
-      span.setAttribute(`${errorAttribute}.cause.name`, errorType(cause));
-      span.setAttribute(
-        `${errorAttribute}.cause.message`,
-        cause instanceof Error ? cause.message : String(cause),
-      );
+      const causeInfo = describeError(cause);
+      span.setAttribute(`${errorAttribute}.cause.name`, causeInfo.name);
+      span.setAttribute(`${errorAttribute}.cause.message`, causeInfo.message);
+      if (causeInfo.status !== undefined) {
+        span.setAttribute(`${errorAttribute}.cause.status`, causeInfo.status);
+      }
     }
 
     span.recordException(exception);
     span.setStatus({
       code: this.#api.SpanStatusCode.ERROR,
-      message: exception.message,
+      message: info.message,
     });
   }
 }

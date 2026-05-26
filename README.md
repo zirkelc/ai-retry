@@ -1141,28 +1141,28 @@ ai_retry.doGenerate            outcome=success, attempts=2
 
 **Operation span** attributes:
 
-| Attribute                                                | Description                                             |
-| -------------------------------------------------------- | ------------------------------------------------------- |
-| `ai_retry.operation`                                     | `doGenerate`, `doStream`, or `doEmbed`                  |
-| `ai_retry.outcome`                                       | `success` or `failure`                                  |
-| `ai_retry.attempts`                                      | total number of attempts                                |
-| `ai_retry.model.start`                                   | the model the request started with (`provider/modelId`) |
-| `ai_retry.model.final`                                   | the model that produced the final outcome               |
-| `ai_retry.error.{name,message,cause.name,cause.message}` | the failing error (on failure)                          |
-| `ai_retry.function.id`, `ai_retry.metadata.*`            | from the telemetry settings                             |
+| Attribute                                                       | Description                                                                  |
+| --------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `ai_retry.operation`                                            | `doGenerate`, `doStream`, or `doEmbed`                                       |
+| `ai_retry.outcome`                                              | `success` or `failure`                                                       |
+| `ai_retry.attempts`                                             | total number of attempts                                                     |
+| `ai_retry.model.start`                                          | the model the request started with (`provider/modelId`)                      |
+| `ai_retry.model.final`                                          | the model that produced the final outcome                                    |
+| `ai_retry.error.{name,message,status,cause.name,cause.message,cause.status}` | the failing error (on failure); `status` when it carries an HTTP status code |
+| `ai_retry.function.id`, `ai_retry.metadata.*`                   | from the telemetry settings                                                  |
 
 **Attempt span** (`ai_retry.attempt`) attributes:
 
-| Attribute                                                        | Description                               |
-| ---------------------------------------------------------------- | ----------------------------------------- |
-| `ai_retry.attempt.number`                                        | 1-based attempt index                     |
-| `ai_retry.attempt.model`                                         | model used (`provider/modelId`)           |
-| `ai_retry.attempt.outcome`                                       | `success`, `retry`, or `failure`          |
-| `ai_retry.attempt.type`                                          | `result` or `error`                       |
-| `ai_retry.attempt.finish_reason`                                 | finish reason (result attempts)           |
-| `ai_retry.attempt.delay_ms`                                      | backoff scheduled before the next attempt |
-| `ai_retry.attempt.timeout_ms`                                    | timeout budget, when the retry set one    |
-| `ai_retry.attempt.error.{name,message,cause.name,cause.message}` | the error (error attempts)                |
+| Attribute                                                               | Description                                                              |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `ai_retry.attempt.number`                                               | 1-based attempt index                                                    |
+| `ai_retry.attempt.model`                                                | model used (`provider/modelId`)                                          |
+| `ai_retry.attempt.outcome`                                              | `success`, `retry`, or `failure`                                         |
+| `ai_retry.attempt.type`                                                 | `result` or `error`                                                      |
+| `ai_retry.attempt.finish_reason`                                        | finish reason (result attempts)                                          |
+| `ai_retry.attempt.delay_ms`                                             | backoff scheduled before the next attempt                                |
+| `ai_retry.attempt.timeout_ms`                                           | timeout budget, when the retry set one                                   |
+| `ai_retry.attempt.error.{name,message,status,cause.name,cause.message,cause.status}` | the error (error attempts); `status` when it carries an HTTP status code |
 
 Attempt spans also carry the standard `gen_ai.request.model` / `gen_ai.provider.name` attributes so observability tools (Langfuse, etc.) recognize and render them.
 

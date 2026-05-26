@@ -167,6 +167,9 @@ describe('telemetry', () => {
       expect(attempts[0]!.attributes['ai_retry.attempt.error.message']).toBe(
         retryableError.message,
       );
+      expect(attempts[0]!.attributes['ai_retry.attempt.error.status']).toBe(
+        429,
+      );
       expect(attempts[0]!.status.code).toBe(SpanStatusCode.ERROR);
 
       expect(attempts[1]!.attributes['ai_retry.attempt.outcome']).toBe(
