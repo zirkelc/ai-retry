@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.9.0](https://github.com/zirkelc/ai-retry/compare/v1.8.0...v1.9.0) (2026-05-27)
+
+
+### Features
+
+* **telemetry:** record HTTP status on error spans ([032c6d1](https://github.com/zirkelc/ai-retry/commit/032c6d15de84dfdb80d33211ed65fe343d2eb7ec))
+
 ## [1.8.0](https://github.com/zirkelc/ai-retry/compare/v1.7.4...v1.8.0) (2026-05-25)
 
 
