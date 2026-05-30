@@ -1,9 +1,9 @@
 import { APICallError, embed, RetryError } from 'ai';
 import { describe, expect, it, vi } from 'vitest';
-import { createRetryable } from '../create-retryable-model.js';
 import {
-  mockEmbeddings,
+  createRetryable,
   MockEmbeddingModel,
+  mockEmbeddings,
   nonRetryableError,
   retryableError,
 } from './test-utils.js';

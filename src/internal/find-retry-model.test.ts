@@ -1,5 +1,5 @@
 import { APICallError } from 'ai';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { findRetryModel } from './find-retry-model.js';
 import { MockLanguageModel } from './test-utils.js';
 import type {
@@ -377,6 +377,27 @@ describe('findRetryModel', () => {
       expect(result).toBeDefined();
       expect(result?.model.provider).toBe('gateway');
       expect(result?.model.modelId).toBe('openai/gpt-4o');
+    });
+
+    it('should resolve string model IDs with the provided family resolver', async () => {
+      // Arrange
+      const primaryModel = new MockLanguageModel();
+      const error = new Error('Test error');
+      const resolved = new MockLanguageModel();
+      const resolve = vi.fn(() => resolved);
+
+      const context: RetryContext<LanguageModel> = {
+        current: { type: 'error', error, model: primaryModel, options },
+        attempts: [{ type: 'error', error, model: primaryModel, options }],
+      };
+
+      // Act
+      const result = await findRetryModel(['openai/gpt-4o'], context, resolve);
+
+      // Assert
+      const resolveInput = resolve.mock.calls[0];
+      expect(resolveInput).toEqual(['openai/gpt-4o']);
+      expect(result?.model).toBe(resolved);
     });
 
     it('should preserve retry options when resolving models', async () => {

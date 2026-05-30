@@ -13,9 +13,9 @@ import {
   streamText,
 } from 'ai';
 import { describe, expect, it, vi } from 'vitest';
-import { createRetryable } from '../create-retryable-model.js';
 import {
   chunksToText,
+  createRetryable,
   MockEmbeddingModel,
   mockEmbeddings,
   MockImageModel,

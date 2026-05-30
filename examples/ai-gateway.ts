@@ -1,6 +1,7 @@
 import { openai } from '@ai-sdk/openai';
 import { embed, gateway, generateText } from 'ai';
-import { createRetryable, type EmbeddingModel } from '../src/index.js';
+import { createRetryable as createRetryableEmbedding } from '../src/embedding-model/index.js';
+import { createRetryable } from '../src/language-model/index.js';
 
 const retryableLanguageModel = createRetryable({
   model: 'openai/gpt-4.1',
@@ -11,7 +12,7 @@ const retryableLanguageModel = createRetryable({
   ],
 });
 
-const retryableEmbeddingModel = createRetryable({
+const retryableEmbeddingModel = createRetryableEmbedding({
   model: gateway.textEmbeddingModel('openai/text-embedding-3-large'),
   retries: [],
 });

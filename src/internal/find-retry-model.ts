@@ -1,5 +1,5 @@
 import { getModelKey } from './get-model-key.js';
-import { resolveModel } from './resolve-model.js';
+import { type GatewayResolver, resolveModel } from './resolve-model.js';
 import type {
   EmbeddingModel,
   ImageModel,
@@ -13,13 +13,16 @@ import type {
 import { isObject, isResultAttempt } from './guards.js';
 
 /**
- * Find the next model to retry with based on the retry context
+ * Find the next model to retry with based on the retry context.
+ * `resolve` resolves gateway model-id strings for the caller's model
+ * family (a bare string is ambiguous across families).
  */
 export async function findRetryModel<
   MODEL extends LanguageModel | EmbeddingModel | ImageModel,
 >(
   retries: Retries<MODEL>,
   context: RetryContext<MODEL>,
+  resolve?: GatewayResolver,
 ): Promise<Retry<ResolvedModel<MODEL>> | undefined> {
   /**
    * Filter retryables based on attempt type:
@@ -58,7 +61,7 @@ export async function findRetryModel<
        * If it is a string, we need to resolve it to an instance.
        */
       const modelValue = retryModel.model;
-      const resolvedModel = resolveModel(modelValue);
+      const resolvedModel = resolveModel(modelValue, resolve);
 
       /**
        * The model key uniquely identifies a model instance (provider + modelId)

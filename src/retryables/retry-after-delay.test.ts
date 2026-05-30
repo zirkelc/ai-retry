@@ -10,9 +10,9 @@ import {
   streamText,
 } from 'ai';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createRetryable } from '../create-retryable-model.js';
 import {
   chunksToText,
+  createRetryable,
   MockEmbeddingModel,
   mockEmbeddings,
   MockImageModel,

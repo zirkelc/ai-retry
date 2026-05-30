@@ -26,8 +26,7 @@ import {
   streamText,
 } from 'ai';
 import { MockLanguageModelV3 } from 'ai/test';
-import { createRetryable } from '../../src/index.js';
-import { serviceOverloaded } from '../../src/retryables/service-overloaded.js';
+import { createRetryable, httpStatus } from '../../src/language-model/index.js';
 
 const usage = {
   inputTokens: { total: 8, noCache: 8, cacheRead: 0, cacheWrite: 0 },
@@ -93,7 +92,7 @@ const reliableModel = new MockLanguageModelV3({
 
 const model = createRetryable({
   model: flakyModel,
-  retries: [serviceOverloaded(reliableModel)],
+  retries: [httpStatus(529, 'overloaded').switch({ model: reliableModel })],
   experimental_telemetry: { isEnabled: true, functionId: 'telemetry-example' },
 });
 

@@ -1,6 +1,6 @@
 import { describe, expectTypeOf, it } from 'vitest';
-import { createRetryable } from '../create-retryable-model.js';
 import {
+  createRetryable,
   MockEmbeddingModel,
   MockImageModel,
   MockLanguageModel,

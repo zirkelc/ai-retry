@@ -1,8 +1,7 @@
 import { openai } from '@ai-sdk/openai';
 import type { LanguageModelV3 } from '@ai-sdk/provider';
 import { generateText, Output } from 'ai';
-import { createRetryable } from 'ai-retry';
-import { schemaMismatch } from 'ai-retry/retryables';
+import { createRetryable, schemaInvalid } from 'ai-retry/language-model';
 import { z } from 'zod';
 
 /**
@@ -52,8 +51,7 @@ const retryableModel = createRetryable({
   // model: openai('gpt-4.1-nano'),
   retries: [
     // Retry with a stronger model
-    schemaMismatch(fallbackModel),
-    // schemaMismatch(openai('gpt-5-pro')),
+    schemaInvalid().switch({ model: fallbackModel }),
   ],
   onRetry: ({ current }) => {
     console.log(`Retrying with model: ${current.model.modelId}`);

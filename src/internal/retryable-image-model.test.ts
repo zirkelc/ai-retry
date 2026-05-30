@@ -5,19 +5,19 @@ import {
   RetryError,
 } from 'ai';
 import { describe, expect, it, vi } from 'vitest';
-import { createRetryable } from '../create-retryable-model.js';
+import {
+  createRetryable,
+  MockImageModel,
+  mockImageResult,
+  nonRetryableError,
+  retryableError,
+  serviceOverloadedError,
+  serviceUnavailableError,
+} from './test-utils.js';
 import { noImageGenerated } from '../retryables/no-image-generated.js';
 import { requestTimeout } from '../retryables/request-timeout.js';
 import { serviceOverloaded } from '../retryables/service-overloaded.js';
 import { serviceUnavailable } from '../retryables/service-unavailable.js';
-import {
-  mockImageResult,
-  MockImageModel,
-  nonRetryableError,
-  retryableError,
-  serviceUnavailableError,
-  serviceOverloadedError,
-} from './test-utils.js';
 import type {
   ImageModel,
   OnRetryOverrides,

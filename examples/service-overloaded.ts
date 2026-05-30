@@ -1,20 +1,19 @@
 import { anthropic } from '@ai-sdk/anthropic';
 import { openai } from '@ai-sdk/openai';
 import { streamText } from 'ai';
-import { createRetryable } from 'ai-retry';
-import { serviceOverloaded } from '../src/retryables/service-overloaded.js';
+import { createRetryable, httpStatus } from 'ai-retry/language-model';
 
 const retryableModel = createRetryable({
   model: anthropic('claude-sonnet-4-0'),
   retries: [
-    // Retry with delay and exponential backoff
-    serviceOverloaded(anthropic('claude-sonnet-4-0'), {
+    // Retry the same model with delay and exponential backoff
+    httpStatus(529, 'overloaded').retry({
       delay: 5_000,
       backoffFactor: 2,
       maxAttempts: 5,
     }),
     // Or switch to a different provider
-    serviceOverloaded(openai('gpt-4')),
+    httpStatus(529, 'overloaded').switch({ model: openai('gpt-4') }),
   ],
 });
 

@@ -8,10 +8,9 @@ import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-ho
 import type { InMemorySpanExporter } from '@opentelemetry/sdk-trace-base';
 import { APICallError } from 'ai';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { createRetryable } from '../create-retryable-model.js';
-import { isErrorAttempt } from './guards.js';
 import {
   attemptSpans,
+  createRetryable,
   createSpanExporter,
   drainStream,
   embeddingCallOptions,
@@ -20,15 +19,16 @@ import {
   generateTextResult,
   imageCallOptions,
   languageCallOptions,
-  mockEmbeddings,
   MockEmbeddingModel,
-  mockImageResult,
+  mockEmbeddings,
   MockImageModel,
+  mockImageResult,
   MockLanguageModel,
   mockStream,
   retryableError,
   successStreamChunks,
 } from './test-utils.js';
+import { isErrorAttempt } from './guards.js';
 import type {
   EmbeddingModel,
   ImageModel,

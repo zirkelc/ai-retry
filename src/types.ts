@@ -26,30 +26,51 @@ export type LanguageModelStreamPart = LanguageModelV3StreamPart;
 export type ImageModelCallOptions = ImageModelV3CallOptions;
 export type ProviderOptions = SharedV3ProviderOptions;
 
-// export  type GatewayEmbeddingModelId = Parameters<typeof gateway['textEmbeddingModel']>[0];
 export type GatewayLanguageModelId = Parameters<
   (typeof gateway)['languageModel']
 >[0];
 
+export type GatewayEmbeddingModelId = Parameters<
+  (typeof gateway)['embeddingModel']
+>[0];
+
+export type GatewayImageModelId = Parameters<(typeof gateway)['imageModel']>[0];
+
+/**
+ * A model that can be passed as either an instance or a gateway string
+ * literal, resolved to an instance via the AI SDK Gateway.
+ */
 export type ResolvableLanguageModel =
   | LanguageModel
   | Literals<GatewayLanguageModelId>;
+export type ResolvableEmbeddingModel =
+  | EmbeddingModel
+  | Literals<GatewayEmbeddingModelId>;
+export type ResolvableImageModel = ImageModel | Literals<GatewayImageModelId>;
+
+/**
+ * Any model the retry system accepts, in resolvable (instance or gateway
+ * string) form.
+ */
+export type AnyResolvableModel =
+  | ResolvableLanguageModel
+  | ResolvableEmbeddingModel
+  | ResolvableImageModel;
 
 export type ResolvableModel<
   MODEL extends LanguageModel | EmbeddingModel | ImageModel,
 > = MODEL extends LanguageModel
   ? ResolvableLanguageModel
   : MODEL extends EmbeddingModel
-    ? EmbeddingModel
-    : ImageModel;
+    ? ResolvableEmbeddingModel
+    : ResolvableImageModel;
 
-export type ResolvedModel<
-  MODEL extends ResolvableLanguageModel | EmbeddingModel | ImageModel,
-> = MODEL extends ResolvableLanguageModel
-  ? LanguageModel
-  : MODEL extends EmbeddingModel
-    ? EmbeddingModel
-    : ImageModel;
+export type ResolvedModel<MODEL extends AnyResolvableModel> =
+  MODEL extends ResolvableLanguageModel
+    ? LanguageModel
+    : MODEL extends ResolvableEmbeddingModel
+      ? EmbeddingModel
+      : ImageModel;
 
 /**
  * Result from a generateText call.
@@ -175,9 +196,7 @@ export type RetryAttempt<
 /**
  * The context provided to Retryables with the current attempt and all previous attempts.
  */
-export type RetryContext<
-  MODEL extends ResolvableLanguageModel | EmbeddingModel | ImageModel,
-> = {
+export type RetryContext<MODEL extends AnyResolvableModel> = {
   /**
    * Current attempt that caused the retry
    */
@@ -203,9 +222,7 @@ export type SuccessAttempt<
 /**
  * The context provided to onSuccess with the successful attempt and all previous attempts.
  */
-export type SuccessContext<
-  MODEL extends ResolvableLanguageModel | EmbeddingModel | ImageModel,
-> = {
+export type SuccessContext<MODEL extends AnyResolvableModel> = {
   /**
    * The successful attempt
    */
@@ -298,15 +315,13 @@ export interface RetryableModelOptions<
  *
  * The model can be:
  * - The exact MODEL type (instance)
- * - A gateway string literal (for LanguageModel only)
+ * - A gateway string literal (for any model family)
  * - A ResolvableModel<MODEL> (for compatibility with plain model arrays)
  *
  * This flexible approach allows retryable functions to return the exact model type
  * they received without type assertions, while still supporting string-based gateway models.
  */
-export type Retry<
-  MODEL extends ResolvableLanguageModel | EmbeddingModel | ImageModel,
-> = {
+export type Retry<MODEL extends AnyResolvableModel> = {
   model: MODEL;
   /**
    * Maximum number of attempts for this model.
@@ -328,9 +343,7 @@ export type Retry<
   /**
    * Call options to override for this retry.
    */
-  options?: RetryCallOptions<
-    MODEL extends ResolvableLanguageModel ? LanguageModel : MODEL
-  >;
+  options?: RetryCallOptions<ResolvedModel<MODEL>>;
   /**
    * @deprecated Use `options.providerOptions` instead.
    * Provider options to override for this retry.
@@ -343,9 +356,7 @@ export type Retry<
 /**
  * A function that determines whether to retry with a different model based on the current attempt and all previous attempts.
  */
-export type Retryable<
-  MODEL extends ResolvableLanguageModel | EmbeddingModel | ImageModel,
-> = (
+export type Retryable<MODEL extends AnyResolvableModel> = (
   context: RetryContext<MODEL>,
 ) => Retry<MODEL> | Promise<Retry<MODEL> | undefined> | undefined;
 
@@ -356,9 +367,9 @@ export type Retries<MODEL extends LanguageModel | EmbeddingModel | ImageModel> =
     | ResolvableModel<MODEL>
   >;
 
-export type RetryableOptions<
-  MODEL extends ResolvableLanguageModel | EmbeddingModel | ImageModel,
-> = Partial<Omit<Retry<MODEL>, 'model'>>;
+export type RetryableOptions<MODEL extends AnyResolvableModel> = Partial<
+  Omit<Retry<MODEL>, 'model'>
+>;
 
 /**
  * Controls when to reset the sticky model back to the base model.

@@ -4,11 +4,11 @@ import {
 } from '@ai-sdk/provider-utils/test';
 import { APICallError, generateText, RetryError, streamText } from 'ai';
 import { describe, expect, it, vi } from 'vitest';
-import { createRetryable } from '../create-retryable-model.js';
 import {
   chunksToText,
   collectParts,
   contentFilterResult,
+  createRetryable,
   errorFromChunks,
   finishReason,
   languageCallOptions,

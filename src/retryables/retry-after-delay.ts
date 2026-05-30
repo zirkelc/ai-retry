@@ -4,9 +4,7 @@ import {
   parseRetryHeaders,
 } from '../internal/parse-retry-headers.js';
 import type {
-  EmbeddingModel,
-  ImageModel,
-  ResolvableLanguageModel,
+  AnyResolvableModel,
   Retryable,
   RetryableOptions,
 } from '../types.js';
@@ -16,10 +14,16 @@ import { isErrorAttempt } from '../internal/guards.js';
  * Retry the current failed attempt with the same model, if the error is retryable.
  * Uses the `Retry-After` or `Retry-After-Ms` headers if present.
  * Otherwise uses the specified `delay` and `backoffFactor` if provided.
+ *
+ * @deprecated Use the composable condition API from
+ * `ai-retry/<family>-model/retryables`:
+ * `error.isRetryable(true).retry({ delay, backoffFactor })`.
+ * See the [v1 README](https://github.com/zirkelc/ai-retry/blob/v1/README.md)
+ * for the old function-style docs.
  */
-export function retryAfterDelay<
-  MODEL extends ResolvableLanguageModel | EmbeddingModel | ImageModel,
->(options: RetryableOptions<MODEL>): Retryable<MODEL> {
+export function retryAfterDelay<MODEL extends AnyResolvableModel>(
+  options: RetryableOptions<MODEL>,
+): Retryable<MODEL> {
   return (context) => {
     const { current } = context;
 

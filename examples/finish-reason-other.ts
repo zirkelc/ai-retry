@@ -1,7 +1,7 @@
 import { openai } from '@ai-sdk/openai';
 import { generateText } from 'ai';
-import type { LanguageModel, Retryable } from 'ai-retry';
-import { createRetryable, isResultAttempt } from 'ai-retry';
+import { isResultAttempt, type LanguageModel, type Retryable } from 'ai-retry';
+import { createRetryable } from 'ai-retry/language-model';
 
 const finishReasonOther: Retryable<LanguageModel> = async (context) => {
   // Current attempt: error or result

@@ -21,12 +21,12 @@
   "types": "./dist/index.d.mts",
   "exports": {
     ".": "./dist/index.mjs",
-    "./experimental/embedding-model": "./dist/experimental/embedding-model/index.mjs",
-    "./experimental/embedding-model/retryables": "./dist/experimental/embedding-model/retryables/index.mjs",
-    "./experimental/image-model": "./dist/experimental/image-model/index.mjs",
-    "./experimental/image-model/retryables": "./dist/experimental/image-model/retryables/index.mjs",
-    "./experimental/language-model": "./dist/experimental/language-model/index.mjs",
-    "./experimental/language-model/retryables": "./dist/experimental/language-model/retryables/index.mjs",
+    "./embedding-model": "./dist/embedding-model/index.mjs",
+    "./embedding-model/conditions": "./dist/embedding-model/conditions/index.mjs",
+    "./image-model": "./dist/image-model/index.mjs",
+    "./image-model/conditions": "./dist/image-model/conditions/index.mjs",
+    "./language-model": "./dist/language-model/index.mjs",
+    "./language-model/conditions": "./dist/language-model/conditions/index.mjs",
     "./retryables": "./dist/retryables/index.mjs",
     "./package.json": "./package.json"
   },

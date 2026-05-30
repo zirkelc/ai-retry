@@ -10,11 +10,9 @@ import {
   streamText,
 } from 'ai';
 import { describe, expect, it } from 'vitest';
-import { createRetryable } from '../create-retryable-model.js';
 import {
   chunksToText,
-  type LanguageModelGenerateFn,
-  type LanguageModelStreamFn,
+  createRetryable,
   MockEmbeddingModel,
   mockEmbeddings,
   MockImageModel,
@@ -23,6 +21,8 @@ import {
   mockResult,
   mockResultText,
   mockStreamChunks,
+  type LanguageModelGenerateFn,
+  type LanguageModelStreamFn,
 } from '../internal/test-utils.js';
 import type {
   EmbeddingModelCallOptions,

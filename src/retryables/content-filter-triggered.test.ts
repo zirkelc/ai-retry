@@ -9,10 +9,10 @@ import {
   streamText,
 } from 'ai';
 import { describe, expect, it } from 'vitest';
-import { createRetryable } from '../create-retryable-model.js';
 import {
   chunksToText,
   contentFilterResult,
+  createRetryable,
   MockLanguageModel,
   mockResult,
   mockResultText,
