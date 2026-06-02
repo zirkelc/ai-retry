@@ -1183,6 +1183,13 @@ In the second case, errors during stream processing will not always be retried, 
 > [!IMPORTANT]
 > **Streaming limitation:** Retries and fallbacks only apply before the first content chunk is emitted. Once streaming begins delivering content, the response is committed to the current model. Mid-stream errors will propagate to the caller rather than triggering a fallback. If reliable retries are critical for your use case, consider using `generateText` instead of `streamText`.
 
+#### Preamble buffering
+
+Every stream begins with a non-content preamble (`stream-start`, then optionally `response-metadata` and `text-start` / `reasoning-start`) that providers emit as soon as the response headers arrive, before any content flows. Because a retry can still happen during this window, `ai-retry` does not forward the preamble immediately. It buffers the leading non-content parts and flushes them only when the first content chunk arrives (or when the stream finishes with no content). If a retry fires before any content, the buffered preamble is discarded and replaced by the fallback's, so the consumer always sees exactly one preamble — the one belonging to the model that actually produced the output, with its own `warnings` and `response-metadata`. Without this, a fallback's `stream-start` would be emitted a second time after the primary's, which some consumers (e.g. `streamText`) reject.
+
+> [!NOTE]
+> One side effect: the consumer's "stream started" signal now arrives at first-content time rather than when the response headers arrive (typically a sub-second difference). For UIs that show a typing indicator off `stream-start` this is negligible.
+
 ### API Reference
 
 #### `createRetryable(options: RetryableModelOptions): LanguageModelV3 | EmbeddingModelV3 | ImageModelV3`
