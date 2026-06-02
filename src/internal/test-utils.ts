@@ -435,6 +435,24 @@ export const drainStream = async (
   }
 };
 
+/** Read a stream to completion, collecting all parts. */
+export const collectParts = async (
+  stream: ReadableStream<LanguageModelStreamPart>,
+): Promise<Array<LanguageModelStreamPart>> => {
+  const parts: Array<LanguageModelStreamPart> = [];
+  const reader = stream.getReader();
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    parts.push(value);
+  }
+  return parts;
+};
+
+/** Concatenate the text deltas (raw parts carry `delta`, not `text`). */
+export const partsToText = (parts: Array<LanguageModelStreamPart>): string =>
+  parts.map((p) => (p.type === 'text-delta' ? p.delta : '')).join('');
+
 export const languageCallOptions = {
   prompt: [{ role: 'user', content: [{ type: 'text', text: 'Hello!' }] }],
 } as LanguageModelCallOptions;

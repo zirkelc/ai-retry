@@ -502,6 +502,17 @@ export class RetryableLanguageModel
             > = {};
 
             /**
+             * Buffer for the leading non-content parts (`stream-start`,
+             * `response-metadata`, `text-start`, `reasoning-start`, …) of this
+             * attempt. While no content has been forwarded the preamble is held
+             * here rather than enqueued, so a pre-content retry can discard it
+             * and the consumer sees exactly one preamble — the one belonging to
+             * the model that actually produced the output. Reset per attempt;
+             * flushed on the first content part or at completion.
+             */
+            let preambleBuffer: Array<LanguageModelStreamPart> = [];
+
+            /**
              * Set when a `finish` part triggers a retry decision. Causes the
              * inner read loop to exit without enqueuing the finish part, and
              * the outer loop to re-stream against the next model.
@@ -609,16 +620,30 @@ export class RetryableLanguageModel
                 }
 
                 /**
-                 * Mark that streaming has started once we receive actual content
+                 * Mark that streaming has started once we receive actual
+                 * content. On the first content part, flush this attempt's
+                 * buffered preamble (in order) ahead of the content, then
+                 * forward normally from here on.
                  */
                 if (isStreamContentPart(value)) {
                   isStreaming = true;
+                  for (const buffered of preambleBuffer) {
+                    controller.enqueue(buffered);
+                  }
+                  preambleBuffer = [];
+                  controller.enqueue(value);
+                } else if (!isStreaming) {
+                  /**
+                   * Pre-content part: buffer it so a pre-content retry can
+                   * replace it with the next attempt's preamble.
+                   */
+                  preambleBuffer.push(value);
+                } else {
+                  /**
+                   * Content already flowing: forward directly.
+                   */
+                  controller.enqueue(value);
                 }
-
-                /**
-                 * Enqueue the chunk to the consumer of the stream
-                 */
-                controller.enqueue(value);
               }
 
               if (retryFromFinish) {
@@ -667,7 +692,13 @@ export class RetryableLanguageModel
                   recorder,
                 });
 
-                await reader?.cancel();
+                /**
+                 * Cancelling a reader whose stream has already errored (e.g.
+                 * a mid-stream `controller.error`) rejects with that stored
+                 * error. Swallow it: the retry already succeeded and that
+                 * rejection must not abort the wrapped stream.
+                 */
+                await reader?.cancel().catch(() => {});
 
                 result = retriedResult.result;
                 attempts = retriedResult.attempts;
@@ -684,6 +715,15 @@ export class RetryableLanguageModel
                   finishReason: streamFinishReason,
                 });
               }
+              /**
+               * A stream that completes with no content part still has its
+               * preamble buffered. Flush it so a zero-content completion emits
+               * its `stream-start` (and any metadata/finish) before closing.
+               */
+              for (const buffered of preambleBuffer) {
+                controller.enqueue(buffered);
+              }
+              preambleBuffer = [];
               controller.close();
               break;
             } catch (error) {
@@ -799,9 +839,13 @@ export class RetryableLanguageModel
               });
 
               /**
-               * Cancel the previous reader and stream if we are retrying
+               * Cancel the previous reader and stream if we are retrying.
+               * Cancelling a reader whose stream has already errored (e.g. a
+               * mid-stream `controller.error`) rejects with that stored
+               * error. Swallow it: the retry already succeeded and that
+               * rejection must not abort the wrapped stream.
                */
-              await reader?.cancel();
+              await reader?.cancel().catch(() => {});
 
               result = retriedResult.result;
               attempts = retriedResult.attempts;

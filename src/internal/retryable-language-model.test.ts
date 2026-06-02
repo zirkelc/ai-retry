@@ -7,15 +7,20 @@ import { describe, expect, it, vi } from 'vitest';
 import { createRetryable } from '../create-retryable-model.js';
 import {
   chunksToText,
+  collectParts,
   contentFilterResult,
   errorFromChunks,
   finishReason,
+  languageCallOptions,
   MockLanguageModel,
   mockResult,
   mockResultText,
+  mockStream,
   mockStreamOptions,
   nonRetryableError,
+  partsToText,
   retryableError,
+  successStreamChunks,
   testUsage,
 } from './test-utils.js';
 import type {
@@ -2658,6 +2663,165 @@ describe('streamText', () => {
       `);
 
         vi.useRealTimers();
+      });
+
+      describe('mid-stream errors before first content', () => {
+        /**
+         * A stream that emits `stream-start` and then errors the stream
+         * itself via `controller.error` (the real-world body-stall / undici
+         * `bodyTimeout` signature), rather than emitting an `error` part.
+         */
+        const streamStartThenError = (error: unknown) => ({
+          stream: new ReadableStream<LanguageModelStreamPart>({
+            start(controller) {
+              controller.enqueue({ type: 'stream-start', warnings: [] });
+              controller.error(error);
+            },
+          }),
+        });
+
+        it('should retry when the stream errors before any content', async () => {
+          // Arrange
+          const error = new Error('body timeout');
+          const baseModel = new MockLanguageModel({
+            doStream: streamStartThenError(error),
+          });
+          const fallbackModel = new MockLanguageModel({
+            doStream: mockStream(successStreamChunks('Recovered')),
+          });
+          const retryableModel = createRetryable({
+            model: baseModel,
+            retries: [fallbackModel],
+          });
+
+          // Act
+          const { stream } = await retryableModel.doStream(languageCallOptions);
+          const parts = await collectParts(stream);
+
+          // Assert
+          expect(baseModel.doStream).toHaveBeenCalledTimes(1);
+          expect(fallbackModel.doStream).toHaveBeenCalledTimes(1);
+          expect(partsToText(parts)).toBe('Recovered');
+        });
+
+        it('should emit exactly one stream-start when retrying before content', async () => {
+          // Arrange
+          const error = new Error('Overloaded');
+          const baseModel = new MockLanguageModel({
+            doStream: mockStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'error', error },
+            ]),
+          });
+          const fallbackModel = new MockLanguageModel({
+            doStream: mockStream(successStreamChunks('Recovered')),
+          });
+          const retryableModel = createRetryable({
+            model: baseModel,
+            retries: [fallbackModel],
+          });
+
+          // Act
+          const { stream } = await retryableModel.doStream(languageCallOptions);
+          const parts = await collectParts(stream);
+
+          // Assert
+          const startCount = parts.filter(
+            (p) => p.type === 'stream-start',
+          ).length;
+          expect(startCount).toBe(1);
+        });
+
+        it('should emit the fallback preamble, not the primary preamble', async () => {
+          // Arrange
+          const error = new Error('Overloaded');
+          const baseModel = new MockLanguageModel({
+            doStream: mockStream([
+              {
+                type: 'stream-start',
+                warnings: [{ type: 'other', message: 'primary-warning' }],
+              },
+              {
+                type: 'response-metadata',
+                id: 'primary-id',
+                modelId: 'primary-model',
+                timestamp: new Date(0),
+              },
+              { type: 'error', error },
+            ]),
+          });
+          const fallbackModel = new MockLanguageModel({
+            doStream: mockStream([
+              { type: 'stream-start', warnings: [] },
+              {
+                type: 'response-metadata',
+                id: 'fallback-id',
+                modelId: 'fallback-model',
+                timestamp: new Date(0),
+              },
+              { type: 'text-start', id: '1' },
+              { type: 'text-delta', id: '1', delta: 'Recovered' },
+              { type: 'text-end', id: '1' },
+              {
+                type: 'finish',
+                finishReason: { unified: 'stop', raw: 'stop' },
+                usage: testUsage,
+              },
+            ]),
+          });
+          const retryableModel = createRetryable({
+            model: baseModel,
+            retries: [fallbackModel],
+          });
+
+          // Act
+          const { stream } = await retryableModel.doStream(languageCallOptions);
+          const parts = await collectParts(stream);
+
+          // Assert
+          const startParts = parts.filter((p) => p.type === 'stream-start');
+          const metadataParts = parts.filter(
+            (p) => p.type === 'response-metadata',
+          );
+          expect(startParts.length).toBe(1);
+          expect(startParts[0]).toEqual({ type: 'stream-start', warnings: [] });
+          expect(metadataParts.length).toBe(1);
+          expect(metadataParts[0]).toEqual({
+            type: 'response-metadata',
+            id: 'fallback-id',
+            modelId: 'fallback-model',
+            timestamp: new Date(0),
+          });
+        });
+
+        it('should deliver fallback output through streamText when the stream errors before content', async () => {
+          // Arrange
+          const error = new Error('body timeout');
+          const baseModel = new MockLanguageModel({
+            doStream: streamStartThenError(error),
+          });
+          const fallbackModel = new MockLanguageModel({
+            doStream: mockStream(mockStreamChunks),
+          });
+          const retryableModel = createRetryable({
+            model: baseModel,
+            retries: [fallbackModel],
+          });
+
+          // Act
+          const result = streamText({
+            model: retryableModel,
+            prompt,
+            ...mockStreamOptions,
+          });
+          const chunks = await convertAsyncIterableToArray(result.fullStream);
+
+          // Assert
+          expect(baseModel.doStream).toHaveBeenCalledTimes(1);
+          expect(fallbackModel.doStream).toHaveBeenCalledTimes(1);
+          expect(chunksToText(chunks)).toBe('Hello, world!');
+          expect(errorFromChunks(chunks)).toBe(null);
+        });
       });
     });
 
