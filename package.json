@@ -1,6 +1,6 @@
 {
   "name": "ai-retry",
-  "version": "1.9.0",
+  "version": "1.9.1",
   "description": "Retry and fallback mechanisms for AI SDK",
   "keywords": [
     "ai",

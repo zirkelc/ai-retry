@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.9.1](https://github.com/zirkelc/ai-retry/compare/v1.9.0...v1.9.1) (2026-06-02)
+
+
+### Bug Fixes
+
+* **stream:** recover mid-stream retry before first content ([956f926](https://github.com/zirkelc/ai-retry/commit/956f92627d5142e6e3d8c08247ba95ef29ed2ca2))
+
+
+### Documentation
+
+* **readme:** explain stream preamble buffering ([0018a4b](https://github.com/zirkelc/ai-retry/commit/0018a4be66966139129c5391af4f50eee8245059))
+
 ## [1.9.0](https://github.com/zirkelc/ai-retry/compare/v1.8.0...v1.9.0) (2026-05-27)
 
 
