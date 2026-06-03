@@ -186,7 +186,7 @@ const retryableImage = createRetryable({
 });
 ```
 
-### Fallbacks & Conditions
+### Retries
 
 The `retries` array holds the things `ai-retry` tries, in order, when a request fails or a result needs retrying. There are two kinds:
 
