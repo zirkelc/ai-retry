@@ -29,7 +29,7 @@ npm install ai-retry
 > [!WARNING]
 > **v2 is a breaking change.**
 >
-> - `createRetryable` is no longer exported from the package root. Import it from `ai-retry/<family>-model` instead.
+> - `createRetryable` on the package root is **deprecated** (it still works). Import it from `ai-retry/<family>-model` instead — it is typed for that family and resolves gateway strings for it.
 > - The function-style retryables (`contentFilterTriggered`, `requestTimeout`, …) are deprecated in favor of the new condition API.
 >
 > If you are not ready to migrate, pin to `ai-retry@1` and read the [v1 README](https://github.com/zirkelc/ai-retry/blob/v1/README.md).
