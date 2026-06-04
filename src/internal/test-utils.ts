@@ -35,7 +35,7 @@ import type {
  * Re-exported for test convenience: the auto-detecting factory builds a
  * retryable model for any family from a single import.
  */
-export { createRetryable } from './create-retryable-model.js';
+export { createRetryable } from './create-retryable.js';
 
 type StreamText = Parameters<typeof streamText>[0];
 type GenerateText = Parameters<typeof generateText>[0];

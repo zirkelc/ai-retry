@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { RetryableLanguageModel } from '../internal/retryable-language-model.js';
 import { MockLanguageModel } from '../internal/test-utils.js';
-import { createRetryableModel } from './create-retryable.js';
+import { createRetryableModel } from './create-retryable-model.js';
 
 describe('createRetryableModel', () => {
   it('should create a retryable model from a language model instance', () => {

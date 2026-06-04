@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { RetryableEmbeddingModel } from '../internal/retryable-embedding-model.js';
 import { MockEmbeddingModel } from '../internal/test-utils.js';
-import { createRetryableModel } from './create-retryable.js';
+import { createRetryableModel } from './create-retryable-model.js';
 
 describe('createRetryableModel', () => {
   it('should create a retryable model from an embedding model instance', () => {

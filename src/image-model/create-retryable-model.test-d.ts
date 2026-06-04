@@ -6,7 +6,7 @@ import type {
   ImageModelGenerate,
   SuccessContext,
 } from '../types.js';
-import { createRetryableModel } from './create-retryable.js';
+import { createRetryableModel } from './create-retryable-model.js';
 
 describe('createRetryableModel', () => {
   it('should return ImageModel for a model instance', () => {

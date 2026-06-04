@@ -1,4 +1,4 @@
-import { createRetryable as createRetryableAnyModel } from './internal/create-retryable-model.js';
+import { createRetryable as createRetryableAnyModel } from './internal/create-retryable.js';
 
 export * from './internal/get-model-key.js';
 export * from './types.js';

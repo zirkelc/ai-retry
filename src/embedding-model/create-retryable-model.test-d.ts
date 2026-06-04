@@ -6,7 +6,7 @@ import type {
   EmbeddingModelEmbed,
   SuccessContext,
 } from '../types.js';
-import { createRetryableModel } from './create-retryable.js';
+import { createRetryableModel } from './create-retryable-model.js';
 
 describe('createRetryableModel', () => {
   it('should return EmbeddingModel for a model instance', () => {

@@ -1,5 +1,5 @@
 import { assertType, describe, expect, it } from 'vitest';
-import { createRetryable } from './create-retryable-model.js';
+import { createRetryable } from './create-retryable.js';
 import { RetryableEmbeddingModel } from './retryable-embedding-model.js';
 import { RetryableLanguageModel } from './retryable-language-model.js';
 import { MockEmbeddingModel, MockLanguageModel } from './test-utils.js';

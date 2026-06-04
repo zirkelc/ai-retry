@@ -6,6 +6,6 @@
  *     from 'ai-retry/embedding-model';
  */
 
-export { createRetryableModel } from './create-retryable.js';
+export { createRetryableModel } from './create-retryable-model.js';
 
 export * from './conditions/index.js';
