@@ -11,7 +11,7 @@ import { resolveImageModel } from '../internal/resolve-model.js';
  * Build a retryable image model. Accepts a model instance or a gateway
  * model-id string, which is resolved to an image model instance.
  */
-export function createRetryable(
+export function createRetryableModel(
   options: Omit<RetryableModelOptions<ImageModel>, 'model'> & {
     model: ResolvableImageModel;
   },

@@ -1,9 +1,9 @@
 import { anthropic } from '@ai-sdk/anthropic';
 import { openai } from '@ai-sdk/openai';
 import { streamText } from 'ai';
-import { createRetryable, httpStatus } from 'ai-retry/language-model';
+import { createRetryableModel, httpStatus } from 'ai-retry/language-model';
 
-const retryableModel = createRetryable({
+const retryableModel = createRetryableModel({
   model: anthropic('claude-sonnet-4-0'),
   retries: [
     // Retry the same model with delay and exponential backoff

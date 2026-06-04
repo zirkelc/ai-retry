@@ -7,11 +7,11 @@ import type {
   LanguageModelStream,
   SuccessContext,
 } from '../types.js';
-import { createRetryable } from './create-retryable.js';
+import { createRetryableModel } from './create-retryable.js';
 
-describe('createRetryable', () => {
+describe('createRetryableModel', () => {
   it('should return LanguageModel for a model instance', () => {
-    const retryable = createRetryable({
+    const retryable = createRetryableModel({
       model: new MockLanguageModel(),
       retries: [new MockLanguageModel(), { model: new MockLanguageModel() }],
     });
@@ -21,7 +21,7 @@ describe('createRetryable', () => {
   });
 
   it('should return LanguageModel for a gateway string', () => {
-    const retryable = createRetryable({
+    const retryable = createRetryableModel({
       model: 'openai/gpt-4.1',
       retries: [
         'anthropic/claude-sonnet-4',

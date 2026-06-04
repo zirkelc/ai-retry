@@ -6,11 +6,11 @@ import type {
   ImageModelGenerate,
   SuccessContext,
 } from '../types.js';
-import { createRetryable } from './create-retryable.js';
+import { createRetryableModel } from './create-retryable.js';
 
-describe('createRetryable', () => {
+describe('createRetryableModel', () => {
   it('should return ImageModel for a model instance', () => {
-    const retryable = createRetryable({
+    const retryable = createRetryableModel({
       model: new MockImageModel(),
       retries: [new MockImageModel(), { model: new MockImageModel() }],
     });
@@ -20,7 +20,7 @@ describe('createRetryable', () => {
   });
 
   it('should return ImageModel for a gateway string', () => {
-    const retryable = createRetryable({
+    const retryable = createRetryableModel({
       model: 'google/imagen-4.0-generate-001',
       retries: ['google/imagen-4.0-fast-generate-001'],
     });
@@ -33,7 +33,9 @@ describe('createRetryable', () => {
     type Ctx = SuccessContext<ImageModel>;
 
     expectTypeOf<Ctx['current']['model']>().toEqualTypeOf<ImageModel>();
-    expectTypeOf<Ctx['current']['result']>().toEqualTypeOf<ImageModelGenerate>();
+    expectTypeOf<
+      Ctx['current']['result']
+    >().toEqualTypeOf<ImageModelGenerate>();
     expectTypeOf<
       Ctx['current']['options']
     >().toEqualTypeOf<ImageModelCallOptions>();

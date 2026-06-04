@@ -1,7 +1,7 @@
 import { openai } from '@ai-sdk/openai';
 import type { LanguageModelV3 } from '@ai-sdk/provider';
 import { generateText, Output } from 'ai';
-import { createRetryable, schemaInvalid } from 'ai-retry/language-model';
+import { createRetryableModel, schemaInvalid } from 'ai-retry/language-model';
 import { z } from 'zod';
 
 /**
@@ -45,7 +45,7 @@ const fallbackModel = createMockModel(
   JSON.stringify({ sentiment: `positive` }),
 );
 
-const retryableModel = createRetryable({
+const retryableModel = createRetryableModel({
   // Weaker base model
   model: primaryModel,
   // model: openai('gpt-4.1-nano'),

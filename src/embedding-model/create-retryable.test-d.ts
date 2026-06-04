@@ -6,11 +6,11 @@ import type {
   EmbeddingModelEmbed,
   SuccessContext,
 } from '../types.js';
-import { createRetryable } from './create-retryable.js';
+import { createRetryableModel } from './create-retryable.js';
 
-describe('createRetryable', () => {
+describe('createRetryableModel', () => {
   it('should return EmbeddingModel for a model instance', () => {
-    const retryable = createRetryable({
+    const retryable = createRetryableModel({
       model: new MockEmbeddingModel(),
       retries: [new MockEmbeddingModel(), { model: new MockEmbeddingModel() }],
     });
@@ -20,7 +20,7 @@ describe('createRetryable', () => {
   });
 
   it('should return EmbeddingModel for a gateway string', () => {
-    const retryable = createRetryable({
+    const retryable = createRetryableModel({
       model: 'openai/text-embedding-3-large',
       retries: ['openai/text-embedding-3-small'],
     });

@@ -11,7 +11,7 @@ import { resolveLanguageModel } from '../internal/resolve-model.js';
  * Build a retryable language model. Accepts a model instance or a gateway
  * model-id string, which is resolved to a language model instance.
  */
-export function createRetryable(
+export function createRetryableModel(
   options: Omit<RetryableModelOptions<LanguageModel>, 'model'> & {
     model: ResolvableLanguageModel;
   },

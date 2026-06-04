@@ -1,16 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { RetryableEmbeddingModel } from '../internal/retryable-embedding-model.js';
 import { MockEmbeddingModel } from '../internal/test-utils.js';
-import { createRetryable } from './create-retryable.js';
+import { createRetryableModel } from './create-retryable.js';
 
-describe('createRetryable', () => {
+describe('createRetryableModel', () => {
   it('should create a retryable model from an embedding model instance', () => {
     // Arrange
     const model = new MockEmbeddingModel();
     const fallbackModel = new MockEmbeddingModel();
 
     // Act
-    const retryable = createRetryable({
+    const retryable = createRetryableModel({
       model,
       retries: [fallbackModel],
     });
@@ -24,7 +24,7 @@ describe('createRetryable', () => {
 
   it('should resolve a gateway string base model to a gateway embedding model', () => {
     // Arrange + Act
-    const retryable = createRetryable({
+    const retryable = createRetryableModel({
       model: 'openai/text-embedding-3-large',
       retries: ['openai/text-embedding-3-small'],
     });

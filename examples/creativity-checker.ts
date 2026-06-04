@@ -2,7 +2,7 @@ import { anthropic } from '@ai-sdk/anthropic';
 import { openai } from '@ai-sdk/openai';
 import { generateObject, generateText } from 'ai';
 import { isResultAttempt, type LanguageModel, type Retryable } from 'ai-retry';
-import { createRetryable } from 'ai-retry/language-model';
+import { createRetryableModel } from 'ai-retry/language-model';
 import { z } from 'zod';
 
 const creativityChecker: Retryable<LanguageModel> = async (context) => {
@@ -68,7 +68,7 @@ const creativityChecker: Retryable<LanguageModel> = async (context) => {
 };
 
 // Create a retryable model with the creativity checker
-const retryableModel = createRetryable({
+const retryableModel = createRetryableModel({
   model: openai('gpt-4.1'), // Base model
   retries: [creativityChecker],
 });

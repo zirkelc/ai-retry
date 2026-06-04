@@ -1,6 +1,6 @@
-import { createRetryable as createRetryableEmbeddingModel } from '../embedding-model/create-retryable.js';
-import { createRetryable as createRetryableImageModel } from '../image-model/create-retryable.js';
-import { createRetryable as createRetryableLanguageModel } from '../language-model/create-retryable.js';
+import { createRetryableModel as createRetryableEmbeddingModel } from '../embedding-model/create-retryable.js';
+import { createRetryableModel as createRetryableImageModel } from '../image-model/create-retryable.js';
+import { createRetryableModel as createRetryableLanguageModel } from '../language-model/create-retryable.js';
 import type {
   EmbeddingModel,
   GatewayLanguageModelId,

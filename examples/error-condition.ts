@@ -2,7 +2,7 @@ import { anthropic } from '@ai-sdk/anthropic';
 import { openai } from '@ai-sdk/openai';
 import { APICallError, generateText } from 'ai';
 import {
-  createRetryable,
+  createRetryableModel,
   error,
   timeout,
 } from '../src/language-model/index.js';
@@ -13,7 +13,7 @@ import {
  * (`httpStatus`, `error.statusCode`, `error.message`, `error.isRetryable`)
  * do not cover the field you need.
  */
-const retryableModel = createRetryable({
+const retryableModel = createRetryableModel({
   model: openai('gpt-4o'),
   retries: [
     timeout().switch({

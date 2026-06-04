@@ -2,7 +2,7 @@ import { anthropic } from '@ai-sdk/anthropic';
 import { openai } from '@ai-sdk/openai';
 import { APICallError, generateText } from 'ai';
 import {
-  createRetryable,
+  createRetryableModel,
   error,
   httpStatus,
   or,
@@ -11,7 +11,7 @@ import {
 const baseModel = openai('gpt-5');
 const fallbackModel = anthropic('claude-opus-4-5');
 
-const retryableModel = createRetryable({
+const retryableModel = createRetryableModel({
   model: baseModel,
   retries: [
     // Low-level error condition with access to full error and retry context

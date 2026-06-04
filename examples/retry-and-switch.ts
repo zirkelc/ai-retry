@@ -1,7 +1,11 @@
 import { anthropic } from '@ai-sdk/anthropic';
 import { openai } from '@ai-sdk/openai';
 import { generateText } from 'ai';
-import { createRetryable, error, httpStatus } from 'ai-retry/language-model';
+import {
+  createRetryableModel,
+  error,
+  httpStatus,
+} from 'ai-retry/language-model';
 
 /**
  * Combine `.retry()` and `.switch()` on the same retryable model.
@@ -13,7 +17,7 @@ import { createRetryable, error, httpStatus } from 'ai-retry/language-model';
  * - HTTP 529 (overloaded) keeps the same retry on the primary, but then
  *   falls back to a different provider if the primary still fails.
  */
-const retryableModel = createRetryable({
+const retryableModel = createRetryableModel({
   model: openai('gpt-4o'),
   retries: [
     // Retry the same model on transient errors

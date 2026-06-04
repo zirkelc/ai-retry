@@ -1,6 +1,6 @@
 import { openai } from '@ai-sdk/openai';
 import { generateText } from 'ai';
-import { createRetryable, timeout } from 'ai-retry/language-model';
+import { createRetryableModel, timeout } from 'ai-retry/language-model';
 
 /**
  * This example demonstrates using AI SDK's `timeout` option (introduced in v6.0.14)
@@ -9,7 +9,7 @@ import { createRetryable, timeout } from 'ai-retry/language-model';
  *
  * The `timeout` option accepts milliseconds directly - no AbortSignal needed.
  */
-const retryableModel = createRetryable({
+const retryableModel = createRetryableModel({
   model: openai('gpt-4o'),
   retries: [
     /** Fallback to GPT-4o-mini if the primary model times out */

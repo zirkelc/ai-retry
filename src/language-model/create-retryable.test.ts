@@ -1,16 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { RetryableLanguageModel } from '../internal/retryable-language-model.js';
 import { MockLanguageModel } from '../internal/test-utils.js';
-import { createRetryable } from './create-retryable.js';
+import { createRetryableModel } from './create-retryable.js';
 
-describe('createRetryable', () => {
+describe('createRetryableModel', () => {
   it('should create a retryable model from a language model instance', () => {
     // Arrange
     const model = new MockLanguageModel();
     const fallbackModel = new MockLanguageModel();
 
     // Act
-    const retryable = createRetryable({
+    const retryable = createRetryableModel({
       model,
       retries: [fallbackModel],
     });
@@ -24,7 +24,7 @@ describe('createRetryable', () => {
 
   it('should resolve a gateway string base model to a gateway language model', () => {
     // Arrange + Act
-    const retryable = createRetryable({
+    const retryable = createRetryableModel({
       model: 'openai/gpt-4.1',
       retries: ['anthropic/claude-sonnet-4'],
     });

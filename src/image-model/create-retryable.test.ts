@@ -1,16 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { RetryableImageModel } from '../internal/retryable-image-model.js';
 import { MockImageModel } from '../internal/test-utils.js';
-import { createRetryable } from './create-retryable.js';
+import { createRetryableModel } from './create-retryable.js';
 
-describe('createRetryable', () => {
+describe('createRetryableModel', () => {
   it('should create a retryable model from an image model instance', () => {
     // Arrange
     const model = new MockImageModel();
     const fallbackModel = new MockImageModel();
 
     // Act
-    const retryable = createRetryable({
+    const retryable = createRetryableModel({
       model,
       retries: [fallbackModel],
     });
@@ -24,7 +24,7 @@ describe('createRetryable', () => {
 
   it('should resolve a gateway string base model to a gateway image model', () => {
     // Arrange + Act
-    const retryable = createRetryable({
+    const retryable = createRetryableModel({
       model: 'google/imagen-4.0-generate-001',
       retries: ['google/imagen-4.0-fast-generate-001'],
     });

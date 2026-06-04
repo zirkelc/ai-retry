@@ -29,7 +29,7 @@ npm install ai-retry
 > [!WARNING]
 > **v2 is a breaking change.**
 >
-> - `createRetryable` on the package root is **deprecated** (it still works). Import it from `ai-retry/<family>-model` instead — it is typed for that family and resolves gateway strings for it.
+> - The root `createRetryable` export is **deprecated** (it still works). Use `createRetryableModel` from `ai-retry/<family>-model` instead — it is typed for that family and resolves gateway strings for it.
 > - The function-style retryables (`contentFilterTriggered`, `requestTimeout`, …) are deprecated in favor of the new condition API.
 >
 > If you are not ready to migrate, pin to `ai-retry@1` and read the [v1 README](https://github.com/zirkelc/ai-retry/blob/v1/README.md).
@@ -50,13 +50,13 @@ import { anthropic } from '@ai-sdk/anthropic';
 import { openai } from '@ai-sdk/openai';
 import { generateText } from 'ai';
 import {
-  createRetryable,
+  createRetryableModel,
   error,
   finishReason,
   httpStatus,
 } from 'ai-retry/language-model';
 
-const retryableModel = createRetryable({
+const retryableModel = createRetryableModel({
   model: openai('gpt-4o'),
   retries: [
     // Fall back to a different model on HTTP 529 or any "overloaded" message
@@ -85,9 +85,9 @@ This also works with embedding models and image models, each through their own e
 ```typescript
 import { openai } from '@ai-sdk/openai';
 import { embed } from 'ai';
-import { createRetryable, httpStatus } from 'ai-retry/embedding-model';
+import { createRetryableModel, httpStatus } from 'ai-retry/embedding-model';
 
-const retryableModel = createRetryable({
+const retryableModel = createRetryableModel({
   model: openai.textEmbedding('text-embedding-3-large'),
   retries: [
     httpStatus(529).switch({
@@ -103,9 +103,9 @@ const result = await embed({ model: retryableModel, value: 'Hello world!' });
 import { google } from '@ai-sdk/google';
 import { openai } from '@ai-sdk/openai';
 import { generateImage } from 'ai';
-import { createRetryable, noImage } from 'ai-retry/image-model';
+import { createRetryableModel, noImage } from 'ai-retry/image-model';
 
-const retryableModel = createRetryable({
+const retryableModel = createRetryableModel({
   model: openai.image('dall-e-3'),
   retries: [
     noImage().switch({ model: google.image('gemini-3-pro-image-preview') }),
@@ -120,7 +120,7 @@ const result = await generateImage({
 
 #### Entry points
 
-Pick the entry point that matches the model you pass to `createRetryable`. Each module exposes the helpers that make sense for that model family already typed for it, so no manual type annotations are needed.
+Pick the entry point that matches the model you pass to `createRetryableModel`. Each module exposes the helpers that make sense for that model family already typed for it, so no manual type annotations are needed.
 
 | Entry point                | For models passed to                                           |
 | -------------------------- | -------------------------------------------------------------- |
@@ -129,12 +129,12 @@ Pick the entry point that matches the model you pass to `createRetryable`. Each 
 | `ai-retry/image-model`     | `generateImage`                                                |
 
 ```typescript
-import { createRetryable } from 'ai-retry/language-model';
-import { createRetryable } from 'ai-retry/image-model';
-import { createRetryable } from 'ai-retry/embedding-model';
+import { createRetryableModel } from 'ai-retry/language-model';
+import { createRetryableModel } from 'ai-retry/image-model';
+import { createRetryableModel } from 'ai-retry/embedding-model';
 ```
 
-Each entry point re-exports `createRetryable` plus every condition for that family. The condition helpers can also be imported from the dedicated `/conditions` subpath:
+Each entry point re-exports `createRetryableModel` plus every condition for that family. The condition helpers can also be imported from the dedicated `/conditions` subpath:
 
 ```typescript
 import {
@@ -152,15 +152,15 @@ You can pass a model as a string and it will be resolved through the default `ga
 
 ```typescript
 import { gateway } from 'ai';
-import { createRetryable } from 'ai-retry/language-model';
+import { createRetryableModel } from 'ai-retry/language-model';
 
-const retryableModel = createRetryable({
+const retryableModel = createRetryableModel({
   model: 'openai/gpt-5',
   retries: ['anthropic/claude-sonnet-4'],
 });
 
 // Is the same as:
-const retryableModel2 = createRetryable({
+const retryableModel2 = createRetryableModel({
   model: gateway('openai/gpt-5'),
   retries: [gateway('anthropic/claude-sonnet-4')],
 });
@@ -169,18 +169,18 @@ const retryableModel2 = createRetryable({
 Embedding and image entry points accept gateway strings too, resolved against their respective families:
 
 ```typescript
-import { createRetryable } from 'ai-retry/embedding-model';
+import { createRetryableModel } from 'ai-retry/embedding-model';
 
-const retryableEmbedding = createRetryable({
+const retryableEmbedding = createRetryableModel({
   model: 'openai/text-embedding-3-large',
   retries: ['openai/text-embedding-3-small'],
 });
 ```
 
 ```typescript
-import { createRetryable } from 'ai-retry/image-model';
+import { createRetryableModel } from 'ai-retry/image-model';
 
-const retryableImage = createRetryable({
+const retryableImage = createRetryableModel({
   model: 'google/imagen-4.0-generate-001',
   retries: ['google/imagen-4.0-fast-generate-001'],
 });
@@ -199,9 +199,13 @@ You can think of `retries` as a big `if-else` chain — each condition is an `if
 import { anthropic } from '@ai-sdk/anthropic';
 import { azure } from '@ai-sdk/azure';
 import { openai } from '@ai-sdk/openai';
-import { createRetryable, error, httpStatus } from 'ai-retry/language-model';
+import {
+  createRetryableModel,
+  error,
+  httpStatus,
+} from 'ai-retry/language-model';
 
-const retryableModel = createRetryable({
+const retryableModel = createRetryableModel({
   model: openai('gpt-4'),
   retries: [
     // Condition: match HTTP 429 (rate limit)
@@ -225,9 +229,9 @@ A fallback is a plain model instance (or gateway string) in `retries`. It always
 ```typescript
 import { anthropic } from '@ai-sdk/anthropic';
 import { openai } from '@ai-sdk/openai';
-import { createRetryable } from 'ai-retry/language-model';
+import { createRetryableModel } from 'ai-retry/language-model';
 
-const retryableModel = createRetryable({
+const retryableModel = createRetryableModel({
   model: openai('gpt-4o'),
   retries: [
     openai('gpt-4o-mini'), // first fallback
@@ -411,7 +415,7 @@ When the higher-level helpers don't cover the field you need, drop down to `erro
 import { anthropic } from '@ai-sdk/anthropic';
 import { openai } from '@ai-sdk/openai';
 import { APICallError } from 'ai';
-import { createRetryable, error } from 'ai-retry/language-model';
+import { createRetryableModel, error } from 'ai-retry/language-model';
 
 // OpenAI-style error code nested at data.error.code. `e` is `unknown`.
 const isContentFilter = (e: unknown) => {
@@ -420,7 +424,7 @@ const isContentFilter = (e: unknown) => {
   return data?.error?.code === 'content_filter';
 };
 
-const retryableModel = createRetryable({
+const retryableModel = createRetryableModel({
   model: openai('gpt-4o'),
   retries: [
     error(isContentFilter).switch({
@@ -460,7 +464,7 @@ Errors are tracked per unique model (`provider/modelId`). Once a model has hit i
 #### Disabling retries
 
 ```typescript
-const retryableModel = createRetryable({
+const retryableModel = createRetryableModel({
   model: openai('gpt-4'),
   retries: [
     /* ... */
@@ -478,9 +482,9 @@ When disabled the base model executes directly, no retry logic runs.
 Delays accept exponential backoff and respect the request's abort signal so they can still be cancelled.
 
 ```typescript
-import { createRetryable } from 'ai-retry/language-model';
+import { createRetryableModel } from 'ai-retry/language-model';
 
-const retryableModel = createRetryable({
+const retryableModel = createRetryableModel({
   model: openai('gpt-4'),
   retries: [
     // Retry the base model with a fixed 2s delay
@@ -501,9 +505,9 @@ When a retry specifies a `timeout`, a fresh `AbortSignal.timeout()` is created f
 If the original `abortSignal` is already aborted at the time of retry and the retry does **not** supply a `timeout`, `ai-retry` re-throws the original error rather than firing a misleading retry against the dead signal. `onError` still fires for observability; `onRetry` is skipped. Setting `timeout` is the explicit opt-in for retrying past an aborted signal.
 
 ```typescript
-import { createRetryable, timeout } from 'ai-retry/language-model';
+import { createRetryableModel, timeout } from 'ai-retry/language-model';
 
-const retryableModel = createRetryable({
+const retryableModel = createRetryableModel({
   model: openai('gpt-4'),
   retries: [
     timeout().switch({ model: openai('gpt-3.5-turbo'), timeout: 30_000 }),
@@ -522,7 +526,7 @@ await generateText({
 Each retryable attempts a model at most once by default. Use `maxAttempts` to allow more. Attempts are counted per unique model, so duplicates across multiple retryables don't get more chances than configured.
 
 ```typescript
-const retryableModel = createRetryable({
+const retryableModel = createRetryableModel({
   model: openai('gpt-4'),
   retries: [
     anthropic('claude-3-haiku-20240307'), // 1 attempt
@@ -537,7 +541,7 @@ const retryableModel = createRetryable({
 Override provider-specific options for a retry, completely replacing the original ones.
 
 ```typescript
-const retryableModel = createRetryable({
+const retryableModel = createRetryableModel({
   model: openai('gpt-5'),
   retries: [
     {
@@ -555,7 +559,7 @@ const retryableModel = createRetryable({
 Override any of the call options for a retry. Useful for things like temperature, max tokens, or the prompt itself.
 
 ```typescript
-const retryableModel = createRetryable({
+const retryableModel = createRetryableModel({
   model: openai('gpt-4'),
   retries: [
     {
@@ -616,9 +620,9 @@ You can also override call options dynamically from `onRetry`, instead of declar
 ```typescript
 import { azure } from '@ai-sdk/azure';
 import { openai } from '@ai-sdk/openai';
-import { createRetryable } from 'ai-retry/language-model';
+import { createRetryableModel } from 'ai-retry/language-model';
 
-const retryableModel = createRetryable({
+const retryableModel = createRetryableModel({
   model: azure('gpt-5-chat'),
   retries: [openai('gpt-5-chat')],
   onRetry: (context) => {
@@ -646,7 +650,7 @@ Inside `onRetry`, `context.current.model` is the model about to be tried next; `
 #### Logging
 
 ```typescript
-const retryableModel = createRetryable({
+const retryableModel = createRetryableModel({
   model: openai('gpt-4o-mini'),
   retries: [
     /* ... */
@@ -681,7 +685,7 @@ By default, every new request starts with the base model, even if a previous req
 | `after-N-seconds`  | Keep the retry model for **N** seconds, then reset           |
 
 ```typescript
-const retryableModel = createRetryable({
+const retryableModel = createRetryableModel({
   model: openai('gpt-4o-mini'),
   retries: [anthropic('claude-sonnet-4-20250514')],
   reset: 'after-5-requests',
@@ -700,9 +704,9 @@ const retryableModel = createRetryable({
 Telemetry uses the optional peer dependency `@opentelemetry/api` (already present if you use the AI SDK). Register an OpenTelemetry SDK once at startup, then opt in per model:
 
 ```typescript
-import { createRetryable } from 'ai-retry/language-model';
+import { createRetryableModel } from 'ai-retry/language-model';
 
-const retryableModel = createRetryable({
+const retryableModel = createRetryableModel({
   model: openai('gpt-4o'),
   retries: [anthropic('claude-sonnet-4-5')],
   experimental_telemetry: { isEnabled: true },
@@ -810,7 +814,7 @@ Every stream begins with a non-content preamble (`stream-start`, then optionally
 
 ### API Reference
 
-#### `createRetryable(options): LanguageModel | EmbeddingModel | ImageModel`
+#### `createRetryableModel(options): LanguageModel | EmbeddingModel | ImageModel`
 
 Imported from the per-model entry point (`ai-retry/language-model`, `ai-retry/embedding-model`, `ai-retry/image-model`). Each entry returns a model already narrowed to that family.
 
@@ -841,6 +845,15 @@ interface RetryableModelOptions<
 - `onError` — fires when an error occurs.
 - `onRetry` — fires before a retry attempt. May return `OnRetryOverrides` (or a promise of one) to override `options.*` for that attempt only. See [Dynamic call options](#dynamic-call-options).
 - `onSuccess` — fires after a successful request.
+
+#### `createRetryable(options)` (deprecated)
+
+```ts
+import { createRetryable } from 'ai-retry';
+```
+
+> [!WARNING]
+> Deprecated. The root `createRetryable` auto-detects the model family at runtime and resolves bare gateway strings as language models only. Prefer `createRetryableModel` from the matching per-model entry point.
 
 #### `Reset`
 

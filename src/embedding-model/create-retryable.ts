@@ -11,7 +11,7 @@ import { resolveEmbeddingModel } from '../internal/resolve-model.js';
  * Build a retryable embedding model. Accepts a model instance or a gateway
  * model-id string, which is resolved to an embedding model instance.
  */
-export function createRetryable(
+export function createRetryableModel(
   options: Omit<RetryableModelOptions<EmbeddingModel>, 'model'> & {
     model: ResolvableEmbeddingModel;
   },
