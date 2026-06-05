@@ -1,9 +1,9 @@
 import { streamText } from 'ai';
 import type { ToolSet } from 'ai';
 import {
-  createRetryableCall,
-  type RetryableCallOptions,
-} from '../call/create-retryable-call.js';
+  createRetryableStream,
+  type RetryableStreamOptions,
+} from '../stream/create-retryable-stream.js';
 
 /**
  * `streamText`'s arguments and result, parametrized by the tool set so tool
@@ -19,14 +19,15 @@ type StreamTextReturn<TOOLS extends ToolSet> = ReturnType<
 >;
 
 /**
- * Options for {@link createRetryableStreamText}. Identical to the generic
- * driver's options: a base model, the retry handlers, and the lifecycle hooks.
+ * Options for {@link createRetryableStreamText}. The base model, the retry
+ * handlers, and the lifecycle hooks (a `classifyPart` override is accepted but
+ * rarely needed — the default handles the `streamText` `fullStream` protocol).
  *
  * Note: a retry's `options.prompt` (and an `onRetry` prompt override) is
  * ignored here — see {@link createRetryableStreamText}. The prompt is set on the
  * `streamText` call arguments instead.
  */
-export type RetryableStreamTextOptions = RetryableCallOptions;
+export type RetryableStreamTextOptions = RetryableStreamOptions;
 
 /**
  * A drop-in for `streamText` that retries the whole call. Takes the same
@@ -42,7 +43,8 @@ export type RetryableStreamText = <TOOLS extends ToolSet = ToolSet>(
 ) => Promise<StreamTextReturn<TOOLS>>;
 
 /**
- * Make a `streamText` call retryable at the call level.
+ * Make a `streamText` call retryable at the call level — a typed `streamText`
+ * drop-in built on {@link createRetryableStream}.
  *
  * Unlike wrapping a model with `createRetryable` (which retries below
  * `streamText`, at `doStream`), this re-runs the entire `streamText` call with
@@ -66,10 +68,15 @@ export type RetryableStreamText = <TOOLS extends ToolSet = ToolSet>(
  * Trade-offs:
  * - The call is `await`ed: it resolves once content commits, not synchronously
  *   like `streamText`.
- * - To detect commit, the adapter pumps a teed branch of the stream only up to
- *   the first content part, then stops; the caller drives the body (via
- *   `fullStream`, `toUIMessageStreamResponse()`, etc.), so back-pressure past
- *   the commit point is preserved and only the leading parts are pre-read.
+ * - Commit is detected by reading a teed branch of the result's `fullStream`
+ *   up to the first content part; the caller drives the body (via `fullStream`,
+ *   `toUIMessageStreamResponse()`, etc.), so back-pressure past the commit
+ *   point is preserved and only the leading parts are pre-read.
+ * - Your `streamText` callbacks pass through and fire per attempt — including
+ *   one that is later recovered. Use the retry-level `onError`/`onRetry` hooks
+ *   to observe only the final, committed outcome. `onError` defaults to a
+ *   no-op (rather than `streamText`'s `console.error`) so recovered attempts
+ *   are not logged.
  * - After the first content part, an attempt is committed and cannot fail over
  *   (re-running would duplicate output) — the error/abort flows through as it
  *   would for a plain `streamText` call.
@@ -77,95 +84,40 @@ export type RetryableStreamText = <TOOLS extends ToolSet = ToolSet>(
 export function createRetryableStreamText(
   options: RetryableStreamTextOptions,
 ): RetryableStreamText {
-  const run = createRetryableCall(options);
+  const retryableStream = createRetryableStream(options);
 
   return <TOOLS extends ToolSet = ToolSet>(
     args: Omit<StreamTextArgs<TOOLS>, 'model'>,
   ) =>
-    run<StreamTextReturn<TOOLS>>(
-      (attempt) =>
-        new Promise<StreamTextReturn<TOOLS>>((resolve, reject) => {
-          /** Set once the attempt's outcome is decided (committed or failed). */
-          let settled = false;
+    retryableStream<StreamTextReturn<TOOLS>>(
+      (attempt) => {
+        /**
+         * Strip `prompt`: the driver carries it in the low-level
+         * `LanguageModelV3Prompt` format (valid when the retry wraps
+         * `doStream`/`doGenerate` directly), which would clobber `streamText`'s
+         * high-level `prompt`/`messages` from `args`. The remaining overrides
+         * (temperature, headers, providerOptions, …) are valid call settings
+         * and pass through unchanged.
+         */
+        const { prompt: _prompt, ...callOverrides } = attempt.options;
 
+        return streamText({
+          ...args,
+          ...callOverrides,
+          model: attempt.model,
+          abortSignal: attempt.abortSignal,
           /**
-           * Strip `prompt`: the driver carries it in the low-level
-           * `LanguageModelV3Prompt` format (valid when the retry wraps
-           * `doStream`/`doGenerate` directly), which would clobber
-           * `streamText`'s high-level `prompt`/`messages` from `args`. The
-           * remaining overrides (temperature, headers, providerOptions, …) are
-           * valid call settings and pass through unchanged.
+           * Default `onError` to a no-op. This wrapper manages errors itself
+           * (it detects them from `fullStream`, reports them through the
+           * retry-level `onError`/`onRetry` hooks, and surfaces the final one
+           * via the rejected promise or the returned stream), so `streamText`'s
+           * default `console.error` logger would just spam every recovered
+           * attempt. A caller-provided `onError` is respected and fires per
+           * attempt — including one that is later recovered.
            */
-          const { prompt: _prompt, ...callOverrides } = attempt.options;
-
-          const result = streamText({
-            ...args,
-            ...callOverrides,
-            model: attempt.model,
-            abortSignal: attempt.abortSignal,
-            onChunk(event) {
-              if (!settled) {
-                settled = true;
-                resolve(result);
-              }
-              return args.onChunk?.(event);
-            },
-            onError(event) {
-              /**
-               * A pre-content error fails the attempt so the driver can fail
-               * over; the driver reports it through the retry `onError` hook.
-               * Once committed, forward it to the caller's handler instead.
-               */
-              if (!settled) {
-                settled = true;
-                reject(event.error);
-                return;
-              }
-              return args.onError?.(event);
-            },
-            onAbort(event) {
-              if (!settled) {
-                settled = true;
-                reject(attempt.abortSignal?.reason ?? new Error('aborted'));
-                return;
-              }
-              return args.onAbort?.(event);
-            },
-            onFinish(event) {
-              /**
-               * A finish before any content (e.g. an empty completion) is a
-               * successful commit, not a failure.
-               */
-              if (!settled) {
-                settled = true;
-                resolve(result);
-              }
-              return args.onFinish?.(event);
-            },
-          } as StreamTextArgs<TOOLS>);
-
-          /**
-           * Pump a teed branch only until the outcome is decided, then cancel
-           * it. The leading parts are read here to fire the callbacks above;
-           * the body is left for the caller to drive. Cancelling this branch
-           * does not cancel the source — the caller's own consumption of the
-           * returned result still receives every part, including the ones read
-           * here (the tee buffers them).
-           */
-          void (async () => {
-            const reader = result.fullStream.getReader();
-            try {
-              while (!settled) {
-                const { done } = await reader.read();
-                if (done) break;
-              }
-            } catch {
-              /* the callbacks own the outcome; ignore read errors here */
-            } finally {
-              void reader.cancel().catch(() => {});
-            }
-          })();
-        }),
+          onError: args.onError ?? (() => {}),
+        } as StreamTextArgs<TOOLS>);
+      },
       { abortSignal: args.abortSignal },
     );
 }

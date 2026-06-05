@@ -28,6 +28,7 @@
     "./experimental/image-model/retryables": "./dist/experimental/image-model/retryables/index.mjs",
     "./experimental/language-model": "./dist/experimental/language-model/index.mjs",
     "./experimental/language-model/retryables": "./dist/experimental/language-model/retryables/index.mjs",
+    "./experimental/stream": "./dist/experimental/stream/index.mjs",
     "./experimental/stream-text": "./dist/experimental/stream-text/index.mjs",
     "./retryables": "./dist/retryables/index.mjs",
     "./package.json": "./package.json"
