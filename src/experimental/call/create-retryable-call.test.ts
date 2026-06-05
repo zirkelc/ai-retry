@@ -9,7 +9,7 @@ import type {
 } from '../../types.js';
 import {
   createRetryableCall,
-  ResultRetry,
+  type ResultRetry,
   type RetryCallAttempt,
 } from './create-retryable-call.js';
 
@@ -31,6 +31,13 @@ const filteredResult = {
   content: [],
   finishReason: { unified: 'content-filter', raw: undefined },
 } as unknown as LanguageModelResult;
+
+/** Build a result-retry signal a call function throws to request re-evaluation. */
+const resultRetry = <V>(value: V): ResultRetry<V> => ({
+  type: 'result',
+  result: filteredResult,
+  value,
+});
 
 /** A function retryable that matches any result attempt. */
 const retryOnResult =
@@ -195,7 +202,7 @@ describe('createRetryableCall', () => {
     const primary = new MockLanguageModel();
     const fallback = new MockLanguageModel();
     const fn = vi.fn(async ({ model }: RetryCallAttempt) => {
-      if (model === primary) throw new ResultRetry(filteredResult, 'FILTERED');
+      if (model === primary) throw resultRetry('FILTERED');
       return 'FALLBACK_OK';
     });
     const run = createRetryableCall({
@@ -217,7 +224,7 @@ describe('createRetryableCall', () => {
     const primary = new MockLanguageModel();
     const fallback = new MockLanguageModel();
     const fn = vi.fn(async (_attempt: RetryCallAttempt) => {
-      throw new ResultRetry(filteredResult, 'TERMINAL_RESULT');
+      throw resultRetry('TERMINAL_RESULT');
     });
     const run = createRetryableCall({ model: primary, retries: [fallback] });
 
@@ -234,7 +241,7 @@ describe('createRetryableCall', () => {
     const primary = new MockLanguageModel();
     const fallback = new MockLanguageModel();
     const fn = vi.fn(async (_attempt: RetryCallAttempt) => {
-      throw new ResultRetry(filteredResult, 'TERMINAL_RESULT');
+      throw resultRetry('TERMINAL_RESULT');
     });
     const run = createRetryableCall({
       model: primary,

@@ -1,10 +1,11 @@
 import { delay } from '@ai-sdk/provider-utils';
 import { BaseRetryableModel } from '../../internal/base-retryable-model.js';
-import { calculateExponentialBackoff } from '../../internal/calculate-exponential-backoff.js';
-import { countModelAttempts } from '../../internal/count-model-attempts.js';
 import { findRetryModel } from '../../internal/find-retry-model.js';
+import { isObject } from '../../internal/guards.js';
 import { resolveAbortSignal } from '../../internal/merge-retry-call-options.js';
 import { prepareRetryError } from '../../internal/prepare-retry-error.js';
+import { resolveBackoffDelay } from '../../internal/resolve-backoff-delay.js';
+import { retryDiesOnAbortedSignal } from '../../internal/retry-dies-on-aborted-signal.js';
 import { resolveModel } from '../../internal/resolve-model.js';
 import { createRetryTelemetry } from '../../internal/telemetry.js';
 import type {
@@ -30,22 +31,33 @@ import type {
  * normally terminal and opaque to the driver, but a call may discover that a
  * structurally-successful result still warrants a retry (e.g. a stream that
  * finished with a `content-filter` reason before producing content). Throwing
- * this lets the driver evaluate the configured retryables against a synthetic
- * result attempt: a match fails over to the next model, no match returns
- * `value` unchanged as the terminal outcome.
+ * this lets the driver evaluate the configured retryables against a result
+ * attempt: a match fails over to the next model, no match returns `value`
+ * unchanged as the terminal outcome.
+ *
+ * Shares the `type: 'result'` discriminant and `result` field with
+ * {@link RetryResultAttempt} — the driver turns it into one by adding the
+ * attempt's `model`/`options` — so the two can share evaluation logic.
  */
-export class ResultRetry<RESULT = unknown> {
-  constructor(
-    /**
-     * Synthetic result evaluated against the retryables. Only the fields a
-     * result-based retryable reads are required — today `finishReason` (and
-     * `content`, which is empty before commit).
-     */
-    readonly result: LanguageModelResult,
-    /** The value to return as the terminal outcome if no retryable matches. */
-    readonly value: RESULT,
-  ) {}
-}
+export type ResultRetry<RESULT = unknown> = {
+  type: 'result';
+  /**
+   * Synthetic result evaluated against the retryables. Only the fields a
+   * result-based retryable reads are required — today `finishReason` (and
+   * `content`, which is empty before commit).
+   */
+  result: LanguageModelResult;
+  /** The value to return as the terminal outcome if no retryable matches. */
+  value: RESULT;
+};
+
+/**
+ * Whether a thrown value is a {@link ResultRetry} signal (vs. a real error).
+ * The `value` field distinguishes it from a {@link RetryResultAttempt}, which
+ * shares the discriminant but carries `model`/`options` instead.
+ */
+export const isResultRetry = (value: unknown): value is ResultRetry =>
+  isObject(value) && value.type === 'result' && 'value' in value;
 
 /**
  * The per-attempt inputs handed to the call function. The retryable owns the
@@ -205,7 +217,7 @@ class RetryableCall extends BaseRetryableModel<LanguageModel> {
          * A result-based retry is moot when retries are disabled: accept the
          * result as the terminal outcome instead of letting the signal escape.
          */
-        if (error instanceof ResultRetry) return error.value as RESULT;
+        if (isResultRetry(error)) return error.value as RESULT;
         throw error;
       }
     }
@@ -299,7 +311,7 @@ class RetryableCall extends BaseRetryableModel<LanguageModel> {
            * Mirrors the model layer: result attempts do not call `onError`, and
            * a no-match returns the result instead of throwing.
            */
-          if (error instanceof ResultRetry) {
+          if (isResultRetry(error)) {
             const resultAttempt: RetryResultAttempt = {
               type: 'result',
               result: error.result,
@@ -333,8 +345,7 @@ class RetryableCall extends BaseRetryableModel<LanguageModel> {
              */
             if (
               !retryModel ||
-              (runOptions?.abortSignal?.aborted &&
-                retryModel.timeout === undefined)
+              retryDiesOnAbortedSignal(runOptions?.abortSignal, retryModel)
             ) {
               recorder?.endAttempt({
                 attempt: attemptNumber,
@@ -345,18 +356,7 @@ class RetryableCall extends BaseRetryableModel<LanguageModel> {
               return error.value as RESULT;
             }
 
-            let calculatedDelay: number | undefined;
-            if (retryModel.delay) {
-              const modelAttemptsCount = countModelAttempts(
-                retryModel.model,
-                attempts,
-              );
-              calculatedDelay = calculateExponentialBackoff(
-                retryModel.delay,
-                retryModel.backoffFactor,
-                modelAttemptsCount,
-              );
-            }
+            const calculatedDelay = resolveBackoffDelay(retryModel, attempts);
 
             recorder?.endAttempt({
               attempt: attemptNumber,
@@ -432,10 +432,7 @@ class RetryableCall extends BaseRetryableModel<LanguageModel> {
            * instantly with the same abort. Surface the error rather than fire
            * a misleading retry against a dead signal.
            */
-          if (
-            runOptions?.abortSignal?.aborted &&
-            retryModel.timeout === undefined
-          ) {
+          if (retryDiesOnAbortedSignal(runOptions?.abortSignal, retryModel)) {
             recorder?.endAttempt({
               attempt: attemptNumber,
               outcome: 'failure',
@@ -445,22 +442,7 @@ class RetryableCall extends BaseRetryableModel<LanguageModel> {
             throw error;
           }
 
-          /**
-           * Calculate exponential backoff delay based on the number of
-           * attempts for this specific model: baseDelay * backoffFactor^attempts.
-           */
-          let calculatedDelay: number | undefined;
-          if (retryModel.delay) {
-            const modelAttemptsCount = countModelAttempts(
-              retryModel.model,
-              attempts,
-            );
-            calculatedDelay = calculateExponentialBackoff(
-              retryModel.delay,
-              retryModel.backoffFactor,
-              modelAttemptsCount,
-            );
-          }
+          const calculatedDelay = resolveBackoffDelay(retryModel, attempts);
 
           recorder?.endAttempt({
             attempt: attemptNumber,

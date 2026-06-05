@@ -1,10 +1,10 @@
 import type { LanguageModelResult } from '../../types.js';
 import {
   createRetryableCall,
-  ResultRetry,
   type RetryableCallOptions,
   type RetryCallAttempt,
   type RetryCallRunOptions,
+  type ResultRetry,
 } from '../call/create-retryable-call.js';
 import { detectStreamCommit } from './detect-stream-commit.js';
 
@@ -83,13 +83,15 @@ export function createRetryableStream(
        * retryables read `finishReason` (and `content`, empty before commit).
        */
       if (finishReason !== undefined) {
-        throw new ResultRetry(
-          {
+        const signal: ResultRetry<RESULT> = {
+          type: 'result',
+          result: {
             content: [],
             finishReason: { unified: finishReason, raw: undefined },
           } as unknown as LanguageModelResult,
-          result,
-        );
+          value: result,
+        };
+        throw signal;
       }
 
       return result;

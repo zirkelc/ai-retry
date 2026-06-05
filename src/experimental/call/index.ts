@@ -1,6 +1,7 @@
 export {
   createRetryableCall,
-  ResultRetry,
+  isResultRetry,
+  type ResultRetry,
   type RetryCall,
   type RetryCallAttempt,
   type RetryCallRunOptions,

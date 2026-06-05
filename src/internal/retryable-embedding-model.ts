@@ -1,10 +1,10 @@
 import { delay } from '@ai-sdk/provider-utils';
 import { BaseRetryableModel } from './base-retryable-model.js';
-import { calculateExponentialBackoff } from './calculate-exponential-backoff.js';
-import { countModelAttempts } from './count-model-attempts.js';
 import { findRetryModel } from './find-retry-model.js';
 import { prepareRetryError } from './prepare-retry-error.js';
 import { mergeEmbeddingModelCallOptions } from './merge-retry-call-options.js';
+import { resolveBackoffDelay } from './resolve-backoff-delay.js';
+import { retryDiesOnAbortedSignal } from './retry-dies-on-aborted-signal.js';
 import { createRetryTelemetry, type RetryTelemetry } from './telemetry.js';
 import type {
   EmbeddingModel,
@@ -154,8 +154,7 @@ export class RetryableEmbeddingModel
          * misleading retry against a dead signal.
          */
         if (
-          input.callOptions.abortSignal?.aborted &&
-          retryModel.timeout === undefined
+          retryDiesOnAbortedSignal(input.callOptions.abortSignal, retryModel)
         ) {
           input.recorder?.endAttempt({
             attempt: attemptNumber,
@@ -165,22 +164,7 @@ export class RetryableEmbeddingModel
           throw error;
         }
 
-        /**
-         * Calculate exponential backoff delay based on the number of attempts
-         * for this specific model: baseDelay * backoffFactor^attempts.
-         */
-        let calculatedDelay: number | undefined;
-        if (retryModel.delay) {
-          const modelAttemptsCount = countModelAttempts(
-            retryModel.model,
-            attempts,
-          );
-          calculatedDelay = calculateExponentialBackoff(
-            retryModel.delay,
-            retryModel.backoffFactor,
-            modelAttemptsCount,
-          );
-        }
+        const calculatedDelay = resolveBackoffDelay(retryModel, attempts);
 
         input.recorder?.endAttempt({
           attempt: attemptNumber,
