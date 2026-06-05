@@ -171,14 +171,16 @@ describe('createRetryableStream', () => {
       expect(models[1]).toBe(fallback);
     });
 
-    it('should support a custom classifier for a non-streamText stream', async () => {
-      // Arrange — a stream whose parts do not follow the AI SDK protocol.
-      const result = streamOf([{ kind: 'meta' }, { kind: 'data' }]);
+    it('should keep reading past preamble parts until content', async () => {
+      // Arrange — leading non-content parts, then a content part.
+      const result = streamOf([
+        { type: 'start' },
+        { type: 'start-step' },
+        { type: 'text-delta', text: 'OK' },
+      ]);
       const retryableStream = createRetryableStream({
         model: new MockLanguageModel(),
         retries: [],
-        classifyPart: (part) =>
-          (part as { kind?: string }).kind === 'data' ? 'content' : 'preamble',
       });
 
       // Act

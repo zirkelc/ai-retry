@@ -4,11 +4,7 @@ import {
   type RetryCallAttempt,
   type RetryCallRunOptions,
 } from '../call/create-retryable-call.js';
-import {
-  type ClassifyStreamPart,
-  classifyStreamTextPart,
-  detectStreamCommit,
-} from './detect-stream-commit.js';
+import { detectStreamCommit } from './detect-stream-commit.js';
 
 /**
  * The minimal shape a stream result must expose: a `fullStream` that can be
@@ -21,14 +17,7 @@ export type StreamResult = { fullStream: ReadableStream<unknown> };
 /**
  * Options for {@link createRetryableStream}.
  */
-export interface RetryableStreamOptions extends RetryableCallOptions {
-  /**
-   * Classifies each `fullStream` part to decide commit vs. fail-over.
-   *
-   * @default classifyStreamTextPart — the AI SDK `fullStream` protocol.
-   */
-  classifyPart?: ClassifyStreamPart;
-}
+export type RetryableStreamOptions = RetryableCallOptions;
 
 /**
  * Runs a stream-producing function with retry/fail-over, deciding the outcome
@@ -66,8 +55,7 @@ export type RetryableStream = <RESULT extends StreamResult>(
 export function createRetryableStream(
   options: RetryableStreamOptions,
 ): RetryableStream {
-  const { classifyPart = classifyStreamTextPart, ...callOptions } = options;
-  const run = createRetryableCall(callOptions);
+  const run = createRetryableCall(options);
 
   return <RESULT extends StreamResult>(
     streamFn: (attempt: RetryCallAttempt) => RESULT | Promise<RESULT>,
@@ -75,7 +63,7 @@ export function createRetryableStream(
   ) =>
     run<RESULT>(async (attempt) => {
       const result = await streamFn(attempt);
-      await detectStreamCommit(result.fullStream, attempt, classifyPart);
+      await detectStreamCommit(result.fullStream, attempt);
       return result;
     }, runOptions);
 }
