@@ -1,5 +1,5 @@
 import { convertArrayToReadableStream } from '@ai-sdk/provider-utils/test';
-import { RetryError, streamText } from 'ai';
+import { APICallError, RetryError, streamText } from 'ai';
 import { describe, expect, it, vi } from 'vitest';
 import { createRetryable } from '../../create-retryable-model.js';
 import {
@@ -7,6 +7,7 @@ import {
   mockStreamChunks,
   mockStreamOptions,
 } from '../../internal/test-utils.js';
+import { contentFilterTriggered } from '../../retryables/content-filter-triggered.js';
 import type { LanguageModelStreamPart } from '../../types.js';
 import {
   createRetryableStream,
@@ -14,6 +15,41 @@ import {
 } from './create-retryable-stream.js';
 
 const prompt = 'Hello!';
+
+/** A `finish` reporting `content-filter`, with no content emitted before it. */
+const contentFilterChunks: Array<LanguageModelStreamPart> = [
+  { type: 'stream-start', warnings: [] },
+  { type: 'text-start', id: '0' },
+  { type: 'text-end', id: '0' },
+  {
+    type: 'finish',
+    finishReason: { unified: 'content-filter', raw: undefined },
+    usage: {
+      inputTokens: { total: 10, noCache: 0, cacheRead: 0, cacheWrite: 0 },
+      outputTokens: { total: 20, text: 0, reasoning: 0 },
+    },
+  },
+];
+
+/** An Azure-style content-filter `APICallError` (code `content_filter`). */
+const contentFilterError = new APICallError({
+  message: 'The response was filtered due to the content management policy.',
+  url: '',
+  requestBodyValues: {},
+  statusCode: 400,
+  responseHeaders: {},
+  responseBody: '',
+  isRetryable: false,
+  data: {
+    error: {
+      message:
+        'The response was filtered due to the content management policy.',
+      type: null,
+      param: 'prompt',
+      code: 'content_filter',
+    },
+  },
+});
 
 /** A result whose `fullStream` emits the given parts once. */
 const streamOf = (parts: Array<unknown>) => ({
@@ -479,6 +515,94 @@ describe('createRetryableStream', () => {
         // Assert
         await expect(result).rejects.toThrow();
         expect(fallback.doStream).toHaveBeenCalledTimes(0);
+      });
+    });
+
+    describe('content-filter (parity with the model-layer retryable)', () => {
+      it('should fail over when the stream throws a content-filter error', async () => {
+        // Arrange
+        const primary = new MockLanguageModel({ doStream: contentFilterError });
+        const fallback = okStreamModel();
+
+        // Act
+        const result = await retryableStreamText(
+          { model: primary, retries: [contentFilterTriggered(fallback)] },
+          { prompt, ...mockStreamOptions },
+        );
+
+        // Assert
+        expect(await result.text).toBe('Hello, world!');
+        expect(primary.doStream).toHaveBeenCalledTimes(1);
+        expect(fallback.doStream).toHaveBeenCalledTimes(1);
+      });
+
+      it('should fail over when the finish part reports content-filter before any content', async () => {
+        // Arrange
+        const primary = new MockLanguageModel({
+          doStream: {
+            stream: convertArrayToReadableStream(contentFilterChunks),
+          },
+        });
+        const fallback = okStreamModel();
+
+        // Act
+        const result = await retryableStreamText(
+          { model: primary, retries: [contentFilterTriggered(fallback)] },
+          { prompt, ...mockStreamOptions },
+        );
+
+        // Assert
+        expect(await result.text).toBe('Hello, world!');
+        expect(primary.doStream).toHaveBeenCalledTimes(1);
+        expect(fallback.doStream).toHaveBeenCalledTimes(1);
+      });
+
+      it('should return the content-filter result terminally when no retryable matches', async () => {
+        // Arrange — content-filter finish, but no retryable handles it.
+        const primary = new MockLanguageModel({
+          doStream: {
+            stream: convertArrayToReadableStream(contentFilterChunks),
+          },
+        });
+        const fallback = okStreamModel();
+
+        // Act
+        const result = await retryableStreamText(
+          { model: primary, retries: [fallback] },
+          { prompt, ...mockStreamOptions },
+        );
+
+        // Assert — resolves to the primary's (empty) result, no fail-over.
+        expect(await result.text).toBe('');
+        expect(primary.doStream).toHaveBeenCalledTimes(1);
+        expect(fallback.doStream).toHaveBeenCalledTimes(0);
+      });
+
+      it('should call onRetry but NOT onError for a result-based fail-over', async () => {
+        // Arrange
+        const primary = new MockLanguageModel({
+          doStream: {
+            stream: convertArrayToReadableStream(contentFilterChunks),
+          },
+        });
+        const fallback = okStreamModel();
+        const onError = vi.fn();
+        const onRetry = vi.fn();
+
+        // Act
+        await retryableStreamText(
+          {
+            model: primary,
+            retries: [contentFilterTriggered(fallback)],
+            onError,
+            onRetry,
+          },
+          { prompt, ...mockStreamOptions },
+        );
+
+        // Assert — result attempts are not errors (parity with the model layer).
+        expect(onRetry.mock.calls.length).toBe(1);
+        expect(onError.mock.calls.length).toBe(0);
       });
     });
 

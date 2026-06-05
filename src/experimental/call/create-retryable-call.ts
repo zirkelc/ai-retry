@@ -10,6 +10,7 @@ import { createRetryTelemetry } from '../../internal/telemetry.js';
 import type {
   LanguageModel,
   LanguageModelCallOptions,
+  LanguageModelResult,
   LanguageModelRetryCallOptions,
   OnRetryOverrides,
   Reset,
@@ -17,10 +18,34 @@ import type {
   Retries,
   Retry,
   RetryableModelOptions,
+  RetryAttempt,
   RetryContext,
   RetryErrorAttempt,
+  RetryResultAttempt,
   RetryTelemetrySettings,
 } from '../../types.js';
+
+/**
+ * Signal a *result-based* retry from a call function. A returned result is
+ * normally terminal and opaque to the driver, but a call may discover that a
+ * structurally-successful result still warrants a retry (e.g. a stream that
+ * finished with a `content-filter` reason before producing content). Throwing
+ * this lets the driver evaluate the configured retryables against a synthetic
+ * result attempt: a match fails over to the next model, no match returns
+ * `value` unchanged as the terminal outcome.
+ */
+export class ResultRetry<RESULT = unknown> {
+  constructor(
+    /**
+     * Synthetic result evaluated against the retryables. Only the fields a
+     * result-based retryable reads are required — today `finishReason` (and
+     * `content`, which is empty before commit).
+     */
+    readonly result: LanguageModelResult,
+    /** The value to return as the terminal outcome if no retryable matches. */
+    readonly value: RESULT,
+  ) {}
+}
 
 /**
  * The per-attempt inputs handed to the call function. The retryable owns the
@@ -163,17 +188,26 @@ class RetryableCall extends BaseRetryableModel<LanguageModel> {
      * attempt still receives a composed deadline from the run options.
      */
     if (this.isDisabled()) {
-      return fn({
-        model: startModel,
-        attempt: 1,
-        abortSignal: resolveAbortSignal(
-          runOptions?.abortSignal,
-          runOptions?.timeout !== undefined
-            ? ({ timeout: runOptions.timeout } as Retry<LanguageModel>)
-            : undefined,
-        ),
-        options: {},
-      });
+      try {
+        return await fn({
+          model: startModel,
+          attempt: 1,
+          abortSignal: resolveAbortSignal(
+            runOptions?.abortSignal,
+            runOptions?.timeout !== undefined
+              ? ({ timeout: runOptions.timeout } as Retry<LanguageModel>)
+              : undefined,
+          ),
+          options: {},
+        });
+      } catch (error) {
+        /**
+         * A result-based retry is moot when retries are disabled: accept the
+         * result as the terminal outcome instead of letting the signal escape.
+         */
+        if (error instanceof ResultRetry) return error.value as RESULT;
+        throw error;
+      }
     }
 
     const recorder = await createRetryTelemetry(
@@ -187,10 +221,11 @@ class RetryableCall extends BaseRetryableModel<LanguageModel> {
     );
 
     /**
-     * Track all attempts. The driver only produces error attempts: a returned
-     * result is terminal and never re-evaluated (the result is opaque here).
+     * Track all attempts. Most are error attempts; a call may also surface a
+     * result attempt via {@link ResultRetry} when a structurally-successful
+     * result still warrants a retry.
      */
-    const attempts: Array<RetryErrorAttempt<LanguageModel>> = [];
+    const attempts: Array<RetryAttempt<LanguageModel>> = [];
 
     /**
      * Track current retry configuration.
@@ -207,7 +242,7 @@ class RetryableCall extends BaseRetryableModel<LanguageModel> {
         let onRetryOverrides: OnRetryOverrides<LanguageModel> | undefined;
         const previousAttempt = attempts.at(-1);
         if (previousAttempt) {
-          const currentAttempt: RetryErrorAttempt<LanguageModel> = {
+          const currentAttempt: RetryAttempt<LanguageModel> = {
             ...previousAttempt,
             model: this.currentModel,
           };
@@ -256,6 +291,91 @@ class RetryableCall extends BaseRetryableModel<LanguageModel> {
           this.updateStickyModel(startModel);
           return result;
         } catch (error) {
+          /**
+           * A result-based retry: the call returned successfully but flagged the
+           * result for re-evaluation (e.g. a stream that finished with a
+           * `content-filter` reason before any content). Evaluate the retryables
+           * against a synthetic result attempt rather than an error attempt.
+           * Mirrors the model layer: result attempts do not call `onError`, and
+           * a no-match returns the result instead of throwing.
+           */
+          if (error instanceof ResultRetry) {
+            const resultAttempt: RetryResultAttempt = {
+              type: 'result',
+              result: error.result,
+              model: attemptModel,
+              options: {
+                prompt: [],
+                abortSignal,
+                ...options,
+              } as LanguageModelCallOptions,
+            };
+
+            const context: RetryContext<LanguageModel> = {
+              current: resultAttempt,
+              attempts: [...attempts, resultAttempt],
+            };
+
+            const retryModel = await findRetryModel(
+              this.options.retries,
+              context,
+            );
+
+            attempts.push(resultAttempt);
+
+            const finishReason = resultAttempt.result.finishReason.unified;
+
+            /**
+             * No retry matched, or the inbound signal is already aborted without
+             * a fresh deadline: accept the result as the terminal outcome. There
+             * is no error to surface — the stream finished cleanly, just
+             * unsatisfactorily.
+             */
+            if (
+              !retryModel ||
+              (runOptions?.abortSignal?.aborted &&
+                retryModel.timeout === undefined)
+            ) {
+              recorder?.endAttempt({
+                attempt: attemptNumber,
+                outcome: 'success',
+                finishReason,
+              });
+              this.updateStickyModel(startModel);
+              return error.value as RESULT;
+            }
+
+            let calculatedDelay: number | undefined;
+            if (retryModel.delay) {
+              const modelAttemptsCount = countModelAttempts(
+                retryModel.model,
+                attempts,
+              );
+              calculatedDelay = calculateExponentialBackoff(
+                retryModel.delay,
+                retryModel.backoffFactor,
+                modelAttemptsCount,
+              );
+            }
+
+            recorder?.endAttempt({
+              attempt: attemptNumber,
+              outcome: 'retry',
+              finishReason,
+              delayMs: calculatedDelay,
+            });
+
+            if (calculatedDelay !== undefined) {
+              await delay(calculatedDelay, {
+                abortSignal: runOptions?.abortSignal,
+              });
+            }
+
+            this.currentModel = retryModel.model;
+            currentRetry = retryModel;
+            continue;
+          }
+
           /**
            * Build the error attempt. `options` is filled with a minimal valid
            * call-options object: the driver has no prompt of its own (the call

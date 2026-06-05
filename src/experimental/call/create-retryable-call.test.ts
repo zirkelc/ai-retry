@@ -2,8 +2,14 @@ import { RetryError } from 'ai';
 import { describe, expect, it, vi } from 'vitest';
 import { MockLanguageModel } from '../../internal/test-utils.js';
 import { requestTimeout } from '../../retryables/request-timeout.js';
+import type {
+  LanguageModel,
+  LanguageModelResult,
+  Retryable,
+} from '../../types.js';
 import {
   createRetryableCall,
+  ResultRetry,
   type RetryCallAttempt,
 } from './create-retryable-call.js';
 
@@ -19,6 +25,18 @@ const stallUntilAbort = (signal: AbortSignal | undefined): Promise<never> =>
         once: true,
       });
   });
+
+/** A minimal synthetic result a stream call would flag for a result retry. */
+const filteredResult = {
+  content: [],
+  finishReason: { unified: 'content-filter', raw: undefined },
+} as unknown as LanguageModelResult;
+
+/** A function retryable that matches any result attempt. */
+const retryOnResult =
+  (model: LanguageModel): Retryable<LanguageModel> =>
+  (context) =>
+    context.current.type === 'result' ? { model } : undefined;
 
 describe('createRetryableCall', () => {
   it('should return the result of the first attempt on success', async () => {
@@ -170,6 +188,66 @@ describe('createRetryableCall', () => {
     await result.catch((e) => expect(e).toBe(error));
     expect(fn.mock.calls.length).toBe(1);
     expect(fn.mock.calls[0]![0].model).toBe(primary);
+  });
+
+  it('should fail over on a ResultRetry when a function retryable matches', async () => {
+    // Arrange
+    const primary = new MockLanguageModel();
+    const fallback = new MockLanguageModel();
+    const fn = vi.fn(async ({ model }: RetryCallAttempt) => {
+      if (model === primary) throw new ResultRetry(filteredResult, 'FILTERED');
+      return 'FALLBACK_OK';
+    });
+    const run = createRetryableCall({
+      model: primary,
+      retries: [retryOnResult(fallback)],
+    });
+
+    // Act
+    const result = await run(fn);
+
+    // Assert
+    expect(result).toBe('FALLBACK_OK');
+    expect(fn.mock.calls.length).toBe(2);
+    expect(fn.mock.calls[1]![0].model).toBe(fallback);
+  });
+
+  it('should return the ResultRetry value terminally when no retryable matches', async () => {
+    // Arrange — a plain fallback model is skipped for result attempts.
+    const primary = new MockLanguageModel();
+    const fallback = new MockLanguageModel();
+    const fn = vi.fn(async (_attempt: RetryCallAttempt) => {
+      throw new ResultRetry(filteredResult, 'TERMINAL_RESULT');
+    });
+    const run = createRetryableCall({ model: primary, retries: [fallback] });
+
+    // Act
+    const result = await run(fn);
+
+    // Assert — resolves to the flagged value, no fail-over.
+    expect(result).toBe('TERMINAL_RESULT');
+    expect(fn.mock.calls.length).toBe(1);
+  });
+
+  it('should return the ResultRetry value when retries are disabled', async () => {
+    // Arrange
+    const primary = new MockLanguageModel();
+    const fallback = new MockLanguageModel();
+    const fn = vi.fn(async (_attempt: RetryCallAttempt) => {
+      throw new ResultRetry(filteredResult, 'TERMINAL_RESULT');
+    });
+    const run = createRetryableCall({
+      model: primary,
+      retries: [retryOnResult(fallback)],
+      disabled: true,
+    });
+
+    // Act
+    const result = await run(fn);
+
+    // Assert
+    expect(result).toBe('TERMINAL_RESULT');
+    expect(fn.mock.calls.length).toBe(1);
   });
 
   it('should stick to the recovered model on the next run per the reset policy', async () => {
