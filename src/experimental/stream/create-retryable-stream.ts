@@ -56,8 +56,8 @@ export type RetryableStream = <RESULT extends StreamResult>(
  * cannot fail over.
  *
  * Decoupled from `streamText`: it depends only on the result exposing a
- * re-readable `fullStream`. Use {@link createRetryableStreamText} for a typed
- * `streamText` drop-in.
+ * re-readable `fullStream`. Pass a `streamFn` that returns a `streamText` (or
+ * `streamObject`) result to make that call retryable at the call level.
  *
  * Returns the winning attempt's result unchanged, so the caller drives the body
  * (`fullStream`, `toUIMessageStreamResponse()`, …) with back-pressure preserved
