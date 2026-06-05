@@ -1,9 +1,9 @@
 import { delay } from '@ai-sdk/provider-utils';
 import { BaseRetryableModel } from './base-retryable-model.js';
+import { evaluateError } from './evaluate-error.js';
 import { findRetryModel } from './find-retry-model.js';
 import { mergeLanguageModelCallOptions } from './merge-retry-call-options.js';
 import { createRetryTelemetry, type RetryTelemetry } from './telemetry.js';
-import { prepareRetryError } from './prepare-retry-error.js';
 import { resolveBackoffDelay } from './resolve-backoff-delay.js';
 import { retryDiesOnAbortedSignal } from './retry-dies-on-aborted-signal.js';
 import type {
@@ -16,7 +16,6 @@ import type {
   Retry,
   RetryAttempt,
   RetryContext,
-  RetryErrorAttempt,
   RetryResultAttempt,
 } from '../types.js';
 import { isGenerateResult, isStreamContentPart } from './guards.js';
@@ -280,36 +279,19 @@ export class RetryableLanguageModel
    * the stream path. If multiple attempts were made, the original error
    * is wrapped in a `RetryError`.
    */
-  private async handleError(
+  private handleError(
     error: unknown,
     attempts: ReadonlyArray<RetryAttempt<LanguageModel>>,
     callOptions: LanguageModelCallOptions,
   ) {
-    const errorAttempt: RetryErrorAttempt<LanguageModel> = {
-      type: 'error',
-      error: error,
+    return evaluateError({
+      error,
       model: this.currentModel,
       options: callOptions,
-    };
-
-    const updatedAttempts = [...attempts, errorAttempt];
-
-    const context: RetryContext<LanguageModel> = {
-      current: errorAttempt,
-      attempts: updatedAttempts,
-    };
-
-    this.options.onError?.(context);
-
-    const retryModel = await findRetryModel(this.options.retries, context);
-
-    const finalError = retryModel
-      ? undefined
-      : updatedAttempts.length > 1
-        ? prepareRetryError(error, updatedAttempts)
-        : error;
-
-    return { retryModel, attempt: errorAttempt, finalError };
+      attempts,
+      retries: this.options.retries,
+      onError: this.options.onError,
+    });
   }
 
   async doGenerate(

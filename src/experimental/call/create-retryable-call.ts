@@ -1,9 +1,9 @@
 import { delay } from '@ai-sdk/provider-utils';
 import { BaseRetryableModel } from '../../internal/base-retryable-model.js';
+import { evaluateError } from '../../internal/evaluate-error.js';
 import { findRetryModel } from '../../internal/find-retry-model.js';
 import { isObject } from '../../internal/guards.js';
 import { resolveAbortSignal } from '../../internal/merge-retry-call-options.js';
-import { prepareRetryError } from '../../internal/prepare-retry-error.js';
 import { resolveBackoffDelay } from '../../internal/resolve-backoff-delay.js';
 import { retryDiesOnAbortedSignal } from '../../internal/retry-dies-on-aborted-signal.js';
 import { resolveModel } from '../../internal/resolve-model.js';
@@ -21,7 +21,6 @@ import type {
   RetryableModelOptions,
   RetryAttempt,
   RetryContext,
-  RetryErrorAttempt,
   RetryResultAttempt,
   RetryTelemetrySettings,
 } from '../../types.js';
@@ -377,12 +376,11 @@ class RetryableCall extends BaseRetryableModel<LanguageModel> {
           }
 
           /**
-           * Build the error attempt. `options` is filled with a minimal valid
+           * Evaluate the failure. `options` is filled with a minimal valid
            * call-options object: the driver has no prompt of its own (the call
            * function owns it), and error retryables only read `error`/`model`.
            */
-          const errorAttempt: RetryErrorAttempt<LanguageModel> = {
-            type: 'error',
+          const { retryModel, attempt, finalError } = await evaluateError({
             error,
             model: attemptModel,
             options: {
@@ -390,33 +388,18 @@ class RetryableCall extends BaseRetryableModel<LanguageModel> {
               abortSignal,
               ...options,
             } as LanguageModelCallOptions,
-          };
+            attempts,
+            retries: this.options.retries,
+            onError: this.options.onError,
+          });
 
-          const updatedAttempts = [...attempts, errorAttempt];
-
-          const context: RetryContext<LanguageModel> = {
-            current: errorAttempt,
-            attempts: updatedAttempts,
-          };
-
-          this.options.onError?.(context);
-
-          const retryModel = await findRetryModel(
-            this.options.retries,
-            context,
-          );
-
-          attempts.push(errorAttempt);
+          attempts.push(attempt);
 
           /**
            * No retry matched. Surface the error, wrapped in a `RetryError`
            * when more than one attempt was made.
            */
           if (!retryModel) {
-            const finalError =
-              updatedAttempts.length > 1
-                ? prepareRetryError(error, updatedAttempts)
-                : error;
             recorder?.endAttempt({
               attempt: attemptNumber,
               outcome: 'failure',

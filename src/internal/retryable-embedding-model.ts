@@ -1,7 +1,6 @@
 import { delay } from '@ai-sdk/provider-utils';
 import { BaseRetryableModel } from './base-retryable-model.js';
-import { findRetryModel } from './find-retry-model.js';
-import { prepareRetryError } from './prepare-retry-error.js';
+import { evaluateError } from './evaluate-error.js';
 import { mergeEmbeddingModelCallOptions } from './merge-retry-call-options.js';
 import { resolveBackoffDelay } from './resolve-backoff-delay.js';
 import { retryDiesOnAbortedSignal } from './retry-dies-on-aborted-signal.js';
@@ -193,40 +192,24 @@ export class RetryableEmbeddingModel
     attempts: ReadonlyArray<RetryErrorAttempt<EmbeddingModel>>,
     callOptions: EmbeddingModelCallOptions,
   ) {
-    const errorAttempt: RetryErrorAttempt<EmbeddingModel> = {
-      type: 'error',
-      error: error,
+    const { retryModel, attempt, finalError } = await evaluateError({
+      error,
       model: this.currentModel,
       options: callOptions,
-    };
+      attempts,
+      retries: this.options.retries,
+      onError: this.options.onError,
+    });
 
     /**
-     * Save the current attempt
-     */
-    const updatedAttempts = [...attempts, errorAttempt];
-
-    const context: RetryContext<EmbeddingModel> = {
-      current: errorAttempt,
-      attempts: updatedAttempts,
-    };
-
-    this.options.onError?.(context);
-
-    const retryModel = await findRetryModel(this.options.retries, context);
-
-    /**
-     * Handler didn't return any models to try next, rethrow the error.
-     * If we retried the request, wrap the error into a `RetryError` for better visibility.
+     * No model to try next: surface the error (a `RetryError` wrapping all
+     * attempts when more than one was made).
      */
     if (!retryModel) {
-      if (updatedAttempts.length > 1) {
-        throw prepareRetryError(error, updatedAttempts);
-      }
-
-      throw error;
+      throw finalError;
     }
 
-    return { retryModel, attempt: errorAttempt };
+    return { retryModel, attempt };
   }
 
   async doEmbed(
