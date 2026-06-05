@@ -1,3 +1,5 @@
+import { isStreamContentPart } from '../../internal/guards.js';
+import type { LanguageModelStreamPart } from '../../types.js';
 import type { RetryCallAttempt } from '../call/create-retryable-call.js';
 
 /**
@@ -21,27 +23,15 @@ export type ClassifyStreamPart = (
 ) => StreamPartClassification;
 
 /**
- * Part types the AI SDK's `streamText`/`streamObject` `fullStream` emits that
- * represent actual output — the boundary past which an attempt is committed.
- */
-const STREAM_TEXT_CONTENT_TYPES = new Set([
-  'text-delta',
-  'reasoning-delta',
-  'tool-call',
-  'tool-input-start',
-  'tool-input-delta',
-  'tool-result',
-  'source',
-  'file',
-  'raw',
-]);
-
-/**
  * Default classifier for the AI SDK `fullStream` protocol. An `error` part
  * fails over with its error; an `abort` part (a `streamText`-level deadline)
  * fails over with the attempt's abort reason — the real `TimeoutError`/
  * `AbortError`, so error-based retryables can match it — rather than the part's
  * serialized `reason` string. Output parts commit; everything else is preamble.
+ *
+ * The commit boundary reuses {@link isStreamContentPart}, the same content-part
+ * set the AI SDK's `onChunk` fires on — so call-level and model-level retries
+ * stop failing over at exactly the same point.
  */
 export const classifyStreamTextPart: ClassifyStreamPart = (part, attempt) => {
   const type = (part as { type?: unknown }).type;
@@ -54,7 +44,7 @@ export const classifyStreamTextPart: ClassifyStreamPart = (part, attempt) => {
       error: attempt.abortSignal?.reason ?? new Error('stream aborted'),
     };
   }
-  if (typeof type === 'string' && STREAM_TEXT_CONTENT_TYPES.has(type)) {
+  if (isStreamContentPart(part as LanguageModelStreamPart)) {
     return 'content';
   }
   return 'preamble';
