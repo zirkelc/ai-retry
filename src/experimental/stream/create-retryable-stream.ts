@@ -1,10 +1,8 @@
-import type { LanguageModelResult } from '../../types.js';
 import {
   createRetryableCall,
   type RetryableCallOptions,
   type RetryCallAttempt,
   type RetryCallRunOptions,
-  type ResultRetry,
 } from '../call/create-retryable-call.js';
 import { detectStreamCommit } from './detect-stream-commit.js';
 
@@ -46,13 +44,11 @@ export type RetryableStream = <RESULT extends StreamResult>(
  * see issue #50). Once a content part is seen the attempt is committed and
  * cannot fail over.
  *
- * Result-based retries work too, at parity with the model layer: a `finish`
- * part seen before any content (e.g. a `content-filter` reason with no output)
- * is evaluated against the configured retryables as a result attempt. As below
- * the model layer, only *function* retryables (`contentFilterTriggered(...)`)
- * match a result attempt — a plain fallback model does not — and a no-match
- * returns the (empty) result rather than failing over. Schema-mismatch needs
- * the generated text, which only exists after commit, so it cannot apply here.
+ * Error-based only. Result-based conditions (a `content-filter` finish reason,
+ * a schema mismatch) are *not* handled here — they recover best below
+ * `streamText`, and they compose: pass a `createRetryable(...)` (with the
+ * relevant result-based retryables) as the `model`, and let this wrapper handle
+ * errors and deadlines around the call.
  *
  * Decoupled from `streamText`: it depends only on the result exposing a
  * re-readable `fullStream`. Pass a `streamFn` that returns a `streamText` (or
@@ -73,27 +69,7 @@ export function createRetryableStream(
   ) =>
     run<RESULT>(async (attempt) => {
       const result = await streamFn(attempt);
-      const finishReason = await detectStreamCommit(result.fullStream, attempt);
-
-      /**
-       * The stream finished before any content with a finish reason (e.g.
-       * `content-filter`). Hand it to the driver as a result-based retry so the
-       * configured retryables evaluate it the same way they would below the
-       * model layer. A minimal synthetic result is enough — result-based
-       * retryables read `finishReason` (and `content`, empty before commit).
-       */
-      if (finishReason !== undefined) {
-        const signal: ResultRetry<RESULT> = {
-          type: 'result',
-          result: {
-            content: [],
-            finishReason: { unified: finishReason, raw: undefined },
-          } as unknown as LanguageModelResult,
-          value: result,
-        };
-        throw signal;
-      }
-
+      await detectStreamCommit(result.fullStream, attempt);
       return result;
     }, runOptions);
 }
