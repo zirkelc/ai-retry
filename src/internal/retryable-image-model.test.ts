@@ -30,6 +30,7 @@ import { isErrorAttempt } from './guards.js';
 type OnError = Required<RetryableModelOptions<ImageModel>>['onError'];
 type OnRetry = Required<RetryableModelOptions<ImageModel>>['onRetry'];
 type OnSuccess = Required<RetryableModelOptions<ImageModel>>['onSuccess'];
+type OnFailure = Required<RetryableModelOptions<ImageModel>>['onFailure'];
 
 const noImageError = new NoImageGeneratedError({
   message: `No image generated`,
@@ -481,6 +482,85 @@ describe('generateImage', () => {
       await expect(result).rejects.toThrow();
 
       expect(onSuccessSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('onFailure', () => {
+    it('should call onFailure with raw error when no retry is available', async () => {
+      // Arrange
+      const baseModel = new MockImageModel({ doGenerate: nonRetryableError });
+      const onFailureSpy = vi.fn<OnFailure>();
+
+      // Act
+      const result = generateImage({
+        model: createRetryable({
+          model: baseModel,
+          retries: [],
+          onFailure: onFailureSpy,
+        }),
+        prompt: `A beautiful sunset`,
+      });
+      await expect(result).rejects.toThrow();
+
+      // Assert
+      expect(onFailureSpy).toHaveBeenCalledTimes(1);
+
+      const failureCall = onFailureSpy.mock.calls[0]![0];
+      expect(failureCall.current.type).toBe('error');
+      expect(failureCall.current.model).toBe(baseModel);
+      expect(failureCall.attempts.length).toBe(1);
+      expect(failureCall.error).toBe(nonRetryableError);
+    });
+
+    it('should call onFailure with RetryError when retries are exhausted', async () => {
+      // Arrange
+      const baseModel = new MockImageModel({ doGenerate: retryableError });
+      const fallbackModel = new MockImageModel({
+        doGenerate: nonRetryableError,
+      });
+      const onFailureSpy = vi.fn<OnFailure>();
+
+      // Act
+      const result = generateImage({
+        model: createRetryable({
+          model: baseModel,
+          retries: [fallbackModel],
+          onFailure: onFailureSpy,
+        }),
+        prompt: `A beautiful sunset`,
+      });
+      await expect(result).rejects.toThrow();
+
+      // Assert
+      expect(onFailureSpy).toHaveBeenCalledTimes(1);
+
+      const failureCall = onFailureSpy.mock.calls[0]![0];
+      expect(failureCall.current.type).toBe('error');
+      expect(failureCall.current.model).toBe(fallbackModel);
+      expect(failureCall.attempts.length).toBe(2);
+      expect(failureCall.error).toBeInstanceOf(RetryError);
+    });
+
+    it('should NOT call onFailure on success', async () => {
+      // Arrange
+      const baseModel = new MockImageModel({ doGenerate: mockImageResult });
+      const onFailureSpy = vi.fn<OnFailure>();
+      const onSuccessSpy = vi.fn<OnSuccess>();
+
+      // Act
+      await generateImage({
+        model: createRetryable({
+          model: baseModel,
+          retries: [],
+          onFailure: onFailureSpy,
+          onSuccess: onSuccessSpy,
+        }),
+        prompt: `A beautiful sunset`,
+      });
+
+      // Assert
+      expect(onSuccessSpy).toHaveBeenCalledTimes(1);
+      expect(onFailureSpy).not.toHaveBeenCalled();
     });
   });
 

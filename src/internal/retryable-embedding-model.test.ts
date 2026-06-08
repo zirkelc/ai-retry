@@ -18,6 +18,7 @@ import { isErrorAttempt } from './guards.js';
 type OnError = Required<RetryableModelOptions<EmbeddingModel>>['onError'];
 type OnRetry = Required<RetryableModelOptions<EmbeddingModel>>['onRetry'];
 type OnSuccess = Required<RetryableModelOptions<EmbeddingModel>>['onSuccess'];
+type OnFailure = Required<RetryableModelOptions<EmbeddingModel>>['onFailure'];
 
 describe('embed', () => {
   it('should embed successfully when no errors occur', async () => {
@@ -712,6 +713,85 @@ describe('embed', () => {
       await expect(result).rejects.toThrow();
 
       expect(onSuccessSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('onFailure', () => {
+    it('should call onFailure with raw error when no retry is available', async () => {
+      // Arrange
+      const baseModel = new MockEmbeddingModel({ doEmbed: nonRetryableError });
+      const onFailureSpy = vi.fn<OnFailure>();
+
+      // Act
+      const result = embed({
+        model: createRetryable({
+          model: baseModel,
+          retries: [],
+          onFailure: onFailureSpy,
+        }),
+        value: 'Hello!',
+      });
+      await expect(result).rejects.toThrow();
+
+      // Assert
+      expect(onFailureSpy).toHaveBeenCalledTimes(1);
+
+      const failureCall = onFailureSpy.mock.calls[0]![0];
+      expect(failureCall.current.type).toBe('error');
+      expect(failureCall.current.model).toBe(baseModel);
+      expect(failureCall.attempts.length).toBe(1);
+      expect(failureCall.error).toBe(nonRetryableError);
+    });
+
+    it('should call onFailure with RetryError when retries are exhausted', async () => {
+      // Arrange
+      const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
+      const fallbackModel = new MockEmbeddingModel({
+        doEmbed: nonRetryableError,
+      });
+      const onFailureSpy = vi.fn<OnFailure>();
+
+      // Act
+      const result = embed({
+        model: createRetryable({
+          model: baseModel,
+          retries: [fallbackModel],
+          onFailure: onFailureSpy,
+        }),
+        value: 'Hello!',
+      });
+      await expect(result).rejects.toThrow();
+
+      // Assert
+      expect(onFailureSpy).toHaveBeenCalledTimes(1);
+
+      const failureCall = onFailureSpy.mock.calls[0]![0];
+      expect(failureCall.current.type).toBe('error');
+      expect(failureCall.current.model).toBe(fallbackModel);
+      expect(failureCall.attempts.length).toBe(2);
+      expect(failureCall.error).toBeInstanceOf(RetryError);
+    });
+
+    it('should NOT call onFailure on success', async () => {
+      // Arrange
+      const baseModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
+      const onFailureSpy = vi.fn<OnFailure>();
+      const onSuccessSpy = vi.fn<OnSuccess>();
+
+      // Act
+      await embed({
+        model: createRetryable({
+          model: baseModel,
+          retries: [],
+          onFailure: onFailureSpy,
+          onSuccess: onSuccessSpy,
+        }),
+        value: 'Hello!',
+      });
+
+      // Assert
+      expect(onSuccessSpy).toHaveBeenCalledTimes(1);
+      expect(onFailureSpy).not.toHaveBeenCalled();
     });
   });
 
