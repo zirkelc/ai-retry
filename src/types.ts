@@ -217,6 +217,29 @@ export type SuccessContext<
 };
 
 /**
+ * The context provided to onFailure when an operation terminally fails
+ * (no retry matched, retries exhausted, or the retry itself failed).
+ */
+export type FailureContext<
+  MODEL extends ResolvableLanguageModel | EmbeddingModel | ImageModel,
+> = {
+  /**
+   * The final attempt that failed.
+   */
+  current: RetryErrorAttempt<ResolvedModel<MODEL>>;
+  /**
+   * All attempts made, including the final failed one.
+   */
+  attempts: Array<RetryAttempt<ResolvedModel<MODEL>>>;
+  /**
+   * The error surfaced to the caller. When more than one attempt was made,
+   * this is a `RetryError` wrapping every attempt error; otherwise the raw
+   * error.
+   */
+  error: unknown;
+};
+
+/**
  * Telemetry configuration for retry instrumentation.
  *
  * Mirrors the AI SDK's `experimental_telemetry` shape so the two can be
@@ -291,6 +314,14 @@ export interface RetryableModelOptions<
     context: RetryContext<MODEL>,
   ) => void | OnRetryOverrides<MODEL> | Promise<void | OnRetryOverrides<MODEL>>;
   onSuccess?: (context: SuccessContext<MODEL>) => void;
+  /**
+   * Called once when an operation terminally fails and the error could not
+   * be recovered by a retry: no retry matched, all retries were exhausted,
+   * or the retry itself failed. The counterpart to `onSuccess`.
+   *
+   * Not called when retries are disabled.
+   */
+  onFailure?: (context: FailureContext<MODEL>) => void;
 }
 
 /**
