@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.10.0](https://github.com/zirkelc/ai-retry/compare/v1.9.1...v1.10.0) (2026-06-08)
+
+
+### Features
+
+* add onFailure callback as counterpart to onSuccess ([#56](https://github.com/zirkelc/ai-retry/issues/56)) ([ffec8d2](https://github.com/zirkelc/ai-retry/commit/ffec8d25261572b17bd6950d618b7fde7c49f572))
+
 ## [1.9.1](https://github.com/zirkelc/ai-retry/compare/v1.9.0...v1.9.1) (2026-06-02)
 
 
