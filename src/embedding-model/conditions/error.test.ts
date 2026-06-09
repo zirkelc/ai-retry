@@ -2,7 +2,7 @@ import { APICallError, embed } from 'ai';
 import { describe, expect, it } from 'vitest';
 import {
   apiError,
-  createRetryable,
+  createRetryableModel,
   MockEmbeddingModel,
 } from '../../internal/test-utils.js';
 import type { EmbeddingModelEmbed } from '../../types.js';
@@ -24,7 +24,7 @@ describe('error (embedding)', () => {
 
       // Act
       const result = await embed({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [
             error(
@@ -51,7 +51,7 @@ describe('error (embedding)', () => {
 
       // Act
       const result = embed({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [
             error(
@@ -86,7 +86,7 @@ describe('error (embedding)', () => {
 
       // Act
       const result = await embed({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [error.isRetryable(true).retry()],
         }),
@@ -108,7 +108,7 @@ describe('error (embedding)', () => {
 
       // Act
       const result = await embed({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [error.isRetryable(false).switch({ model: retryModel })],
         }),
@@ -133,7 +133,7 @@ describe('error (embedding)', () => {
 
       // Act
       const result = await embed({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [error.statusCode(503).switch({ model: retryModel })],
         }),
@@ -158,7 +158,7 @@ describe('error (embedding)', () => {
 
       // Act
       const result = await embed({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [error.message('overloaded').switch({ model: retryModel })],
         }),

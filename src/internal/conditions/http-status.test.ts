@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   apiError,
   buildErrorContext,
-  createRetryable,
+  createRetryableModel,
   generateTextResult,
   MockLanguageModel,
 } from '../test-utils.js';
@@ -130,7 +130,7 @@ describe('httpStatus', () => {
     expect(matched).toBe(false);
   });
 
-  it(`should switch to fallback in createRetryable`, async () => {
+  it(`should switch to fallback in createRetryableModel`, async () => {
     // Arrange
     const baseModel = new MockLanguageModel({
       doGenerate: apiError({ statusCode: 529, message: 'overloaded' }),
@@ -141,7 +141,7 @@ describe('httpStatus', () => {
 
     // Act
     const result = await generateText({
-      model: createRetryable({
+      model: createRetryableModel({
         model: baseModel,
         retries: [
           httpStatus<MockLanguageModel>(529, 'overloaded').switch({

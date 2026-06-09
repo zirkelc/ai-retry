@@ -12,7 +12,7 @@ import { describe, expect, it } from 'vitest';
 import {
   chunksToText,
   contentFilterResult,
-  createRetryable,
+  createRetryableModel,
   MockLanguageModel,
   mockResult,
   mockResultText,
@@ -74,7 +74,7 @@ describe('contentFilterTriggered', () => {
 
       // Act
       const result = await generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [contentFilterTriggered(retryModel)],
         }),
@@ -95,7 +95,7 @@ describe('contentFilterTriggered', () => {
 
       // Act
       const result = await generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [contentFilterTriggered(retryModel)],
         }),
@@ -118,7 +118,7 @@ describe('contentFilterTriggered', () => {
 
       // Act
       const result = await generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [contentFilterTriggered(retryModel)],
         }),
@@ -158,7 +158,7 @@ describe('contentFilterTriggered', () => {
 
       // Act
       const result = generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [contentFilterTriggered(retryModel)],
         }),
@@ -190,7 +190,7 @@ describe('contentFilterTriggered', () => {
 
       // Act
       const result = streamText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [contentFilterTriggered(retryModel)],
         }),
@@ -221,7 +221,7 @@ describe('contentFilterTriggered', () => {
 
       // Act
       const result = streamText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [contentFilterTriggered(retryModel)],
         }),
@@ -257,7 +257,7 @@ describe('contentFilterTriggered', () => {
 
       // Act
       const result = streamText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [contentFilterTriggered(retryModel)],
         }),
@@ -308,7 +308,7 @@ describe('contentFilterTriggered', () => {
 
       // Act
       const result = streamText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [contentFilterTriggered(retryModel)],
         }),

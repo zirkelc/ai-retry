@@ -2,7 +2,7 @@ import { embed } from 'ai';
 import { describe, expect, it } from 'vitest';
 import {
   abortError,
-  createRetryable,
+  createRetryableModel,
   MockEmbeddingModel,
   timeoutError,
 } from '../../internal/test-utils.js';
@@ -23,7 +23,7 @@ describe('timeout (embedding)', () => {
 
       // Act
       const result = await embed({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [timeout().switch({ model: retryModel })],
         }),
@@ -44,7 +44,7 @@ describe('timeout (embedding)', () => {
 
       // Act
       const result = embed({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [timeout().switch({ model: retryModel })],
         }),

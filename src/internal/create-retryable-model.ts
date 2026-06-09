@@ -18,21 +18,21 @@ import { resolveLanguageModel } from './resolve-model.js';
  * entry points (`ai-retry/<family>-model`) resolve strings for embedding
  * and image models too.
  */
-export function createRetryable<MODEL extends LanguageModel>(
+export function createRetryableModel<MODEL extends LanguageModel>(
   options: Omit<RetryableModelOptions<LanguageModel>, 'model'> & {
     model: GatewayLanguageModelId;
   },
 ): LanguageModel;
-export function createRetryable<MODEL extends LanguageModel>(
+export function createRetryableModel<MODEL extends LanguageModel>(
   options: RetryableModelOptions<MODEL>,
 ): LanguageModel;
-export function createRetryable<MODEL extends EmbeddingModel>(
+export function createRetryableModel<MODEL extends EmbeddingModel>(
   options: RetryableModelOptions<MODEL>,
 ): EmbeddingModel;
-export function createRetryable<MODEL extends ImageModel>(
+export function createRetryableModel<MODEL extends ImageModel>(
   options: RetryableModelOptions<MODEL>,
 ): ImageModel;
-export function createRetryable(
+export function createRetryableModel(
   options:
     | RetryableModelOptions<LanguageModel>
     | RetryableModelOptions<EmbeddingModel>

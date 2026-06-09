@@ -1,6 +1,6 @@
 import { describe, expectTypeOf, it } from 'vitest';
 import {
-  createRetryable,
+  createRetryableModel,
   MockEmbeddingModel,
   MockImageModel,
   MockLanguageModel,
@@ -13,7 +13,7 @@ describe('retryAfterDelay types', () => {
     const model = new MockLanguageModel();
     const retryable = retryAfterDelay<MockLanguageModel>({ maxAttempts: 3 });
 
-    const retryableModel = createRetryable({
+    const retryableModel = createRetryableModel({
       model,
       retries: [retryable],
     });
@@ -25,7 +25,7 @@ describe('retryAfterDelay types', () => {
     const model = new MockEmbeddingModel();
     const retryable = retryAfterDelay<MockEmbeddingModel>({ maxAttempts: 3 });
 
-    const retryableModel = createRetryable({
+    const retryableModel = createRetryableModel({
       model,
       retries: [retryable],
     });
@@ -36,7 +36,7 @@ describe('retryAfterDelay types', () => {
   it('should accept model string', () => {
     const retryable = retryAfterDelay<MockLanguageModel>({});
 
-    const retryableModel = createRetryable({
+    const retryableModel = createRetryableModel({
       model: 'openai/gpt-4.1',
       retries: [retryable],
     });
@@ -48,7 +48,7 @@ describe('retryAfterDelay types', () => {
     const model = new MockImageModel();
     const retryable = retryAfterDelay<MockImageModel>({ maxAttempts: 3 });
 
-    const retryableModel = createRetryable({
+    const retryableModel = createRetryableModel({
       model,
       retries: [retryable],
     });

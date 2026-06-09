@@ -15,7 +15,7 @@ import {
 import { describe, expect, it, vi } from 'vitest';
 import {
   chunksToText,
-  createRetryable,
+  createRetryableModel,
   MockEmbeddingModel,
   mockEmbeddings,
   MockImageModel,
@@ -66,7 +66,7 @@ describe('serviceOverloaded', () => {
 
       // Act
       const result = await generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [serviceOverloaded(retryModel)],
         }),
@@ -85,7 +85,7 @@ describe('serviceOverloaded', () => {
 
       // Act
       const result = await generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [serviceOverloaded(retryModel)],
         }),
@@ -105,7 +105,7 @@ describe('serviceOverloaded', () => {
 
       // Act
       const result = await generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [serviceOverloaded(retryModel)],
         }),
@@ -144,7 +144,7 @@ describe('serviceOverloaded', () => {
 
       // Act
       const result = generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [serviceOverloaded(retryModel)],
         }),
@@ -176,7 +176,7 @@ describe('serviceOverloaded', () => {
 
       // Act
       const result = streamText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [serviceOverloaded(retryModel)],
         }),
@@ -207,7 +207,7 @@ describe('serviceOverloaded', () => {
 
       // Act
       const result = streamText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [serviceOverloaded(retryModel)],
         }),
@@ -257,7 +257,7 @@ describe('serviceOverloaded', () => {
 
       // Act
       const result = streamText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [serviceOverloaded(retryModel)],
         }),
@@ -318,7 +318,7 @@ describe('serviceOverloaded', () => {
 
         // Act
         const result = streamText({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [serviceOverloaded(retryModel)],
           }),
@@ -360,7 +360,7 @@ describe('serviceOverloaded', () => {
 
         // Act
         const result = streamText({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [serviceOverloaded(retryModel)],
           }),
@@ -405,7 +405,7 @@ describe('serviceOverloaded', () => {
 
         // Act
         const result = streamText({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [serviceOverloaded(retryModel)],
           }),
@@ -434,7 +434,7 @@ describe('serviceOverloaded', () => {
 
       // Act
       const result = await embed({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [serviceOverloaded(retryModel)],
         }),
@@ -453,7 +453,7 @@ describe('serviceOverloaded', () => {
 
       // Act
       const result = await embed({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [serviceOverloaded(retryModel)],
         }),
@@ -473,7 +473,7 @@ describe('serviceOverloaded', () => {
 
       // Act
       const result = await embed({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [serviceOverloaded(retryModel)],
         }),
@@ -512,7 +512,7 @@ describe('serviceOverloaded', () => {
 
       // Act
       const result = embed({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [serviceOverloaded(retryModel)],
         }),
@@ -535,7 +535,7 @@ describe('serviceOverloaded', () => {
 
       // Act
       const result = await generateImage({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [serviceOverloaded(retryModel)],
         }),
@@ -555,7 +555,7 @@ describe('serviceOverloaded', () => {
 
       // Act
       const result = await generateImage({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [serviceOverloaded(retryModel)],
         }),
@@ -593,7 +593,7 @@ describe('serviceOverloaded', () => {
 
       // Act
       const result = generateImage({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [serviceOverloaded(retryModel)],
         }),

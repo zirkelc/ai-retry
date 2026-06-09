@@ -1,6 +1,6 @@
 import { describe, expectTypeOf, it } from 'vitest';
 import {
-  createRetryable,
+  createRetryableModel,
   MockEmbeddingModel,
   MockImageModel,
   MockLanguageModel,
@@ -13,7 +13,7 @@ describe('requestNotRetryable', () => {
     const model = new MockLanguageModel();
     const retryable = requestNotRetryable(model);
 
-    const retryableModel = createRetryable({
+    const retryableModel = createRetryableModel({
       model,
       retries: [retryable],
     });
@@ -25,7 +25,7 @@ describe('requestNotRetryable', () => {
     const model = new MockEmbeddingModel();
     const retryable = requestNotRetryable(model);
 
-    const retryableModel = createRetryable({
+    const retryableModel = createRetryableModel({
       model,
       retries: [retryable],
     });
@@ -37,7 +37,7 @@ describe('requestNotRetryable', () => {
     const model = new MockLanguageModel();
     const retryable = requestNotRetryable(model, { maxAttempts: 3 });
 
-    const retryableModel = createRetryable({
+    const retryableModel = createRetryableModel({
       model,
       retries: [retryable],
     });
@@ -49,7 +49,7 @@ describe('requestNotRetryable', () => {
     const model = new MockEmbeddingModel();
     const retryable = requestNotRetryable(model, { maxAttempts: 3 });
 
-    const retryableModel = createRetryable({
+    const retryableModel = createRetryableModel({
       model,
       retries: [retryable],
     });
@@ -60,7 +60,7 @@ describe('requestNotRetryable', () => {
   it('should accept model string', () => {
     const retryable = requestNotRetryable('openai/gpt-4.1');
 
-    const retryableModel = createRetryable({
+    const retryableModel = createRetryableModel({
       model: 'openai/gpt-4.1',
       retries: [retryable],
     });
@@ -72,7 +72,7 @@ describe('requestNotRetryable', () => {
     const model = new MockImageModel();
     const retryable = requestNotRetryable(model);
 
-    const retryableModel = createRetryable({
+    const retryableModel = createRetryableModel({
       model,
       retries: [retryable],
     });
@@ -84,7 +84,7 @@ describe('requestNotRetryable', () => {
     const model = new MockImageModel();
     const retryable = requestNotRetryable(model, { maxAttempts: 3 });
 
-    const retryableModel = createRetryable({
+    const retryableModel = createRetryableModel({
       model,
       retries: [retryable],
     });

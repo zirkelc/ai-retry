@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildResultContext,
   contentFilterResult,
-  createRetryable,
+  createRetryableModel,
   generateTextResult,
   MockLanguageModel,
 } from '../test-utils.js';
@@ -42,7 +42,7 @@ describe('finishReason', () => {
     expect(matched).toBe(true);
   });
 
-  it(`should switch in createRetryable when finishReason hits`, async () => {
+  it(`should switch in createRetryableModel when finishReason hits`, async () => {
     // Arrange
     const baseModel = new MockLanguageModel({
       doGenerate: contentFilterResult,
@@ -53,7 +53,7 @@ describe('finishReason', () => {
 
     // Act
     const result = await generateText({
-      model: createRetryable({
+      model: createRetryableModel({
         model: baseModel,
         retries: [finishReason('content-filter').switch({ model: fallback })],
       }),

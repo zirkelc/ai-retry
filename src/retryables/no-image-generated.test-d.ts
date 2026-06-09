@@ -1,5 +1,5 @@
 import { describe, expectTypeOf, it } from 'vitest';
-import { createRetryable, MockImageModel } from '../internal/test-utils.js';
+import { createRetryableModel, MockImageModel } from '../internal/test-utils.js';
 import type { Retryable } from '../types.js';
 import { noImageGenerated } from './no-image-generated.js';
 
@@ -8,7 +8,7 @@ describe('noImageGenerated', () => {
     const model = new MockImageModel();
     const retryable = noImageGenerated(model);
 
-    const retryableModel = createRetryable({
+    const retryableModel = createRetryableModel({
       model,
       retries: [retryable],
     });
@@ -20,7 +20,7 @@ describe('noImageGenerated', () => {
     const model = new MockImageModel();
     const retryable = noImageGenerated(model, { maxAttempts: 3 });
 
-    const retryableModel = createRetryable({
+    const retryableModel = createRetryableModel({
       model,
       retries: [retryable],
     });

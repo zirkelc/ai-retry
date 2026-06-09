@@ -12,7 +12,7 @@ import {
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   chunksToText,
-  createRetryable,
+  createRetryableModel,
   MockEmbeddingModel,
   mockEmbeddings,
   MockImageModel,
@@ -125,7 +125,7 @@ describe('retryAfterDelay', () => {
       const retryModel = new MockLanguageModel({ doGenerate: mockResult });
 
       const promise = generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [retryAfterDelay({ delay: 1000 })],
         }),
@@ -153,7 +153,7 @@ describe('retryAfterDelay', () => {
       });
 
       const promise = generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [retryAfterDelay({ delay: 1000 })],
         }),
@@ -180,7 +180,7 @@ describe('retryAfterDelay', () => {
       });
 
       const promise = generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [retryAfterDelay({ delay: 1000 })],
         }),
@@ -207,7 +207,7 @@ describe('retryAfterDelay', () => {
       });
 
       const promise = generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [retryAfterDelay({ delay: 1000 })],
         }),
@@ -234,7 +234,7 @@ describe('retryAfterDelay', () => {
       });
 
       const promise = generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [retryAfterDelay({ delay: 1000 })],
         }),
@@ -254,7 +254,7 @@ describe('retryAfterDelay', () => {
       });
 
       const result = generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [retryAfterDelay({ delay: 1000 })],
         }),
@@ -279,7 +279,7 @@ describe('retryAfterDelay', () => {
       });
 
       const promise = generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [
             retryAfterDelay({
@@ -303,7 +303,7 @@ describe('retryAfterDelay', () => {
       const baseModel = new MockLanguageModel({ doGenerate: rateLimitError });
 
       const result = generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [retryAfterDelay({ delay: 1000, maxAttempts: 2 })],
         }),
@@ -331,7 +331,7 @@ describe('retryAfterDelay', () => {
       });
 
       const promise = generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [retryAfterDelay({ delay: 100, maxAttempts: 5 })],
         }),
@@ -372,7 +372,7 @@ describe('retryAfterDelay', () => {
       };
 
       const promise = generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [
             fallbackOnError,
@@ -405,7 +405,7 @@ describe('retryAfterDelay', () => {
       });
 
       const result = streamText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [retryAfterDelay({ delay: 1000 })],
         }),
@@ -434,7 +434,7 @@ describe('retryAfterDelay', () => {
       });
 
       const result = streamText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [retryAfterDelay({ delay: 1000 })],
         }),
@@ -477,7 +477,7 @@ describe('retryAfterDelay', () => {
       };
 
       const result = streamText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [
             fallbackOnError,
@@ -501,7 +501,7 @@ describe('retryAfterDelay', () => {
       const baseModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
 
       const promise = embed({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [retryAfterDelay({ delay: 1000 })],
         }),
@@ -528,7 +528,7 @@ describe('retryAfterDelay', () => {
       });
 
       const promise = embed({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [retryAfterDelay({ delay: 1000 })],
         }),
@@ -555,7 +555,7 @@ describe('retryAfterDelay', () => {
       });
 
       const promise = embed({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [retryAfterDelay({ delay: 1000 })],
         }),
@@ -596,7 +596,7 @@ describe('retryAfterDelay', () => {
       };
 
       const promise = embed({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [
             fallbackOnError,
@@ -622,7 +622,7 @@ describe('retryAfterDelay', () => {
 
       // Act
       const promise = generateImage({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [retryAfterDelay({ delay: 1000 })],
         }),
@@ -652,7 +652,7 @@ describe('retryAfterDelay', () => {
 
       // Act
       const promise = generateImage({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [retryAfterDelay({ delay: 1000 })],
         }),
@@ -696,7 +696,7 @@ describe('retryAfterDelay', () => {
 
       // Act
       const promise = generateImage({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [
             fallbackOnError,

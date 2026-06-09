@@ -1,7 +1,7 @@
 import { APICallError, generateImage, NoImageGeneratedError } from 'ai';
 import { describe, expect, it, vi } from 'vitest';
 import {
-  createRetryable,
+  createRetryableModel,
   MockImageModel,
   mockImageResult,
 } from '../internal/test-utils.js';
@@ -42,7 +42,7 @@ describe('noImageGenerated', () => {
 
       // Act
       const result = await generateImage({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [noImageGenerated(retryModel)],
         }),
@@ -62,7 +62,7 @@ describe('noImageGenerated', () => {
 
       // Act
       const result = await generateImage({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [noImageGenerated(retryModel)],
         }),
@@ -82,7 +82,7 @@ describe('noImageGenerated', () => {
 
       // Act
       const result = generateImage({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [noImageGenerated(retryModel)],
         }),
@@ -104,7 +104,7 @@ describe('noImageGenerated', () => {
 
       // Act
       await generateImage({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [noImageGenerated(retryModel)],
           onError,
@@ -125,7 +125,7 @@ describe('noImageGenerated', () => {
 
       // Act
       await generateImage({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [noImageGenerated(retryModel)],
           onRetry,

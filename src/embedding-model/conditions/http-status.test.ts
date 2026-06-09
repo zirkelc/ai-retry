@@ -2,7 +2,7 @@ import { APICallError, embed } from 'ai';
 import { describe, expect, it } from 'vitest';
 import {
   apiError,
-  createRetryable,
+  createRetryableModel,
   MockEmbeddingModel,
 } from '../../internal/test-utils.js';
 import type { EmbeddingModelEmbed } from '../../types.js';
@@ -24,7 +24,7 @@ describe('httpStatus (embedding)', () => {
 
       // Act
       const result = await embed({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [httpStatus(529).switch({ model: retryModel })],
         }),
@@ -50,7 +50,7 @@ describe('httpStatus (embedding)', () => {
 
       // Act
       const result = await embed({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [httpStatus('overloaded').switch({ model: retryModel })],
         }),
@@ -73,7 +73,7 @@ describe('httpStatus (embedding)', () => {
 
       // Act
       const result = await embed({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [httpStatus(/^5\d\d$/).switch({ model: retryModel })],
         }),
@@ -96,7 +96,7 @@ describe('httpStatus (embedding)', () => {
 
       // Act
       const result = embed({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [
             httpStatus(529, 'overloaded').switch({ model: retryModel }),

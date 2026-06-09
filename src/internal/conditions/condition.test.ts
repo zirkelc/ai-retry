@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   apiError,
   buildErrorContext,
-  createRetryable,
+  createRetryableModel,
   generateTextResult,
   MockLanguageModel,
 } from '../test-utils.js';
@@ -233,7 +233,7 @@ describe('Condition', () => {
     });
   });
 
-  describe('integration with createRetryable', () => {
+  describe('integration with createRetryableModel', () => {
     it(`should switch to fallback when condition matches`, async () => {
       // Arrange
       const baseModel = new MockLanguageModel({
@@ -246,7 +246,7 @@ describe('Condition', () => {
 
       // Act
       const result = await generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [cond.switch({ model: fallback })],
         }),

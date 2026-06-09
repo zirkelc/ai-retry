@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import {
   abortError,
   chunksToText,
-  createRetryable,
+  createRetryableModel,
   generateTextResult,
   MockLanguageModel,
   timeoutError,
@@ -43,7 +43,7 @@ describe('aborted', () => {
 
       // Act
       const result = await generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [aborted().switch({ model: retryModel, timeout: 60_000 })],
         }),
@@ -66,7 +66,7 @@ describe('aborted', () => {
 
       // Act
       const result = generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [aborted().switch({ model: retryModel, timeout: 60_000 })],
         }),
@@ -92,7 +92,7 @@ describe('aborted', () => {
 
       // Act
       const result = streamText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [aborted().switch({ model: retryModel, timeout: 60_000 })],
         }),

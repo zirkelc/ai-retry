@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import {
   apiError,
   chunksToText,
-  createRetryable,
+  createRetryableModel,
   generateTextResult,
   MockLanguageModel,
 } from '../../internal/test-utils.js';
@@ -44,7 +44,7 @@ describe('error', () => {
 
       // Act
       const result = await generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [
             error(
@@ -73,7 +73,7 @@ describe('error', () => {
 
       // Act
       const result = generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [
             error(
@@ -105,7 +105,7 @@ describe('error', () => {
 
       // Act
       const result = streamText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [
             error(
@@ -145,7 +145,7 @@ describe('error', () => {
 
       // Act
       const result = await generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [error.isRetryable(true).retry()],
         }),
@@ -169,7 +169,7 @@ describe('error', () => {
 
       // Act
       const result = await generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [error.isRetryable(false).switch({ model: retryModel })],
         }),
@@ -196,7 +196,7 @@ describe('error', () => {
 
       // Act
       const result = await generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [error.statusCode(503).switch({ model: retryModel })],
         }),
@@ -221,7 +221,7 @@ describe('error', () => {
 
       // Act
       const result = await generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [error.statusCode(/^5\d\d$/).switch({ model: retryModel })],
         }),
@@ -248,7 +248,7 @@ describe('error', () => {
 
       // Act
       const result = await generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [error.message('overloaded').switch({ model: retryModel })],
         }),

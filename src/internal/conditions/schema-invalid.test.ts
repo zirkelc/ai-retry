@@ -2,7 +2,7 @@ import { generateText, Output } from 'ai';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import {
-  createRetryable,
+  createRetryableModel,
   generateTextResult,
   MockLanguageModel,
 } from '../test-utils.js';
@@ -31,7 +31,7 @@ describe('schemaInvalid', () => {
 
     // Act
     const result = await generateText({
-      model: createRetryable({
+      model: createRetryableModel({
         model: baseModel,
         retries: [schemaInvalid().switch({ model: fallback })],
       }),
@@ -57,7 +57,7 @@ describe('schemaInvalid', () => {
 
     // Act
     const result = await generateText({
-      model: createRetryable({
+      model: createRetryableModel({
         model: baseModel,
         retries: [schemaInvalid().switch({ model: fallback })],
       }),
@@ -83,7 +83,7 @@ describe('schemaInvalid', () => {
 
     // Act
     const result = await generateText({
-      model: createRetryable({
+      model: createRetryableModel({
         model: baseModel,
         retries: [schemaInvalid().switch({ model: fallback })],
       }),
@@ -109,7 +109,7 @@ describe('schemaInvalid', () => {
 
     // Act
     const result = await generateText({
-      model: createRetryable({
+      model: createRetryableModel({
         model: baseModel,
         retries: [schemaInvalid().switch({ model: fallback })],
       }),

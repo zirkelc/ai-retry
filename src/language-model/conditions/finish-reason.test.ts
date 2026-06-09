@@ -1,7 +1,7 @@
 import { generateText } from 'ai';
 import { describe, expect, it } from 'vitest';
 import {
-  createRetryable,
+  createRetryableModel,
   generateTextResult,
   MockLanguageModel,
 } from '../../internal/test-utils.js';
@@ -33,7 +33,7 @@ describe('finishReason', () => {
 
       // Act
       const out = await generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [
             finishReason('content-filter').switch({ model: retryModel }),
@@ -60,7 +60,7 @@ describe('finishReason', () => {
 
       // Act
       const out = await generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [
             finishReason('content-filter').switch({ model: retryModel }),
@@ -87,7 +87,7 @@ describe('finishReason', () => {
 
       // Act
       const out = await generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [
             finishReason('content-filter', 'length').switch({

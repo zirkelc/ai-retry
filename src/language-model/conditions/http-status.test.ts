@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import {
   apiError,
   chunksToText,
-  createRetryable,
+  createRetryableModel,
   generateTextResult,
   MockLanguageModel,
 } from '../../internal/test-utils.js';
@@ -44,7 +44,7 @@ describe('httpStatus', () => {
 
       // Act
       const result = await generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [httpStatus(529).switch({ model: retryModel })],
         }),
@@ -72,7 +72,7 @@ describe('httpStatus', () => {
 
       // Act
       const result = await generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [httpStatus('overloaded').switch({ model: retryModel })],
         }),
@@ -97,7 +97,7 @@ describe('httpStatus', () => {
 
       // Act
       const result = await generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [httpStatus(/^5\d\d$/).switch({ model: retryModel })],
         }),
@@ -122,7 +122,7 @@ describe('httpStatus', () => {
 
       // Act
       const result = generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [
             httpStatus(529, 'overloaded').switch({ model: retryModel }),
@@ -152,7 +152,7 @@ describe('httpStatus', () => {
 
       // Act
       const result = streamText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [httpStatus(529).switch({ model: retryModel })],
         }),

@@ -1,7 +1,7 @@
 import { APICallError, embed, RetryError } from 'ai';
 import { describe, expect, it, vi } from 'vitest';
 import {
-  createRetryable,
+  createRetryableModel,
   MockEmbeddingModel,
   mockEmbeddings,
   nonRetryableError,
@@ -26,7 +26,7 @@ describe('embed', () => {
     const baseModel = new MockEmbeddingModel({
       doEmbed: mockEmbeddings,
     });
-    const retryableModel = createRetryable({
+    const retryableModel = createRetryableModel({
       model: baseModel,
       retries: [],
     });
@@ -63,7 +63,7 @@ describe('embed', () => {
 
         // Act
         const result = await embed({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [fallbackRetryable],
           }),
@@ -89,7 +89,7 @@ describe('embed', () => {
 
         // Act
         const result = await embed({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [fallbackModel1, fallbackModel2],
           }),
@@ -125,7 +125,7 @@ describe('embed', () => {
 
         // Act
         const result = await embed({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [fallbackModel1, fallbackRetryable],
           }),
@@ -153,7 +153,7 @@ describe('embed', () => {
         return { model: fallbackModel, maxAttempts: 1 };
       };
 
-      const retryableModel = createRetryable({
+      const retryableModel = createRetryableModel({
         model: baseModel,
         retries: [fallbackRetryable],
         disabled: true,
@@ -183,7 +183,7 @@ describe('embed', () => {
         return { model: fallbackModel, maxAttempts: 1 };
       };
 
-      const retryableModel = createRetryable({
+      const retryableModel = createRetryableModel({
         model: baseModel,
         retries: [fallbackRetryable],
         disabled: false,
@@ -214,7 +214,7 @@ describe('embed', () => {
 
       const disabledFn = vi.fn(() => true);
 
-      const retryableModel = createRetryable({
+      const retryableModel = createRetryableModel({
         model: baseModel,
         retries: [fallbackRetryable],
         disabled: disabledFn,
@@ -247,7 +247,7 @@ describe('embed', () => {
 
       const disabledFn = vi.fn(() => false);
 
-      const retryableModel = createRetryable({
+      const retryableModel = createRetryableModel({
         model: baseModel,
         retries: [fallbackRetryable],
         disabled: disabledFn,
@@ -277,7 +277,7 @@ describe('embed', () => {
         return { model: fallbackModel, maxAttempts: 1 };
       };
 
-      const retryableModel = createRetryable({
+      const retryableModel = createRetryableModel({
         model: baseModel,
         retries: [fallbackRetryable],
         // disabled is undefined by default
@@ -305,7 +305,7 @@ describe('embed', () => {
 
       // Act
       await embed({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [fallbackModel],
           onError: onErrorSpy,
@@ -334,7 +334,7 @@ describe('embed', () => {
 
       // Act
       await embed({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [fallbackModel, finalModel],
           onError: onErrorSpy,
@@ -369,7 +369,7 @@ describe('embed', () => {
 
       // Act
       await embed({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [fallbackModel],
           onError: onErrorSpy,
@@ -403,7 +403,7 @@ describe('embed', () => {
 
       // Act
       await embed({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [],
           onError: onErrorSpy,
@@ -425,7 +425,7 @@ describe('embed', () => {
 
       // Act
       await embed({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [fallbackModel],
           onRetry: onRetrySpy,
@@ -459,7 +459,7 @@ describe('embed', () => {
 
       // Act
       await embed({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [fallbackModel1, fallbackModel2],
           onRetry: onRetrySpy,
@@ -498,7 +498,7 @@ describe('embed', () => {
 
       // Act
       await embed({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [],
           onRetry: onRetrySpy,
@@ -520,7 +520,7 @@ describe('embed', () => {
 
         // Act
         await embed({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [fallbackModel],
             onRetry: () => ({ options: { values: ['sanitized'] } }),
@@ -544,7 +544,7 @@ describe('embed', () => {
 
         // Act
         await embed({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [fallbackModel],
             onRetry: () => ({
@@ -572,7 +572,7 @@ describe('embed', () => {
 
         // Act
         await embed({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [
               { model: fallbackModel, options: { values: ['from-retry'] } },
@@ -597,7 +597,7 @@ describe('embed', () => {
 
         // Act
         await embed({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [
               { model: fallbackModel, options: { values: ['from-retry'] } },
@@ -622,7 +622,7 @@ describe('embed', () => {
 
         // Act
         await embed({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [fallbackModel],
             onRetry: async () => {
@@ -649,7 +649,7 @@ describe('embed', () => {
 
       // Act
       await embed({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [],
           onSuccess: onSuccessSpy,
@@ -675,7 +675,7 @@ describe('embed', () => {
 
       // Act
       await embed({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [fallbackModel],
           onSuccess: onSuccessSpy,
@@ -703,7 +703,7 @@ describe('embed', () => {
 
       // Act & Assert
       const result = embed({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [fallbackModel],
           onSuccess: onSuccessSpy,
@@ -724,7 +724,7 @@ describe('embed', () => {
 
       // Act
       const result = embed({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [],
           onFailure: onFailureSpy,
@@ -753,7 +753,7 @@ describe('embed', () => {
 
       // Act
       const result = embed({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [fallbackModel],
           onFailure: onFailureSpy,
@@ -780,7 +780,7 @@ describe('embed', () => {
 
       // Act
       await embed({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [],
           onFailure: onFailureSpy,
@@ -804,7 +804,7 @@ describe('embed', () => {
 
       // Act
       await embed({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [fallbackModel],
           onError: onErrorSpy,
@@ -834,7 +834,7 @@ describe('embed', () => {
 
       // Act
       await embed({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [
             { model: fallbackModel, options: { values: overrideValues } },
@@ -877,7 +877,7 @@ describe('embed', () => {
 
         // Act
         await embed({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [
               fallbackModel1,
@@ -908,7 +908,7 @@ describe('embed', () => {
 
         // Act
         await embed({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [
               // Retryable  with different maxAttempts
@@ -939,7 +939,7 @@ describe('embed', () => {
         // Act & Assert
         try {
           await embed({
-            model: createRetryable({
+            model: createRetryableModel({
               model: baseModel,
               retries: [fallbackModel],
             }),
@@ -961,7 +961,7 @@ describe('embed', () => {
         // Act & Assert
         try {
           await embed({
-            model: createRetryable({
+            model: createRetryableModel({
               model: baseModel,
               retries: [],
             }),
@@ -988,7 +988,7 @@ describe('embed', () => {
 
         // Act
         const promise = embed({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [{ model: fallbackModel, delay: delayMs }],
           }),
@@ -1020,7 +1020,7 @@ describe('embed', () => {
 
         // Act
         const promise = embed({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [
               { model: fallbackModel1, delay: delay1 },
@@ -1050,7 +1050,7 @@ describe('embed', () => {
 
         // Act
         await embed({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [{ model: fallbackModel }],
           }),
@@ -1075,7 +1075,7 @@ describe('embed', () => {
 
         // Act
         await embed({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [
               {
@@ -1142,7 +1142,7 @@ describe('embed', () => {
 
         // Act
         await embed({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [
               {
@@ -1180,7 +1180,7 @@ describe('embed', () => {
 
         // Act
         await embed({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [
               { model: fallbackModel, options: { values: overrideValues } },
@@ -1208,7 +1208,7 @@ describe('embed', () => {
 
         // Act
         await embed({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [
               { model: fallbackModel, options: { headers: retryHeaders } },
@@ -1243,7 +1243,7 @@ describe('embed', () => {
       // Act & Assert
       try {
         await embed({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [fallbackModel1, fallbackModel2],
           }),
@@ -1271,7 +1271,7 @@ describe('embed', () => {
       // Act & Assert
       try {
         await embed({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [], // No retry models
           }),
@@ -1296,7 +1296,7 @@ describe('embed', () => {
       // Act & Assert
       try {
         await embed({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [() => undefined],
           }),
@@ -1329,7 +1329,7 @@ describe('embed', () => {
           doEmbed: mockEmbeddings,
         });
 
-        const retryableModel = createRetryable({
+        const retryableModel = createRetryableModel({
           model: baseModel,
           retries: [{ model: fallbackModel, maxAttempts: 1 }],
         });
@@ -1362,7 +1362,7 @@ describe('embed', () => {
           doEmbed: mockEmbeddings,
         });
 
-        const retryableModel = createRetryable({
+        const retryableModel = createRetryableModel({
           model: baseModel,
           retries: [{ model: fallbackModel, maxAttempts: 1 }],
           reset: `after-2-requests`,
@@ -1398,7 +1398,7 @@ describe('embed', () => {
           doEmbed: mockEmbeddings,
         });
 
-        const retryableModel = createRetryable({
+        const retryableModel = createRetryableModel({
           model: baseModel,
           retries: [{ model: fallbackModel, maxAttempts: 1 }],
           reset: `after-3-requests`,
@@ -1429,7 +1429,7 @@ describe('embed', () => {
           doEmbed: mockEmbeddings,
         });
 
-        const retryableModel = createRetryable({
+        const retryableModel = createRetryableModel({
           model: baseModel,
           retries: [
             { model: fallbackModel1, maxAttempts: 1 },
@@ -1467,7 +1467,7 @@ describe('embed', () => {
           doEmbed: mockEmbeddings,
         });
 
-        const retryableModel = createRetryable({
+        const retryableModel = createRetryableModel({
           model: baseModel,
           retries: [{ model: fallbackModel, maxAttempts: 1 }],
           reset: `after-5-seconds`,

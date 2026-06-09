@@ -2,7 +2,7 @@ import { APICallError, generateImage } from 'ai';
 import { describe, expect, it } from 'vitest';
 import {
   apiError,
-  createRetryable,
+  createRetryableModel,
   MockImageModel,
   validBase64Image,
 } from '../../internal/test-utils.js';
@@ -30,7 +30,7 @@ describe('error (image)', () => {
 
       // Act
       const out = await generateImage({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [
             error(
@@ -57,7 +57,7 @@ describe('error (image)', () => {
 
       // Act
       const out = await generateImage({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [httpStatus(529).switch({ model: retryModel })],
         }),

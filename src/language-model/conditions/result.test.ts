@@ -6,7 +6,7 @@ import { generateText, streamText } from 'ai';
 import { describe, expect, it } from 'vitest';
 import {
   chunksToText,
-  createRetryable,
+  createRetryableModel,
   generateTextResult,
   MockLanguageModel,
 } from '../../internal/test-utils.js';
@@ -52,7 +52,7 @@ describe('result', () => {
 
       // Act
       const out = await generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [result(containsFlagged).switch({ model: retryModel })],
         }),
@@ -77,7 +77,7 @@ describe('result', () => {
 
       // Act
       const out = await generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [result(containsFlagged).switch({ model: retryModel })],
         }),
@@ -104,7 +104,7 @@ describe('result', () => {
 
       // Act
       const out = streamText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [result(containsFlagged).switch({ model: retryModel })],
         }),
