@@ -123,14 +123,19 @@ export class RetryableImageModel
         });
         return { result, attempts, callOptions: retryCallOptions };
       } catch (error) {
+        const { retryModel, attempt, finalError } = await this.handleError(
+          error,
+          attempts,
+          retryCallOptions,
+        );
+
+        attempts.push(attempt);
+
         /**
-         * `handleError` throws when no retry matched. Record the attempt as
-         * failed before that error propagates.
+         * No retry matched. Record the attempt as failed and throw the
+         * surfaced error.
          */
-        let decision: Awaited<ReturnType<typeof this.handleError>>;
-        try {
-          decision = await this.handleError(error, attempts, retryCallOptions);
-        } catch (finalError) {
+        if (!retryModel) {
           input.recorder?.endAttempt({
             attempt: attemptNumber,
             outcome: 'failure',
@@ -138,10 +143,6 @@ export class RetryableImageModel
           });
           throw finalError;
         }
-
-        const { retryModel, attempt } = decision;
-
-        attempts.push(attempt);
 
         /**
          * If the inbound abort signal is already aborted and the chosen
@@ -231,18 +232,32 @@ export class RetryableImageModel
     );
 
     /**
-     * Handler didn't return any models to try next, rethrow the error.
-     * If we retried the request, wrap the error into a `RetryError` for better visibility.
+     * Handler didn't return any models to try next. Compute the error to
+     * surface: if we retried the request, wrap it into a `RetryError` for
+     * better visibility; otherwise surface the original error. The caller
+     * pushes the attempt and throws `finalError`.
      */
-    if (!retryModel) {
-      if (updatedAttempts.length > 1) {
-        throw prepareRetryError(error, updatedAttempts);
-      }
+    const finalError = retryModel
+      ? undefined
+      : updatedAttempts.length > 1
+        ? prepareRetryError(error, updatedAttempts)
+        : error;
 
-      throw error;
-    }
+    return { retryModel, attempt: errorAttempt, finalError };
+  }
 
-    return { retryModel, attempt: errorAttempt };
+  /**
+   * Fire the `onFailure` callback for a terminally failed operation. The
+   * final attempt (last entry of `attempts`) is surfaced as `current`.
+   */
+  private emitFailure(
+    attempts: Array<RetryErrorAttempt<ImageModel>>,
+    error: unknown,
+  ) {
+    if (!this.options.onFailure) return;
+    const current = attempts.at(-1);
+    if (!current) return;
+    this.options.onFailure({ current, attempts, error });
   }
 
   async doGenerate(
@@ -271,17 +286,19 @@ export class RetryableImageModel
       },
     );
 
+    /**
+     * Shared attempts array, threaded into `withRetry` so it stays populated
+     * (including the final failed attempt) when the retry loop throws.
+     */
+    const attempts: Array<RetryErrorAttempt<ImageModel>> = [];
     let operationError: unknown;
     try {
-      const {
-        result,
-        attempts,
-        callOptions: finalCallOptions,
-      } = await this.withRetry({
+      const { result, callOptions: finalCallOptions } = await this.withRetry({
         fn: async (retryCallOptions) => {
           return this.currentModel.doGenerate(retryCallOptions);
         },
         callOptions: callOptions,
+        attempts,
         recorder,
       });
 
@@ -300,6 +317,7 @@ export class RetryableImageModel
       return result;
     } catch (error) {
       operationError = error;
+      this.emitFailure(attempts, error);
       throw error;
     } finally {
       recorder?.endOperation({

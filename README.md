@@ -649,6 +649,13 @@ Inside `onRetry`, `context.current.model` is the model about to be tried next; `
 
 #### Logging
 
+You can use the following callbacks to log retry attempts and errors:
+
+- `onError` is invoked if an error occurs.
+- `onRetry` is invoked before attempting a retry.
+- `onSuccess` is invoked after a successful request with the model that handled it.
+- `onFailure` is invoked when the request ultimately fails and no retry could recover it.
+
 ```typescript
 const retryableModel = createRetryableModel({
   model: openai('gpt-4o-mini'),
@@ -671,8 +678,16 @@ const retryableModel = createRetryableModel({
       `Request handled by ${context.current.model.provider}/${context.current.model.modelId}`,
     );
   },
+  onFailure: (context) => {
+    console.error(
+      `Request failed after ${context.attempts.length} attempts:`,
+      context.error,
+    );
+  },
 });
 ```
+
+`onSuccess` and `onFailure` are counterparts: exactly one of them is invoked per request once its final outcome is known. `onFailure` fires when the error could not be recovered by a retry, whether because no retryable matched, all retries were exhausted, or the retry itself failed. `context.error` is the error surfaced to the caller (a [`RetryError`](#all-retries-failed) wrapping every attempt error when more than one attempt was made, otherwise the original error), and `context.current` is the final failed attempt. Neither callback fires when retries are disabled.
 
 #### Reset
 
@@ -832,6 +847,7 @@ interface RetryableModelOptions<
     context: RetryContext<MODEL>,
   ) => void | OnRetryOverrides<MODEL> | Promise<void | OnRetryOverrides<MODEL>>;
   onSuccess?: (context: SuccessContext<MODEL>) => void;
+  onFailure?: (context: FailureContext<MODEL>) => void;
 }
 ```
 
@@ -845,6 +861,7 @@ interface RetryableModelOptions<
 - `onError` — fires when an error occurs.
 - `onRetry` — fires before a retry attempt. May return `OnRetryOverrides` (or a promise of one) to override `options.*` for that attempt only. See [Dynamic call options](#dynamic-call-options).
 - `onSuccess` — fires after a successful request.
+- `onFailure` — fires when the request ultimately fails and no retry recovered it (no condition matched, retries exhausted, or the retry itself failed).
 
 #### `createRetryable(options)` (deprecated)
 
@@ -911,6 +928,18 @@ The shape returned by a retryable (and accepted in static `retries: [...]` entri
 interface RetryContext<MODEL> {
   current: RetryAttempt<MODEL>;
   attempts: Array<RetryAttempt<MODEL>>;
+}
+```
+
+#### `FailureContext`
+
+The `FailureContext` object is passed to the `onFailure` callback when a request ultimately fails. `current` is the final failed attempt (an error attempt, see [`RetryAttempt`](#retryattempt)) and `error` is the error surfaced to the caller, a [`RetryError`](#all-retries-failed) wrapping every attempt error when more than one attempt was made, otherwise the original error.
+
+```typescript
+interface FailureContext {
+  current: RetryErrorAttempt;
+  attempts: Array<RetryAttempt>;
+  error: unknown;
 }
 ```
 
