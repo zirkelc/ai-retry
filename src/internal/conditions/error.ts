@@ -1,6 +1,6 @@
 import { APICallError } from 'ai';
 import type { RetryContext } from '../../types.js';
-import { isErrorAttempt } from '../guards.js';
+import { isAbortError, isErrorAttempt, isTimeoutError } from '../guards.js';
 import { type AnyModel, Condition } from './condition.js';
 import { or } from './or.js';
 
@@ -111,6 +111,40 @@ export function createErrorAPI<BOUND extends AnyModel>() {
   };
 
   /**
+   * Match a timeout error: an `Error` with `name === 'TimeoutError'`,
+   * which `AbortSignal.timeout()` produces when the timeout fires.
+   * Distinct from `error.isAbort()`, which matches manual aborts.
+   *
+   * **Important:** returns a `Condition`, not a `Retryable`. Call
+   * `.switch()` or `.retry()` to plug it into `retries: [...]`.
+   *
+   * @example
+   * error.isTimeout().switch({ model: fallback, timeout: 60_000 })
+   */
+  error.isTimeout = function isTimeout<
+    MODEL extends BOUND = BOUND,
+  >(): Condition<MODEL> {
+    return error<MODEL>((e) => isTimeoutError(e));
+  };
+
+  /**
+   * Match a manual abort: an `Error` with `name === 'AbortError'`, which
+   * `controller.abort()` produces. Distinct from `error.isTimeout()`,
+   * which matches `AbortSignal.timeout()` firing.
+   *
+   * **Important:** returns a `Condition`, not a `Retryable`. Call
+   * `.switch()` or `.retry()` to plug it into `retries: [...]`.
+   *
+   * @example
+   * error.isAbort().switch({ model: fallback })
+   */
+  error.isAbort = function isAbort<
+    MODEL extends BOUND = BOUND,
+  >(): Condition<MODEL> {
+    return error<MODEL>((e) => isAbortError(e));
+  };
+
+  /**
    * Match an `APICallError` by status code, message substring, or regular
    * expression. Numbers match the status code; strings match the message;
    * regular expressions match either the stringified status code or the
@@ -144,7 +178,8 @@ export function createErrorAPI<BOUND extends AnyModel>() {
   /**
    * Match a timeout error: an `Error` with `name === 'TimeoutError'`,
    * which `AbortSignal.timeout()` produces when the timeout fires.
-   * Distinct from `aborted()`, which matches manual aborts.
+   * Distinct from `aborted()`, which matches manual aborts. Convenience
+   * wrapper around `error.isTimeout()`.
    *
    * **Important:** returns a `Condition`, not a `Retryable`. Call
    * `.switch()` or `.retry()` to plug it into `retries: [...]`.
@@ -154,15 +189,14 @@ export function createErrorAPI<BOUND extends AnyModel>() {
    * timeout().retry({ delay: 1000 })
    */
   function timeout<MODEL extends BOUND = BOUND>(): Condition<MODEL> {
-    return error<MODEL>(
-      (err) => err instanceof Error && err.name === 'TimeoutError',
-    );
+    return error.isTimeout<MODEL>();
   }
 
   /**
    * Match a manual abort: an `Error` with `name === 'AbortError'`, which
    * `controller.abort()` produces. Distinct from `timeout()`, which
-   * matches `AbortSignal.timeout()` firing.
+   * matches `AbortSignal.timeout()` firing. Convenience wrapper around
+   * `error.isAbort()`.
    *
    * **Important:** returns a `Condition`, not a `Retryable`. Call
    * `.switch()` or `.retry()` to plug it into `retries: [...]`.
@@ -171,9 +205,7 @@ export function createErrorAPI<BOUND extends AnyModel>() {
    * aborted().switch({ model: fallback })
    */
   function aborted<MODEL extends BOUND = BOUND>(): Condition<MODEL> {
-    return error<MODEL>(
-      (err) => err instanceof Error && err.name === 'AbortError',
-    );
+    return error.isAbort<MODEL>();
   }
 
   return { error, httpStatus, timeout, aborted };

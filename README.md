@@ -259,13 +259,15 @@ These are available from all three entry points (`language-model`, `embedding-mo
 | `error.isRetryable(flag)`       | low-level  | `APICallError.isRetryable === flag` (default `true`)                           |
 | `error.statusCode(...patterns)` | low-level  | Numbers match the status code exactly; regex matches the stringified code      |
 | `error.message(...patterns)`    | low-level  | Substring (case-insensitive) or regex match against the error message          |
+| `error.isTimeout()`             | low-level  | `Error.name === 'TimeoutError'` (`AbortSignal.timeout()` fired)                |
+| `error.isAbort()`               | low-level  | `Error.name === 'AbortError'` (manual `controller.abort()`)                    |
 | `httpStatus(...patterns)`       | high-level | Numbers match the status code; strings match the message; regex matches either |
-| `timeout()`                     | high-level | `Error.name === 'TimeoutError'` (`AbortSignal.timeout()` fired)                |
-| `aborted()`                     | high-level | `Error.name === 'AbortError'` (manual `controller.abort()`)                    |
+| `timeout()`                     | high-level | Alias for `error.isTimeout()`                                                  |
+| `aborted()`                     | high-level | Alias for `error.isAbort()`                                                    |
 
 ###### `error(predicate)`
 
-Takes any predicate over the failed attempt's error. Its namespace bundles the common matchers: `isRetryable` (defaults to `true`), `statusCode` (numbers or regex), and `message` (case-insensitive substring or regex). All accept any number of patterns and match if any matches.
+Takes any predicate over the failed attempt's error. Its namespace bundles the common matchers: `isRetryable` (defaults to `true`), `statusCode` (numbers or regex), `message` (case-insensitive substring or regex), and `isTimeout` / `isAbort` (match `AbortSignal.timeout()` firing vs a manual `controller.abort()`). The pattern matchers accept any number of patterns and match if any matches.
 
 ```typescript
 import { APICallError } from 'ai';
@@ -283,6 +285,9 @@ error.statusCode(/^5\d\d$/).switch({ model: fallback }); // any 5xx
 
 error.message('overloaded').switch({ model: fallback }); // substring
 error.message(/rate.?limit/i).switch({ model: fallback }); // regex
+
+error.isTimeout().switch({ model: fallback }); // AbortSignal.timeout() fired
+error.isAbort().switch({ model: fallback }); // manual controller.abort()
 ```
 
 ###### `httpStatus(...patterns)`
@@ -299,7 +304,7 @@ httpStatus(/^5\d\d$/).switch({ model: fallback }); // any 5xx
 
 ###### `timeout()`
 
-Matches `AbortSignal.timeout()` firing (`Error.name === 'TimeoutError'`); pass a fresh `timeout` to the action so the fallback gets its own deadline.
+Alias for `error.isTimeout()` — matches `AbortSignal.timeout()` firing (`Error.name === 'TimeoutError'`); pass a fresh `timeout` to the action so the fallback gets its own deadline.
 
 ```typescript
 import { timeout } from 'ai-retry/language-model';
@@ -309,7 +314,7 @@ timeout().switch({ model: fallback, timeout: 30_000 });
 
 ###### `aborted()`
 
-Matches a manual `controller.abort()` (`Error.name === 'AbortError'`).
+Alias for `error.isAbort()` — matches a manual `controller.abort()` (`Error.name === 'AbortError'`).
 
 ```typescript
 import { aborted } from 'ai-retry/language-model';
@@ -317,7 +322,7 @@ import { aborted } from 'ai-retry/language-model';
 aborted().switch({ model: fallback });
 ```
 
-Each high-level helper is a thin wrapper around the low-level ones. For example, `timeout()` is roughly `error((err) => err instanceof Error && err.name === 'TimeoutError')`.
+Each high-level helper is a thin wrapper around the low-level ones. For example, `httpStatus(...)` composes `error.statusCode(...)` with `error.message(...)`, and `timeout()` / `aborted()` are aliases for `error.isTimeout()` / `error.isAbort()`.
 
 ##### Language model conditions
 

@@ -1,5 +1,8 @@
 import { describe, expectTypeOf, it } from 'vitest';
-import { createRetryableModel, MockLanguageModel } from '../internal/test-utils.js';
+import {
+  createRetryableModel,
+  MockLanguageModel,
+} from '../internal/test-utils.js';
 import type { Retryable } from '../types.js';
 import { contentFilterTriggered } from './content-filter-triggered.js';
 

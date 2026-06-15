@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  abortError,
   apiError,
   buildErrorContext,
   buildResultContext,
   MockLanguageModel,
+  timeoutError,
 } from '../test-utils.js';
 import { createErrorAPI } from './error.js';
 
@@ -217,6 +219,58 @@ describe('error', () => {
       // Assert
       expect(overloaded).toBe(true);
       expect(rateLimit).toBe(true);
+    });
+  });
+
+  describe('isTimeout', () => {
+    it(`should match a TimeoutError`, async () => {
+      // Arrange
+      const cond = error.isTimeout<MockLanguageModel>();
+
+      // Act
+      const matched = await cond.evaluate(buildErrorContext(timeoutError()));
+
+      // Assert
+      expect(matched).toBe(true);
+    });
+
+    it(`should not match an AbortError or a plain error`, async () => {
+      // Arrange
+      const cond = error.isTimeout<MockLanguageModel>();
+
+      // Act
+      const aborted = await cond.evaluate(buildErrorContext(abortError()));
+      const plain = await cond.evaluate(buildErrorContext(new Error('boom')));
+
+      // Assert
+      expect(aborted).toBe(false);
+      expect(plain).toBe(false);
+    });
+  });
+
+  describe('isAbort', () => {
+    it(`should match an AbortError`, async () => {
+      // Arrange
+      const cond = error.isAbort<MockLanguageModel>();
+
+      // Act
+      const matched = await cond.evaluate(buildErrorContext(abortError()));
+
+      // Assert
+      expect(matched).toBe(true);
+    });
+
+    it(`should not match a TimeoutError or a plain error`, async () => {
+      // Arrange
+      const cond = error.isAbort<MockLanguageModel>();
+
+      // Act
+      const timedOut = await cond.evaluate(buildErrorContext(timeoutError()));
+      const plain = await cond.evaluate(buildErrorContext(new Error('boom')));
+
+      // Assert
+      expect(timedOut).toBe(false);
+      expect(plain).toBe(false);
     });
   });
 });
