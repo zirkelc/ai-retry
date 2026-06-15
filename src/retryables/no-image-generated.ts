@@ -10,7 +10,7 @@ import { isErrorAttempt } from '../internal/guards.js';
  * Fallback to a different model if image generation fails with NoImageGeneratedError.
  *
  * @deprecated Use the composable condition API from
- * `ai-retry/image-model/retryables`:
+ * `ai-retry/image-model/conditions`:
  * `noImage().switch({ model: m })`.
  * See the [v1 README](https://github.com/zirkelc/ai-retry/blob/v1/README.md)
  * for the old function-style docs.

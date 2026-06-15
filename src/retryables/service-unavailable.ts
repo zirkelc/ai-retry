@@ -11,8 +11,8 @@ import { isErrorAttempt } from '../internal/guards.js';
  * This retryable handles HTTP status code 503 (Service Unavailable).
  *
  * @deprecated Use the composable condition API from
- * `ai-retry/<family>-model/retryables`:
- * `error.statusCode(503).switch({ model: m })`.
+ * `ai-retry/<family>-model/conditions`:
+ * `httpStatus(503).switch({ model: m })`.
  * See the [v1 README](https://github.com/zirkelc/ai-retry/blob/v1/README.md)
  * for the old function-style docs.
  */

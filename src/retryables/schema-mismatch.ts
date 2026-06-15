@@ -15,7 +15,7 @@ import { isResultAttempt } from '../internal/guards.js';
  * if validation fails.
  *
  * @deprecated Use the composable condition API from
- * `ai-retry/language-model/retryables`:
+ * `ai-retry/language-model/conditions`:
  * `schemaInvalid().switch({ model: m })`.
  * See the [v1 README](https://github.com/zirkelc/ai-retry/blob/v1/README.md)
  * for the old function-style docs.

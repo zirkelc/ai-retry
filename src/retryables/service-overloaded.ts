@@ -14,8 +14,8 @@ import { isErrorAttempt, isObject, isString } from '../internal/guards.js';
  * - Response with a `message` containing "overloaded"
  *
  * @deprecated Use the composable condition API from
- * `ai-retry/<family>-model/retryables`:
- * `httpStatus(529, 'overloaded').switch({ model: m })`.
+ * `ai-retry/<family>-model/conditions`:
+ * `httpStatus(529).switch({ model: m })`.
  * See the [v1 README](https://github.com/zirkelc/ai-retry/blob/v1/README.md)
  * for the old function-style docs.
  */

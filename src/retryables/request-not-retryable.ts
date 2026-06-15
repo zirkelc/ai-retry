@@ -10,7 +10,7 @@ import { isErrorAttempt } from '../internal/guards.js';
  * Fallback to a different model if the error is non-retryable.
  *
  * @deprecated Use the composable condition API from
- * `ai-retry/<family>-model/retryables`:
+ * `ai-retry/<family>-model/conditions`:
  * `error.isRetryable(false).switch({ model: m })`.
  * See the [v1 README](https://github.com/zirkelc/ai-retry/blob/v1/README.md)
  * for the old function-style docs.

@@ -20,20 +20,6 @@ Two retry shapes are supported:
 
 ### Installation
 
-`ai-retry` ships separate entry points per model family. Pick the one that matches the model you're wrapping (see [Picking an entry point](#picking-an-entry-point)).
-
-```bash
-npm install ai-retry
-```
-
-> [!WARNING]
-> **v2 is a breaking change.**
->
-> - The root `createRetryable` export is **deprecated** (it still works). Use `createRetryableModel` from `ai-retry/<family>-model` instead — it is typed for that family and resolves gateway strings for it.
-> - The function-style retryables (`contentFilterTriggered`, `requestTimeout`, …) are deprecated in favor of the new condition API.
->
-> If you are not ready to migrate, pin to `ai-retry@1` and read the [v1 README](https://github.com/zirkelc/ai-retry/blob/v1/README.md).
-
 > [!NOTE]
 > Version compatibility:
 >
@@ -41,7 +27,20 @@ npm install ai-retry
 > - `ai-retry@1.x` — AI SDK v6, function-style retryables
 > - `ai-retry@2.x` — AI SDK v6, condition-based retryables
 
+```bash
+npm install ai-retry
+```
+
 ### Usage
+
+> [!WARNING]
+> **v2 introduces a new condition API**
+>
+> - The root `createRetryable` export is **deprecated** (it still works). Use `createRetryableModel` from `ai-retry/<family>-model` instead — it is typed for that family and resolves gateway strings for it.
+> - The function-style retryables (`contentFilterTriggered`, `requestTimeout`, …) are deprecated in favor of the new condition API.
+> - The `ai-retry/experimental/*` import paths were removed; the condition API now lives at `ai-retry/<family>-model`.
+>
+> See the [migration guide](./MIGRATION.md) for step-by-step instructions. If you are not ready to migrate, pin to `ai-retry@1` and read the [v1 README](https://github.com/zirkelc/ai-retry/blob/v1/README.md).
 
 Create a retryable model with a base model and a list of conditions plus the action to take when a condition matches.
 
@@ -810,18 +809,18 @@ Result-based conditions (`finishReason`, `schemaInvalid`, `result(...)`) apply t
 The function-style helpers (`contentFilterTriggered`, `requestTimeout`, `requestNotRetryable`, `retryAfterDelay`, `schemaMismatch`, `serviceOverloaded`, `serviceUnavailable`, `noImageGenerated`) are still exported from `ai-retry/retryables` for backwards compatibility, but they are deprecated in v2 in favor of the condition API documented above.
 
 > [!NOTE]
-> Full documentation for the deprecated function-style retryables lives in the [v1 README](https://github.com/zirkelc/ai-retry/blob/v1/README.md). New code should use the condition API.
+> Full documentation for the deprecated function-style retryables lives in the [v1 README](https://github.com/zirkelc/ai-retry/blob/v1/README.md). New code should use the condition API. See the [migration guide](./MIGRATION.md) to convert existing code.
 
 Each function-style retryable has a one-line equivalent in the new shape (imports from `ai-retry/language-model` unless noted):
 
 | Built-in (v1)                               | Composable form (v2)                                                                                                 |
 | ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `contentFilterTriggered(m)`                 | `or(error(/* check e.data.error.code === 'content_filter' */), finishReason('content-filter')).switch({ model: m })` |
+| `contentFilterTriggered(m)`                 | `finishReason('content-filter').switch({ model: m })`                                                                |
 | `requestTimeout(m)`                         | `timeout().switch({ model: m, timeout: 60_000 })`                                                                    |
 | `requestNotRetryable(m)`                    | `error.isRetryable(false).switch({ model: m })`                                                                      |
 | `schemaMismatch(m)`                         | `schemaInvalid().switch({ model: m })`                                                                               |
-| `serviceOverloaded(m)`                      | `httpStatus(529, 'overloaded').switch({ model: m })`                                                                 |
-| `serviceUnavailable(m)`                     | `error.statusCode(503).switch({ model: m })`                                                                         |
+| `serviceOverloaded(m)`                      | `httpStatus(529).switch({ model: m })`                                                                               |
+| `serviceUnavailable(m)`                     | `httpStatus(503).switch({ model: m })`                                                                               |
 | `noImageGenerated(m)`                       | `noImage().switch({ model: m })` (from `ai-retry/image-model`)                                                       |
 | `retryAfterDelay({ delay, backoffFactor })` | `error.isRetryable(true).retry({ delay, backoffFactor })`                                                            |
 

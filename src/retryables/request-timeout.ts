@@ -11,7 +11,7 @@ import { isErrorAttempt, isTimeoutError } from '../internal/guards.js';
  * If no timeout is specified, a default of 60 seconds is used.
  *
  * @deprecated Use the composable condition API from
- * `ai-retry/<family>-model/retryables`:
+ * `ai-retry/<family>-model/conditions`:
  * `timeout().switch({ model: m, timeout: 60_000 })`.
  * See the [v1 README](https://github.com/zirkelc/ai-retry/blob/v1/README.md)
  * for the old function-style docs.

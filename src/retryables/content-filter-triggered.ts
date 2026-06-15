@@ -15,10 +15,8 @@ import {
  * Fallback to a different model if the content filter was triggered.
  *
  * @deprecated Use the composable condition API from
- * `ai-retry/language-model/retryables`:
- * `error(/* check e.data.error.code === 'content_filter' *\/)
- *   .or(finishReason('content-filter'))
- *   .switch({ model: m })`.
+ * `ai-retry/language-model/conditions`:
+ * `finishReason('content-filter').switch({ model: m })`.
  * See the [v1 README](https://github.com/zirkelc/ai-retry/blob/v1/README.md)
  * for the old function-style docs.
  */
