@@ -9,6 +9,7 @@ import {
   chunksToText,
   collectParts,
   contentFilterResult,
+  contentFilterStreamChunks,
   errorFromChunks,
   finishReason,
   languageCallOptions,
@@ -58,30 +59,6 @@ const mockStreamChunks: LanguageModelStreamPart[] = [
   {
     type: 'finish',
     finishReason: { unified: 'stop', raw: undefined },
-    usage: testUsage,
-    providerMetadata: {
-      testProvider: { testKey: 'testValue' },
-    },
-  },
-];
-
-/**
- * Stream that finishes with `content-filter` before any text deltas are
- * emitted. The retry layer evaluates result-based retryables against a
- * synthetic result built from the finish part when no content has been
- * streamed yet.
- */
-const contentFilterStreamChunks: LanguageModelStreamPart[] = [
-  { type: 'stream-start', warnings: [] },
-  {
-    type: 'response-metadata',
-    id: 'id-0',
-    modelId: 'mock-model-id',
-    timestamp: new Date(0),
-  },
-  {
-    type: 'finish',
-    finishReason: { unified: 'content-filter', raw: undefined },
     usage: testUsage,
     providerMetadata: {
       testProvider: { testKey: 'testValue' },

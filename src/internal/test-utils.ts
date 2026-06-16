@@ -332,6 +332,22 @@ export const nonRetryableError = apiError({
   },
 });
 
+/** Azure-style content-filter `APICallError` (data code `content_filter`). */
+export const contentFilterError = apiError({
+  message: 'The response was filtered due to the content management policy.',
+  statusCode: 400,
+  isRetryable: false,
+  data: {
+    error: {
+      message:
+        'The response was filtered due to the content management policy.',
+      type: null,
+      param: 'prompt',
+      code: 'content_filter',
+    },
+  },
+});
+
 export const testUsage = {
   inputTokens: { total: 3, noCache: 0, cacheRead: 0, cacheWrite: 0 },
   outputTokens: { total: 10, text: 0, reasoning: 0 },
@@ -369,6 +385,29 @@ export const mockStreamChunks: Array<LanguageModelStreamPart> = [
     usage: {
       inputTokens: { total: 10, noCache: 0, cacheRead: 0, cacheWrite: 0 },
       outputTokens: { total: 20, text: 0, reasoning: 0 },
+    },
+  },
+];
+
+/**
+ * Stream parts that finish with `content-filter` before any text deltas are
+ * emitted. The retry layer evaluates result-based retryables against a
+ * synthetic result built from the finish part when no content has streamed yet.
+ */
+export const contentFilterStreamChunks: Array<LanguageModelStreamPart> = [
+  { type: 'stream-start', warnings: [] },
+  {
+    type: 'response-metadata',
+    id: 'id-0',
+    modelId: 'mock-model-id',
+    timestamp: new Date(0),
+  },
+  {
+    type: 'finish',
+    finishReason: { unified: 'content-filter', raw: undefined },
+    usage: testUsage,
+    providerMetadata: {
+      testProvider: { testKey: 'testValue' },
     },
   },
 ];
