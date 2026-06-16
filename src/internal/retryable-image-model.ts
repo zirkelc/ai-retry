@@ -3,6 +3,7 @@ import { BaseRetryableModel } from './base-retryable-model.js';
 import { calculateExponentialBackoff } from './calculate-exponential-backoff.js';
 import { countModelAttempts } from './count-model-attempts.js';
 import { findRetryModel } from './find-retry-model.js';
+import { resolveImageModel } from './resolve-model.js';
 import { prepareRetryError } from './prepare-retry-error.js';
 import { mergeImageModelCallOptions } from './merge-retry-call-options.js';
 import { createRetryTelemetry, type RetryTelemetry } from './telemetry.js';
@@ -224,7 +225,11 @@ export class RetryableImageModel
 
     this.options.onError?.(context);
 
-    const retryModel = await findRetryModel(this.options.retries, context);
+    const retryModel = await findRetryModel(
+      this.options.retries,
+      context,
+      resolveImageModel,
+    );
 
     /**
      * Handler didn't return any models to try next. Compute the error to

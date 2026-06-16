@@ -1,8 +1,6 @@
 import { APICallError } from 'ai';
 import type {
-  EmbeddingModel,
-  ImageModel,
-  ResolvableLanguageModel,
+  AnyResolvableModel,
   Retryable,
   RetryableOptions,
 } from '../types.js';
@@ -10,10 +8,17 @@ import { isErrorAttempt } from '../internal/guards.js';
 
 /**
  * Fallback to a different model if the error is non-retryable.
+ *
+ * @deprecated Use the composable condition API from
+ * `ai-retry/<family>-model/conditions`:
+ * `error.isRetryable(false).switch({ model: m })`.
+ * See the [v1 README](https://github.com/zirkelc/ai-retry/blob/v1/README.md)
+ * for the old function-style docs.
  */
-export function requestNotRetryable<
-  MODEL extends ResolvableLanguageModel | EmbeddingModel | ImageModel,
->(model: MODEL, options?: RetryableOptions<MODEL>): Retryable<MODEL> {
+export function requestNotRetryable<MODEL extends AnyResolvableModel>(
+  model: MODEL,
+  options?: RetryableOptions<MODEL>,
+): Retryable<MODEL> {
   return (context) => {
     const { current } = context;
 

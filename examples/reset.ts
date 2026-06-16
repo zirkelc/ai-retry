@@ -1,8 +1,7 @@
 import { openai } from '@ai-sdk/openai';
 import type { LanguageModelV3 } from '@ai-sdk/provider';
 import { APICallError, generateText } from 'ai';
-import { createRetryable } from 'ai-retry';
-import { serviceOverloaded } from 'ai-retry/retryables';
+import { createRetryableModel, httpStatus } from 'ai-retry/language-model';
 
 /**
  * Creates a mock language model that always throws a 529 (overloaded) error.
@@ -68,13 +67,12 @@ function createSuccessModel(modelId: string): LanguageModelV3 {
 const primaryModel = createOverloadedModel(`primary-model`);
 const fallbackModel = createSuccessModel(`fallback-model`);
 
-const retryableModel = createRetryable({
+const retryableModel = createRetryableModel({
   // model: openai('gpt-4o-mini'),
   model: primaryModel,
   retries: [
     // Switch to the fallback model on service overloads (HTTP 529)
-    serviceOverloaded(fallbackModel),
-    // serviceOverloaded(fallbackModel)
+    httpStatus(529).switch({ model: fallbackModel }),
   ],
   // Reset policy:
   // - after-request (default): every new request starts with the base model

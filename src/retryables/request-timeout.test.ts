@@ -10,11 +10,9 @@ import {
   streamText,
 } from 'ai';
 import { describe, expect, it } from 'vitest';
-import { createRetryable } from '../create-retryable-model.js';
 import {
   chunksToText,
-  type LanguageModelGenerateFn,
-  type LanguageModelStreamFn,
+  createRetryableModel,
   MockEmbeddingModel,
   mockEmbeddings,
   MockImageModel,
@@ -23,6 +21,8 @@ import {
   mockResult,
   mockResultText,
   mockStreamChunks,
+  type LanguageModelGenerateFn,
+  type LanguageModelStreamFn,
 } from '../internal/test-utils.js';
 import type {
   EmbeddingModelCallOptions,
@@ -96,7 +96,7 @@ describe('requestTimeout', () => {
 
       // Act
       const result = await generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [requestTimeout(retryModel)],
         }),
@@ -117,7 +117,7 @@ describe('requestTimeout', () => {
 
       // Act
       const result = await generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [requestTimeout(retryModel)],
         }),
@@ -141,7 +141,7 @@ describe('requestTimeout', () => {
 
       // Act
       const result = generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [requestTimeout(retryModel)],
         }),
@@ -197,7 +197,7 @@ describe('requestTimeout', () => {
 
       // Act
       const result = await generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [requestTimeout(retryModel)], // Uses default 60s timeout
         }),
@@ -246,7 +246,7 @@ describe('requestTimeout', () => {
 
       // Act
       const result = await generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [requestTimeout(retryModel, { timeout: customTimeout })],
         }),
@@ -283,7 +283,7 @@ describe('requestTimeout', () => {
 
       // Act
       const result = streamText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [requestTimeout(retryModel)],
         }),
@@ -317,7 +317,7 @@ describe('requestTimeout', () => {
 
       // Act
       const result = streamText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [requestTimeout(retryModel)],
         }),
@@ -360,7 +360,7 @@ describe('requestTimeout', () => {
 
       // Act
       const result = streamText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [requestTimeout(retryModel)],
         }),
@@ -399,7 +399,7 @@ describe('requestTimeout', () => {
 
       // Act
       const result = await embed({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [requestTimeout(retryModel)],
         }),
@@ -420,7 +420,7 @@ describe('requestTimeout', () => {
 
       // Act
       const result = await embed({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [requestTimeout(retryModel)],
         }),
@@ -444,7 +444,7 @@ describe('requestTimeout', () => {
 
       // Act
       const result = embed({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [requestTimeout(retryModel)],
         }),
@@ -467,7 +467,7 @@ describe('requestTimeout', () => {
 
       // Act
       const result = await generateImage({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [requestTimeout(retryModel)],
         }),
@@ -490,7 +490,7 @@ describe('requestTimeout', () => {
 
       // Act
       const result = await generateImage({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [requestTimeout(retryModel)],
         }),
@@ -510,7 +510,7 @@ describe('requestTimeout', () => {
 
       // Act
       const result = generateImage({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [requestTimeout(retryModel)],
         }),

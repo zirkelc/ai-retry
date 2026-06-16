@@ -31,6 +31,12 @@ import type {
   RetryResultAttempt,
 } from '../types.js';
 
+/**
+ * Re-exported for test convenience: the auto-detecting factory builds a
+ * retryable model for any family from a single import.
+ */
+export { createRetryableModel } from './create-retryable-model.js';
+
 type StreamText = Parameters<typeof streamText>[0];
 type GenerateText = Parameters<typeof generateText>[0];
 

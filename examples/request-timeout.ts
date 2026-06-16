@@ -1,20 +1,20 @@
 import { openai } from '@ai-sdk/openai';
 import { generateText } from 'ai';
-import { createRetryable } from 'ai-retry';
-import { requestTimeout } from '../src/retryables/request-timeout.js';
+import { createRetryableModel, timeout } from 'ai-retry/language-model';
 
 /**
  * This example demonstrates using AI SDK's `timeout` option (introduced in v6.0.14)
- * combined with the `requestTimeout` retryable to automatically fallback to a
+ * combined with the `timeout()` condition to automatically fall back to a
  * different model when the primary model times out.
  *
  * The `timeout` option accepts milliseconds directly - no AbortSignal needed.
  */
-const retryableModel = createRetryable({
+const retryableModel = createRetryableModel({
   model: openai('gpt-4o'),
   retries: [
-    /** Fallback to GPT-4o if the primary model times out */
-    requestTimeout(openai('gpt-4o-mini'), {
+    /** Fallback to GPT-4o-mini if the primary model times out */
+    timeout().switch({
+      model: openai('gpt-4o-mini'),
       timeout: 30_000, // 30 second timeout for the fallback
     }),
   ],

@@ -10,9 +10,9 @@ import {
   streamText,
 } from 'ai';
 import { describe, expect, it } from 'vitest';
-import { createRetryable } from '../create-retryable-model.js';
 import {
   chunksToText,
+  createRetryableModel,
   MockEmbeddingModel,
   mockEmbeddings,
   MockImageModel,
@@ -44,7 +44,7 @@ describe('serviceUnavailable', () => {
 
       // Act
       const result = await generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [serviceUnavailable(retryModel)],
         }),
@@ -63,7 +63,7 @@ describe('serviceUnavailable', () => {
 
       // Act
       const result = await generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [serviceUnavailable(retryModel)],
         }),
@@ -83,7 +83,7 @@ describe('serviceUnavailable', () => {
 
       // Act
       const result = await generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [serviceUnavailable(retryModel)],
         }),
@@ -122,7 +122,7 @@ describe('serviceUnavailable', () => {
 
       // Act
       const result = generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [serviceUnavailable(retryModel)],
         }),
@@ -154,7 +154,7 @@ describe('serviceUnavailable', () => {
 
       // Act
       const result = streamText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [serviceUnavailable(retryModel)],
         }),
@@ -185,7 +185,7 @@ describe('serviceUnavailable', () => {
 
       // Act
       const result = streamText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [serviceUnavailable(retryModel)],
         }),
@@ -235,7 +235,7 @@ describe('serviceUnavailable', () => {
 
       // Act
       const result = streamText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [serviceUnavailable(retryModel)],
         }),
@@ -274,7 +274,7 @@ describe('serviceUnavailable', () => {
 
       // Act
       const result = await embed({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [serviceUnavailable(retryModel)],
         }),
@@ -293,7 +293,7 @@ describe('serviceUnavailable', () => {
 
       // Act
       const result = await embed({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [serviceUnavailable(retryModel)],
         }),
@@ -313,7 +313,7 @@ describe('serviceUnavailable', () => {
 
       // Act
       const result = await embed({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [serviceUnavailable(retryModel)],
         }),
@@ -352,7 +352,7 @@ describe('serviceUnavailable', () => {
 
       // Act
       const result = embed({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [serviceUnavailable(retryModel)],
         }),
@@ -375,7 +375,7 @@ describe('serviceUnavailable', () => {
 
       // Act
       const result = await generateImage({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [serviceUnavailable(retryModel)],
         }),
@@ -395,7 +395,7 @@ describe('serviceUnavailable', () => {
 
       // Act
       const result = await generateImage({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [serviceUnavailable(retryModel)],
         }),
@@ -433,7 +433,7 @@ describe('serviceUnavailable', () => {
 
       // Act
       const result = generateImage({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [serviceUnavailable(retryModel)],
         }),

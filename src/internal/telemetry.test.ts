@@ -8,10 +8,9 @@ import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-ho
 import type { InMemorySpanExporter } from '@opentelemetry/sdk-trace-base';
 import { APICallError } from 'ai';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { createRetryable } from '../create-retryable-model.js';
-import { isErrorAttempt } from './guards.js';
 import {
   attemptSpans,
+  createRetryableModel,
   createSpanExporter,
   drainStream,
   embeddingCallOptions,
@@ -20,15 +19,16 @@ import {
   generateTextResult,
   imageCallOptions,
   languageCallOptions,
-  mockEmbeddings,
   MockEmbeddingModel,
-  mockImageResult,
+  mockEmbeddings,
   MockImageModel,
+  mockImageResult,
   MockLanguageModel,
   mockStream,
   retryableError,
   successStreamChunks,
 } from './test-utils.js';
+import { isErrorAttempt } from './guards.js';
 import type {
   EmbeddingModel,
   ImageModel,
@@ -50,7 +50,7 @@ describe('telemetry', () => {
       const baseModel = new MockLanguageModel({
         doGenerate: generateTextResult('ok'),
       });
-      const model = createRetryable({ model: baseModel, retries: [] });
+      const model = createRetryableModel({ model: baseModel, retries: [] });
 
       // Act
       await model.doGenerate(languageCallOptions);
@@ -64,7 +64,7 @@ describe('telemetry', () => {
       const baseModel = new MockLanguageModel({
         doGenerate: generateTextResult('ok'),
       });
-      const model = createRetryable({
+      const model = createRetryableModel({
         model: baseModel,
         retries: [],
         experimental_telemetry: { isEnabled: false, tracer },
@@ -82,7 +82,7 @@ describe('telemetry', () => {
       const baseModel = new MockLanguageModel({
         doGenerate: generateTextResult('ok'),
       });
-      const model = createRetryable({
+      const model = createRetryableModel({
         model: baseModel,
         retries: [],
         experimental_telemetry: { isEnabled: true, tracer },
@@ -143,7 +143,7 @@ describe('telemetry', () => {
         isErrorAttempt(ctx.current)
           ? { model: fallbackModel, maxAttempts: 1 }
           : undefined;
-      const model = createRetryable({
+      const model = createRetryableModel({
         model: baseModel,
         retries: [fallback],
         experimental_telemetry: { isEnabled: true, tracer },
@@ -210,7 +210,7 @@ describe('telemetry', () => {
         isErrorAttempt(ctx.current)
           ? { model: fallbackModel, maxAttempts: 1 }
           : undefined;
-      const model = createRetryable({
+      const model = createRetryableModel({
         model: baseModel,
         retries: [fallback],
         experimental_telemetry: { isEnabled: true, tracer },
@@ -246,7 +246,7 @@ describe('telemetry', () => {
         APICallError.isInstance(ctx.current.error)
           ? { model: fallbackModel, maxAttempts: 1 }
           : undefined;
-      const model = createRetryable({
+      const model = createRetryableModel({
         model: baseModel,
         retries: [fallback],
         experimental_telemetry: { isEnabled: true, tracer },
@@ -282,7 +282,7 @@ describe('telemetry', () => {
         isErrorAttempt(ctx.current)
           ? { model: fallbackModel, maxAttempts: 1, timeout: 5000 }
           : undefined;
-      const model = createRetryable({
+      const model = createRetryableModel({
         model: baseModel,
         retries: [fallback],
         experimental_telemetry: { isEnabled: true, tracer },
@@ -306,7 +306,7 @@ describe('telemetry', () => {
       const baseModel = new MockLanguageModel({
         doGenerate: generateTextResult('ok'),
       });
-      const model = createRetryable({
+      const model = createRetryableModel({
         model: baseModel,
         retries: [],
         experimental_telemetry: {
@@ -336,7 +336,7 @@ describe('telemetry', () => {
         const baseModel = new MockLanguageModel({
           doGenerate: generateTextResult('ok'),
         });
-        const model = createRetryable({
+        const model = createRetryableModel({
           model: baseModel,
           retries: [],
           experimental_telemetry: { isEnabled: true, tracer },
@@ -367,7 +367,7 @@ describe('telemetry', () => {
       const baseModel = new MockLanguageModel({
         doStream: mockStream(successStreamChunks('hi')),
       });
-      const model = createRetryable({
+      const model = createRetryableModel({
         model: baseModel,
         retries: [],
         experimental_telemetry: { isEnabled: true, tracer },
@@ -406,7 +406,7 @@ describe('telemetry', () => {
         isErrorAttempt(ctx.current)
           ? { model: fallbackModel, maxAttempts: 1 }
           : undefined;
-      const model = createRetryable({
+      const model = createRetryableModel({
         model: baseModel,
         retries: [fallback],
         experimental_telemetry: { isEnabled: true, tracer },
@@ -447,7 +447,7 @@ describe('telemetry', () => {
         isErrorAttempt(ctx.current)
           ? { model: fallbackModel, maxAttempts: 1 }
           : undefined;
-      const model = createRetryable({
+      const model = createRetryableModel({
         model: baseModel,
         retries: [fallback],
         experimental_telemetry: { isEnabled: true, tracer },
@@ -478,7 +478,7 @@ describe('telemetry', () => {
         isErrorAttempt(ctx.current)
           ? { model: fallbackModel, maxAttempts: 1 }
           : undefined;
-      const model = createRetryable({
+      const model = createRetryableModel({
         model: baseModel,
         retries: [fallback],
         experimental_telemetry: { isEnabled: true, tracer },

@@ -3,6 +3,7 @@ import { BaseRetryableModel } from './base-retryable-model.js';
 import { calculateExponentialBackoff } from './calculate-exponential-backoff.js';
 import { countModelAttempts } from './count-model-attempts.js';
 import { findRetryModel } from './find-retry-model.js';
+import { resolveLanguageModel } from './resolve-model.js';
 import { mergeLanguageModelCallOptions } from './merge-retry-call-options.js';
 import { createRetryTelemetry, type RetryTelemetry } from './telemetry.js';
 import { prepareRetryError } from './prepare-retry-error.js';
@@ -301,7 +302,11 @@ export class RetryableLanguageModel
       attempts: updatedAttempts,
     };
 
-    const retryModel = await findRetryModel(this.options.retries, context);
+    const retryModel = await findRetryModel(
+      this.options.retries,
+      context,
+      resolveLanguageModel,
+    );
 
     return { retryModel, attempt: resultAttempt };
   }
@@ -336,7 +341,11 @@ export class RetryableLanguageModel
 
     this.options.onError?.(context);
 
-    const retryModel = await findRetryModel(this.options.retries, context);
+    const retryModel = await findRetryModel(
+      this.options.retries,
+      context,
+      resolveLanguageModel,
+    );
 
     const finalError = retryModel
       ? undefined

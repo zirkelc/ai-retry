@@ -1,8 +1,8 @@
 import { generateText, Output } from 'ai';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { createRetryable } from '../create-retryable-model.js';
 import {
+  createRetryableModel,
   generateEmptyResult,
   generateTextResult,
   MockLanguageModel,
@@ -30,7 +30,7 @@ describe(`schemaMismatch`, () => {
 
     // Act
     const result = await generateText({
-      model: createRetryable({
+      model: createRetryableModel({
         model: baseModel,
         retries: [schemaMismatch(retryModel)],
       }),
@@ -56,7 +56,7 @@ describe(`schemaMismatch`, () => {
 
     // Act
     const result = await generateText({
-      model: createRetryable({
+      model: createRetryableModel({
         model: baseModel,
         retries: [schemaMismatch(retryModel)],
       }),
@@ -82,7 +82,7 @@ describe(`schemaMismatch`, () => {
 
     // Act
     const result = await generateText({
-      model: createRetryable({
+      model: createRetryableModel({
         model: baseModel,
         retries: [schemaMismatch(retryModel)],
       }),
@@ -108,7 +108,7 @@ describe(`schemaMismatch`, () => {
 
     // Act
     const result = await generateText({
-      model: createRetryable({
+      model: createRetryableModel({
         model: baseModel,
         retries: [schemaMismatch(retryModel)],
       }),
@@ -134,7 +134,7 @@ describe(`schemaMismatch`, () => {
 
     // Act
     const result = generateText({
-      model: createRetryable({
+      model: createRetryableModel({
         model: baseModel,
         retries: [schemaMismatch(retryModel)],
       }),
@@ -164,7 +164,7 @@ describe(`schemaMismatch`, () => {
 
     // Act
     const result = await generateText({
-      model: createRetryable({
+      model: createRetryableModel({
         model: baseModel,
         retries: [schemaMismatch(retryModel)],
       }),
@@ -192,7 +192,7 @@ describe(`schemaMismatch`, () => {
 
     // Act
     const result = await generateText({
-      model: createRetryable({
+      model: createRetryableModel({
         model: baseModel,
         retries: [schemaMismatch(retryModel)],
       }),
@@ -218,7 +218,7 @@ describe(`schemaMismatch`, () => {
 
     // Act
     const result = generateText({
-      model: createRetryable({
+      model: createRetryableModel({
         model: baseModel,
         retries: [schemaMismatch(retryModel)],
       }),

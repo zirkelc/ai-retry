@@ -4,11 +4,11 @@ import {
 } from '@ai-sdk/provider-utils/test';
 import { APICallError, generateText, RetryError, streamText } from 'ai';
 import { describe, expect, it, vi } from 'vitest';
-import { createRetryable } from '../create-retryable-model.js';
 import {
   chunksToText,
   collectParts,
   contentFilterResult,
+  createRetryableModel,
   errorFromChunks,
   errorStreamChunks,
   finishReason,
@@ -134,7 +134,7 @@ describe('generateText', () => {
         warnings: [],
       },
     });
-    const retryableModel = createRetryable({
+    const retryableModel = createRetryableModel({
       model: baseModel,
       retries: [],
     });
@@ -169,7 +169,7 @@ describe('generateText', () => {
 
         // Act
         const result = await generateText({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [fallbackRetryable],
           }),
@@ -195,7 +195,7 @@ describe('generateText', () => {
 
         // Act
         const result = await generateText({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [fallbackModel1, fallbackModel2],
           }),
@@ -231,7 +231,7 @@ describe('generateText', () => {
 
         // Act
         const result = await generateText({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [fallbackModel1, fallbackRetryable],
           }),
@@ -269,7 +269,7 @@ describe('generateText', () => {
 
         // Act
         const result = await generateText({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [{ model: fallbackModel1 }, fallbackRetryable],
           }),
@@ -303,7 +303,7 @@ describe('generateText', () => {
 
         // Act
         const result = await generateText({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [fallbackRetryable],
           }),
@@ -340,7 +340,7 @@ describe('generateText', () => {
 
         // Act
         const result = await generateText({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [
               fallbackModel1, // Language model should be skipped
@@ -381,7 +381,7 @@ describe('generateText', () => {
 
         // Act
         const result = await generateText({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [
               { model: fallbackModel1 }, // Static retry should be skipped
@@ -410,7 +410,7 @@ describe('generateText', () => {
         return { model: fallbackModel, maxAttempts: 1 };
       };
 
-      const retryableModel = createRetryable({
+      const retryableModel = createRetryableModel({
         model: baseModel,
         retries: [fallbackRetryable],
         disabled: true,
@@ -438,7 +438,7 @@ describe('generateText', () => {
         return { model: fallbackModel, maxAttempts: 1 };
       };
 
-      const retryableModel = createRetryable({
+      const retryableModel = createRetryableModel({
         model: baseModel,
         retries: [fallbackRetryable],
         disabled: false,
@@ -467,7 +467,7 @@ describe('generateText', () => {
 
       const disabledFn = vi.fn(() => true);
 
-      const retryableModel = createRetryable({
+      const retryableModel = createRetryableModel({
         model: baseModel,
         retries: [fallbackRetryable],
         disabled: disabledFn,
@@ -498,7 +498,7 @@ describe('generateText', () => {
 
       const disabledFn = vi.fn(() => false);
 
-      const retryableModel = createRetryable({
+      const retryableModel = createRetryableModel({
         model: baseModel,
         retries: [fallbackRetryable],
         disabled: disabledFn,
@@ -526,7 +526,7 @@ describe('generateText', () => {
         return { model: fallbackModel, maxAttempts: 1 };
       };
 
-      const retryableModel = createRetryable({
+      const retryableModel = createRetryableModel({
         model: baseModel,
         retries: [fallbackRetryable],
         // disabled is undefined by default
@@ -554,7 +554,7 @@ describe('generateText', () => {
 
       // Act
       await generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [fallbackModel],
           onError: onErrorSpy,
@@ -583,7 +583,7 @@ describe('generateText', () => {
 
       // Act
       await generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [fallbackModel, finalModel],
           onError: onErrorSpy,
@@ -620,7 +620,7 @@ describe('generateText', () => {
 
       // Act
       await generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [
             (context: RetryContext<LanguageModel>) => {
@@ -653,7 +653,7 @@ describe('generateText', () => {
 
       // Act
       await generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [fallbackModel],
           onError: onErrorSpy,
@@ -690,7 +690,7 @@ describe('generateText', () => {
 
       // Act
       await generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [fallbackModel],
           onRetry: onRetrySpy,
@@ -721,7 +721,7 @@ describe('generateText', () => {
 
       // Act
       await generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [
             (context: RetryContext<LanguageModel>) => {
@@ -765,7 +765,7 @@ describe('generateText', () => {
 
       // Act
       await generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [fallbackModel1, fallbackModel2],
           onRetry: onRetrySpy,
@@ -804,7 +804,7 @@ describe('generateText', () => {
 
       // Act
       await generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [],
           onRetry: onRetrySpy,
@@ -830,7 +830,7 @@ describe('generateText', () => {
 
         // Act
         await generateText({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [fallbackModel],
             onRetry: () => ({ options: { prompt: sanitizedPrompt } }),
@@ -853,7 +853,7 @@ describe('generateText', () => {
 
         // Act
         await generateText({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [fallbackModel],
             onRetry: () => ({
@@ -879,7 +879,7 @@ describe('generateText', () => {
 
         // Act
         await generateText({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [{ model: fallbackModel, options: { temperature: 0.5 } }],
             onRetry: () => ({ options: { temperature: 0.1 } }),
@@ -901,7 +901,7 @@ describe('generateText', () => {
 
         // Act
         await generateText({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [{ model: fallbackModel, options: { temperature: 0.5 } }],
             onRetry: () => undefined,
@@ -923,7 +923,7 @@ describe('generateText', () => {
 
         // Act
         await generateText({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [fallbackModel],
             onRetry: async () => {
@@ -950,7 +950,7 @@ describe('generateText', () => {
 
       // Act
       await generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [],
           onSuccess: onSuccessSpy,
@@ -976,7 +976,7 @@ describe('generateText', () => {
 
       // Act
       await generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [fallbackModel],
           onSuccess: onSuccessSpy,
@@ -1004,7 +1004,7 @@ describe('generateText', () => {
 
       // Act & Assert
       const result = generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [fallbackModel],
           onSuccess: onSuccessSpy,
@@ -1027,7 +1027,7 @@ describe('generateText', () => {
 
       // Act
       const result = generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [],
           onFailure: onFailureSpy,
@@ -1056,7 +1056,7 @@ describe('generateText', () => {
 
       // Act
       const result = generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [fallbackModel],
           onFailure: onFailureSpy,
@@ -1083,7 +1083,7 @@ describe('generateText', () => {
 
       // Act
       await generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [],
           onFailure: onFailureSpy,
@@ -1108,7 +1108,7 @@ describe('generateText', () => {
 
       // Act
       const result = generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [fallbackModel],
           onFailure: onFailureSpy,
@@ -1133,7 +1133,7 @@ describe('generateText', () => {
 
       // Act
       await generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [fallbackModel],
           onError: onErrorSpy,
@@ -1162,7 +1162,7 @@ describe('generateText', () => {
 
       // Act
       await generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [
             (context) => {
@@ -1205,7 +1205,7 @@ describe('generateText', () => {
 
       // Act
       await generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [
             { model: fallbackModel, options: { temperature: 0.5 } },
@@ -1237,7 +1237,7 @@ describe('generateText', () => {
 
       // Act
       await generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [fallbackModel],
           onError: onErrorSpy,
@@ -1278,7 +1278,7 @@ describe('generateText', () => {
 
         // Act
         await generateText({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [
               fallbackModel1,
@@ -1309,7 +1309,7 @@ describe('generateText', () => {
 
         // Act
         await generateText({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [
               // Retryable<LanguageModel>  with different maxAttempts
@@ -1340,7 +1340,7 @@ describe('generateText', () => {
         // Act & Assert
         try {
           await generateText({
-            model: createRetryable({
+            model: createRetryableModel({
               model: baseModel,
               retries: [fallbackModel],
             }),
@@ -1362,7 +1362,7 @@ describe('generateText', () => {
         // Act & Assert
         try {
           await generateText({
-            model: createRetryable({
+            model: createRetryableModel({
               model: baseModel,
               retries: [],
             }),
@@ -1387,7 +1387,7 @@ describe('generateText', () => {
 
         // Act
         const promise = generateText({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [{ model: fallbackModel, delay: delayMs }],
           }),
@@ -1419,7 +1419,7 @@ describe('generateText', () => {
 
         // Act
         const promise = generateText({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [
               { model: fallbackModel1, delay: delay1 },
@@ -1447,7 +1447,7 @@ describe('generateText', () => {
 
         // Act
         await generateText({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [{ model: fallbackModel }],
           }),
@@ -1470,7 +1470,7 @@ describe('generateText', () => {
 
         // Act
         await generateText({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [
               {
@@ -1537,7 +1537,7 @@ describe('generateText', () => {
 
         // Act
         await generateText({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [
               {
@@ -1590,7 +1590,7 @@ describe('generateText', () => {
 
         // Act
         const result = generateText({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [fallbackModel],
             onError,
@@ -1623,7 +1623,7 @@ describe('generateText', () => {
 
         // Act
         await generateText({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [
               { model: fallbackModel, options: { prompt: overridePrompt } },
@@ -1647,7 +1647,7 @@ describe('generateText', () => {
 
         // Act
         await generateText({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [{ model: fallbackModel, options: { temperature: 0.5 } }],
           }),
@@ -1673,7 +1673,7 @@ describe('generateText', () => {
 
         // Act
         await generateText({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [{ model: fallbackModel, options: { topP: 0.8 } }],
           }),
@@ -1699,7 +1699,7 @@ describe('generateText', () => {
 
         // Act
         await generateText({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [{ model: fallbackModel, options: { topK: 10 } }],
           }),
@@ -1725,7 +1725,7 @@ describe('generateText', () => {
 
         // Act
         await generateText({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [
               { model: fallbackModel, options: { maxOutputTokens: 500 } },
@@ -1753,7 +1753,7 @@ describe('generateText', () => {
 
         // Act
         await generateText({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [{ model: fallbackModel, options: { seed: 42 } }],
           }),
@@ -1779,7 +1779,7 @@ describe('generateText', () => {
 
         // Act
         await generateText({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [
               {
@@ -1810,7 +1810,7 @@ describe('generateText', () => {
 
         // Act
         await generateText({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [
               { model: fallbackModel, options: { presencePenalty: 0.5 } },
@@ -1838,7 +1838,7 @@ describe('generateText', () => {
 
         // Act
         await generateText({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [
               { model: fallbackModel, options: { frequencyPenalty: 0.8 } },
@@ -1868,7 +1868,7 @@ describe('generateText', () => {
 
         // Act
         await generateText({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [
               { model: fallbackModel, options: { headers: retryHeaders } },
@@ -1903,7 +1903,7 @@ describe('generateText', () => {
       // Act & Assert
       try {
         await generateText({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [fallbackModel1, fallbackModel2],
           }),
@@ -1931,7 +1931,7 @@ describe('generateText', () => {
       // Act & Assert
       try {
         await generateText({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [], // No retry models
           }),
@@ -1956,7 +1956,7 @@ describe('generateText', () => {
       // Act & Assert
       try {
         await generateText({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [() => undefined],
           }),
@@ -1987,7 +1987,7 @@ describe('generateText', () => {
         });
         const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
 
-        const retryableModel = createRetryable({
+        const retryableModel = createRetryableModel({
           model: baseModel,
           retries: [{ model: fallbackModel, maxAttempts: 1 }],
         });
@@ -2018,7 +2018,7 @@ describe('generateText', () => {
         const baseModel = new MockLanguageModel({ doGenerate: retryableError });
         const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
 
-        const retryableModel = createRetryable({
+        const retryableModel = createRetryableModel({
           model: baseModel,
           retries: [{ model: fallbackModel, maxAttempts: 1 }],
           reset: `after-2-requests`,
@@ -2052,7 +2052,7 @@ describe('generateText', () => {
         const baseModel = new MockLanguageModel({ doGenerate: mockResult });
         const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
 
-        const retryableModel = createRetryable({
+        const retryableModel = createRetryableModel({
           model: baseModel,
           retries: [{ model: fallbackModel, maxAttempts: 1 }],
           reset: `after-3-requests`,
@@ -2083,7 +2083,7 @@ describe('generateText', () => {
           doGenerate: mockResult,
         });
 
-        const retryableModel = createRetryable({
+        const retryableModel = createRetryableModel({
           model: baseModel,
           retries: [
             { model: fallbackModel1, maxAttempts: 1 },
@@ -2119,7 +2119,7 @@ describe('generateText', () => {
         const baseModel = new MockLanguageModel({ doGenerate: retryableError });
         const fallbackModel = new MockLanguageModel({ doGenerate: mockResult });
 
-        const retryableModel = createRetryable({
+        const retryableModel = createRetryableModel({
           model: baseModel,
           retries: [{ model: fallbackModel, maxAttempts: 1 }],
           reset: `after-5-seconds`,
@@ -2154,7 +2154,7 @@ describe('streamText', () => {
       },
     });
 
-    const retryableModel = createRetryable({
+    const retryableModel = createRetryableModel({
       model: baseModel,
       retries: [],
     });
@@ -2181,7 +2181,7 @@ describe('streamText', () => {
           },
         });
 
-        const retryableModel = createRetryable({
+        const retryableModel = createRetryableModel({
           model: baseModel,
           retries: [fallbackModel],
         });
@@ -2308,7 +2308,7 @@ describe('streamText', () => {
           },
         });
 
-        const retryableModel = createRetryable({
+        const retryableModel = createRetryableModel({
           model: baseModel,
           retries: [fallbackModel],
         });
@@ -2438,7 +2438,7 @@ describe('streamText', () => {
           },
         });
 
-        const retryableModel = createRetryable({
+        const retryableModel = createRetryableModel({
           model: baseModel,
           retries: [fallbackModel1, fallbackModel2],
         });
@@ -2568,7 +2568,7 @@ describe('streamText', () => {
           },
         });
 
-        const retryableModel = createRetryable({
+        const retryableModel = createRetryableModel({
           model: baseModel,
           retries: [fallbackModel],
         });
@@ -2679,7 +2679,7 @@ describe('streamText', () => {
 
         const noopRetryable: Retryable<LanguageModel> = () => undefined;
 
-        const retryableModel = createRetryable({
+        const retryableModel = createRetryableModel({
           model: baseModel,
           retries: [noopRetryable],
         });
@@ -2798,7 +2798,7 @@ describe('streamText', () => {
           const fallbackModel = new MockLanguageModel({
             doStream: mockStream(successStreamChunks('Recovered')),
           });
-          const retryableModel = createRetryable({
+          const retryableModel = createRetryableModel({
             model: baseModel,
             retries: [fallbackModel],
           });
@@ -2825,7 +2825,7 @@ describe('streamText', () => {
           const fallbackModel = new MockLanguageModel({
             doStream: mockStream(successStreamChunks('Recovered')),
           });
-          const retryableModel = createRetryable({
+          const retryableModel = createRetryableModel({
             model: baseModel,
             retries: [fallbackModel],
           });
@@ -2878,7 +2878,7 @@ describe('streamText', () => {
               },
             ]),
           });
-          const retryableModel = createRetryable({
+          const retryableModel = createRetryableModel({
             model: baseModel,
             retries: [fallbackModel],
           });
@@ -2912,7 +2912,7 @@ describe('streamText', () => {
           const fallbackModel = new MockLanguageModel({
             doStream: mockStream(mockStreamChunks),
           });
-          const retryableModel = createRetryable({
+          const retryableModel = createRetryableModel({
             model: baseModel,
             retries: [fallbackModel],
           });
@@ -2959,7 +2959,7 @@ describe('streamText', () => {
 
         // Act
         const result = streamText({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [fallbackRetryable],
           }),
@@ -3093,7 +3093,7 @@ describe('streamText', () => {
 
         // Act
         const result = streamText({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [fallbackRetryable],
           }),
@@ -3219,7 +3219,7 @@ describe('streamText', () => {
 
         // Act
         const result = streamText({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [
               fallbackModel1, // Language model should be skipped
@@ -3358,7 +3358,7 @@ describe('streamText', () => {
 
         // Act
         const result = streamText({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [
               { model: fallbackModel1 }, // Static retry should be skipped
@@ -3483,7 +3483,7 @@ describe('streamText', () => {
         return { model: fallbackModel, maxAttempts: 1 };
       };
 
-      const retryableModel = createRetryable({
+      const retryableModel = createRetryableModel({
         model: baseModel,
         retries: [fallbackRetryable],
         disabled: true,
@@ -3523,7 +3523,7 @@ describe('streamText', () => {
         return { model: fallbackModel, maxAttempts: 1 };
       };
 
-      const retryableModel = createRetryable({
+      const retryableModel = createRetryableModel({
         model: baseModel,
         retries: [fallbackRetryable],
         disabled: false,
@@ -3556,7 +3556,7 @@ describe('streamText', () => {
       const onErrorSpy = vi.fn<OnError>();
 
       // Act
-      const retryableModel = createRetryable({
+      const retryableModel = createRetryableModel({
         model: baseModel,
         retries: [fallbackModel],
         onError: onErrorSpy,
@@ -3593,7 +3593,7 @@ describe('streamText', () => {
       const onErrorSpy = vi.fn<OnError>();
 
       // Act
-      const retryableModel = createRetryable({
+      const retryableModel = createRetryableModel({
         model: baseModel,
         retries: [fallbackModel, finalModel],
         onError: onErrorSpy,
@@ -3634,7 +3634,7 @@ describe('streamText', () => {
       const onErrorSpy = vi.fn<OnError>();
 
       // Act
-      const retryableModel = createRetryable({
+      const retryableModel = createRetryableModel({
         model: baseModel,
         retries: [],
         onError: onErrorSpy,
@@ -3664,7 +3664,7 @@ describe('streamText', () => {
       const onRetrySpy = vi.fn<OnRetry>();
 
       // Act
-      const retryableModel = createRetryable({
+      const retryableModel = createRetryableModel({
         model: baseModel,
         retries: [fallbackModel],
         onRetry: onRetrySpy,
@@ -3704,7 +3704,7 @@ describe('streamText', () => {
       const onRetrySpy = vi.fn<OnRetry>();
 
       // Act
-      const retryableModel = createRetryable({
+      const retryableModel = createRetryableModel({
         model: baseModel,
         retries: [fallbackModel1, fallbackModel2],
         onRetry: onRetrySpy,
@@ -3751,7 +3751,7 @@ describe('streamText', () => {
       const onRetrySpy = vi.fn<OnRetry>();
 
       // Act
-      const retryableModel = createRetryable({
+      const retryableModel = createRetryableModel({
         model: baseModel,
         retries: [],
         onRetry: onRetrySpy,
@@ -3780,7 +3780,7 @@ describe('streamText', () => {
       const onSuccessSpy = vi.fn<OnSuccess>();
 
       // Act
-      const retryableModel = createRetryable({
+      const retryableModel = createRetryableModel({
         model: baseModel,
         retries: [],
         onSuccess: onSuccessSpy,
@@ -3813,7 +3813,7 @@ describe('streamText', () => {
       const onSuccessSpy = vi.fn<OnSuccess>();
 
       // Act
-      const retryableModel = createRetryable({
+      const retryableModel = createRetryableModel({
         model: baseModel,
         retries: [fallbackModel],
         onSuccess: onSuccessSpy,
@@ -3844,7 +3844,7 @@ describe('streamText', () => {
 
       // Act
       const result = streamText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [],
           onFailure: onFailureSpy,
@@ -3872,7 +3872,7 @@ describe('streamText', () => {
 
       // Act
       const result = streamText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [],
           onFailure: onFailureSpy,
@@ -3904,7 +3904,7 @@ describe('streamText', () => {
 
       // Act
       const result = streamText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [],
           onFailure: onFailureSpy,
@@ -3938,7 +3938,7 @@ describe('streamText', () => {
         });
 
         // Act
-        const retryableModel = createRetryable({
+        const retryableModel = createRetryableModel({
           model: baseModel,
           retries: [
             fallbackModel1,
@@ -3977,7 +3977,7 @@ describe('streamText', () => {
         });
 
         // Act
-        const retryableModel = createRetryable({
+        const retryableModel = createRetryableModel({
           model: baseModel,
           retries: [
             // Retryable<LanguageModel>  with different maxAttempts
@@ -4016,7 +4016,7 @@ describe('streamText', () => {
 
         // Act
         const result = streamText({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [{ model: fallbackModel, delay: delayMs }],
           }),
@@ -4051,7 +4051,7 @@ describe('streamText', () => {
 
         // Act
         const result = streamText({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [
               { model: fallbackModel1, delay: delay1 },
@@ -4084,7 +4084,7 @@ describe('streamText', () => {
 
         // Act
         const result = streamText({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [{ model: fallbackModel }],
           }),
@@ -4115,7 +4115,7 @@ describe('streamText', () => {
 
         // Act
         const result = streamText({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [
               {
@@ -4186,7 +4186,7 @@ describe('streamText', () => {
 
         // Act
         const result = streamText({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [
               {
@@ -4247,7 +4247,7 @@ describe('streamText', () => {
 
         // Act
         const result = streamText({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [fallbackModel],
             onError,
@@ -4288,7 +4288,7 @@ describe('streamText', () => {
           },
         });
 
-        const retryableModel = createRetryable({
+        const retryableModel = createRetryableModel({
           model: baseModel,
           retries: [{ model: fallbackModel, options: { temperature: 0.5 } }],
         });
@@ -4333,7 +4333,7 @@ describe('streamText', () => {
           },
         });
 
-        const retryableModel = createRetryable({
+        const retryableModel = createRetryableModel({
           model: baseModel,
           retries: [{ model: fallbackModel, options: { topP: 0.8 } }],
         });
@@ -4375,7 +4375,7 @@ describe('streamText', () => {
           },
         });
 
-        const retryableModel = createRetryable({
+        const retryableModel = createRetryableModel({
           model: baseModel,
           retries: [{ model: fallbackModel, options: { topK: 10 } }],
         });
@@ -4417,7 +4417,7 @@ describe('streamText', () => {
           },
         });
 
-        const retryableModel = createRetryable({
+        const retryableModel = createRetryableModel({
           model: baseModel,
           retries: [
             { model: fallbackModel, options: { maxOutputTokens: 500 } },
@@ -4461,7 +4461,7 @@ describe('streamText', () => {
           },
         });
 
-        const retryableModel = createRetryable({
+        const retryableModel = createRetryableModel({
           model: baseModel,
           retries: [{ model: fallbackModel, options: { seed: 42 } }],
         });
@@ -4503,7 +4503,7 @@ describe('streamText', () => {
           },
         });
 
-        const retryableModel = createRetryable({
+        const retryableModel = createRetryableModel({
           model: baseModel,
           retries: [
             {
@@ -4550,7 +4550,7 @@ describe('streamText', () => {
           },
         });
 
-        const retryableModel = createRetryable({
+        const retryableModel = createRetryableModel({
           model: baseModel,
           retries: [
             { model: fallbackModel, options: { presencePenalty: 0.5 } },
@@ -4594,7 +4594,7 @@ describe('streamText', () => {
           },
         });
 
-        const retryableModel = createRetryable({
+        const retryableModel = createRetryableModel({
           model: baseModel,
           retries: [
             { model: fallbackModel, options: { frequencyPenalty: 0.8 } },
@@ -4640,7 +4640,7 @@ describe('streamText', () => {
 
         const retryHeaders = { 'x-retry': 'retry' };
 
-        const retryableModel = createRetryable({
+        const retryableModel = createRetryableModel({
           model: baseModel,
           retries: [
             { model: fallbackModel, options: { headers: retryHeaders } },
@@ -4678,7 +4678,7 @@ describe('streamText', () => {
         doStream: retryableError,
       });
 
-      const retryableModel = createRetryable({
+      const retryableModel = createRetryableModel({
         model: baseModel,
         retries: [fallbackModel1, fallbackModel2],
       });
@@ -4723,7 +4723,7 @@ describe('streamText', () => {
       // Arrange
       const baseModel = new MockLanguageModel({ doStream: retryableError });
 
-      const retryableModel = createRetryable({
+      const retryableModel = createRetryableModel({
         model: baseModel,
         retries: [], // No retry models
       });
@@ -4757,7 +4757,7 @@ describe('streamText', () => {
       // Arrange
       const baseModel = new MockLanguageModel({ doStream: nonRetryableError });
 
-      const retryableModel = createRetryable({
+      const retryableModel = createRetryableModel({
         model: baseModel,
         retries: [() => undefined],
       });
@@ -4806,7 +4806,7 @@ describe('streamText', () => {
           }),
         });
 
-        const retryableModel = createRetryable({
+        const retryableModel = createRetryableModel({
           model: baseModel,
           retries: [{ model: fallbackModel, maxAttempts: 1 }],
         });
@@ -4837,7 +4837,7 @@ describe('streamText', () => {
           }),
         });
 
-        const retryableModel = createRetryable({
+        const retryableModel = createRetryableModel({
           model: baseModel,
           retries: [{ model: fallbackModel, maxAttempts: 1 }],
           reset: `after-2-requests`,
@@ -4883,7 +4883,7 @@ describe('streamText', () => {
           }),
         });
 
-        const retryableModel = createRetryable({
+        const retryableModel = createRetryableModel({
           model: baseModel,
           retries: [{ model: fallbackModel, maxAttempts: 1 }],
           reset: `after-3-requests`,
@@ -4918,7 +4918,7 @@ describe('streamText', () => {
           }),
         });
 
-        const retryableModel = createRetryable({
+        const retryableModel = createRetryableModel({
           model: baseModel,
           retries: [
             { model: fallbackModel1, maxAttempts: 1 },
@@ -4962,7 +4962,7 @@ describe('streamText', () => {
           }),
         });
 
-        const retryableModel = createRetryable({
+        const retryableModel = createRetryableModel({
           model: baseModel,
           retries: [{ model: fallbackModel, maxAttempts: 1 }],
           reset: `after-5-seconds`,

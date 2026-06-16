@@ -14,17 +14,11 @@ import { isResultAttempt } from '../internal/guards.js';
  * (set automatically when using `Output.object()`) and retries with a different model
  * if validation fails.
  *
- * @example
- * ```ts
- * const result = await generateText({
- *   model: createRetryable({
- *     model: primaryModel,
- *     retries: [schemaMismatch(fallbackModel)],
- *   }),
- *   output: Output.object({ schema: z.object({ name: z.string() }) }),
- *   prompt: `Generate a person`,
- * });
- * ```
+ * @deprecated Use the composable condition API from
+ * `ai-retry/language-model/conditions`:
+ * `schemaInvalid().switch({ model: m })`.
+ * See the [v1 README](https://github.com/zirkelc/ai-retry/blob/v1/README.md)
+ * for the old function-style docs.
  */
 export function schemaMismatch<MODEL extends ResolvableLanguageModel>(
   model: MODEL,

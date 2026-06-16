@@ -5,19 +5,19 @@ import {
   RetryError,
 } from 'ai';
 import { describe, expect, it, vi } from 'vitest';
-import { createRetryable } from '../create-retryable-model.js';
+import {
+  createRetryableModel,
+  MockImageModel,
+  mockImageResult,
+  nonRetryableError,
+  retryableError,
+  serviceOverloadedError,
+  serviceUnavailableError,
+} from './test-utils.js';
 import { noImageGenerated } from '../retryables/no-image-generated.js';
 import { requestTimeout } from '../retryables/request-timeout.js';
 import { serviceOverloaded } from '../retryables/service-overloaded.js';
 import { serviceUnavailable } from '../retryables/service-unavailable.js';
-import {
-  mockImageResult,
-  MockImageModel,
-  nonRetryableError,
-  retryableError,
-  serviceUnavailableError,
-  serviceOverloadedError,
-} from './test-utils.js';
 import type {
   ImageModel,
   OnRetryOverrides,
@@ -42,7 +42,7 @@ describe('generateImage', () => {
     const baseModel = new MockImageModel({
       doGenerate: mockImageResult,
     });
-    const retryableModel = createRetryable({
+    const retryableModel = createRetryableModel({
       model: baseModel,
       retries: [],
     });
@@ -79,7 +79,7 @@ describe('generateImage', () => {
 
         // Act
         const result = await generateImage({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [fallbackRetryable],
           }),
@@ -104,7 +104,7 @@ describe('generateImage', () => {
 
         // Act
         const result = await generateImage({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [fallbackModel1, fallbackModel2],
           }),
@@ -140,7 +140,7 @@ describe('generateImage', () => {
 
         // Act
         const result = await generateImage({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [fallbackModel1, fallbackRetryable],
           }),
@@ -168,7 +168,7 @@ describe('generateImage', () => {
         return { model: fallbackModel, maxAttempts: 1 };
       };
 
-      const retryableModel = createRetryable({
+      const retryableModel = createRetryableModel({
         model: baseModel,
         retries: [fallbackRetryable],
         disabled: true,
@@ -196,7 +196,7 @@ describe('generateImage', () => {
         return { model: fallbackModel, maxAttempts: 1 };
       };
 
-      const retryableModel = createRetryable({
+      const retryableModel = createRetryableModel({
         model: baseModel,
         retries: [fallbackRetryable],
         disabled: () => true,
@@ -230,7 +230,7 @@ describe('generateImage', () => {
 
       // Act
       await generateImage({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [fallbackRetryable],
           onError: onErrorSpy,
@@ -260,7 +260,7 @@ describe('generateImage', () => {
 
       // Act
       await generateImage({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [fallbackRetryable],
           onRetry: onRetrySpy,
@@ -285,7 +285,7 @@ describe('generateImage', () => {
 
         // Act
         await generateImage({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [fallbackModel],
             onRetry: () => override,
@@ -311,7 +311,7 @@ describe('generateImage', () => {
 
         // Act
         await generateImage({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [fallbackModel],
             onRetry: () => ({
@@ -342,7 +342,7 @@ describe('generateImage', () => {
 
         // Act
         await generateImage({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [{ model: fallbackModel, options: { size: `1024x1024` } }],
             onRetry: () => override,
@@ -365,7 +365,7 @@ describe('generateImage', () => {
 
         // Act
         await generateImage({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [{ model: fallbackModel, options: { size: `1024x1024` } }],
             onRetry: () => undefined,
@@ -388,7 +388,7 @@ describe('generateImage', () => {
 
         // Act
         await generateImage({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [fallbackModel],
             onRetry: async () => {
@@ -415,7 +415,7 @@ describe('generateImage', () => {
 
       // Act
       await generateImage({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [],
           onSuccess: onSuccessSpy,
@@ -444,7 +444,7 @@ describe('generateImage', () => {
 
       // Act
       await generateImage({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [fallbackModel],
           onSuccess: onSuccessSpy,
@@ -472,7 +472,7 @@ describe('generateImage', () => {
 
       // Act & Assert
       const result = generateImage({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [fallbackModel],
           onSuccess: onSuccessSpy,
@@ -493,7 +493,7 @@ describe('generateImage', () => {
 
       // Act
       const result = generateImage({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [],
           onFailure: onFailureSpy,
@@ -522,7 +522,7 @@ describe('generateImage', () => {
 
       // Act
       const result = generateImage({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [fallbackModel],
           onFailure: onFailureSpy,
@@ -549,7 +549,7 @@ describe('generateImage', () => {
 
       // Act
       await generateImage({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [],
           onFailure: onFailureSpy,
@@ -583,7 +583,7 @@ describe('generateImage', () => {
         return undefined;
       };
 
-      const retryableModel = createRetryable({
+      const retryableModel = createRetryableModel({
         model: baseModel,
         retries: [fallbackRetryable],
       });
@@ -613,7 +613,7 @@ describe('generateImage', () => {
           return undefined;
         };
 
-        const retryableModel = createRetryable({
+        const retryableModel = createRetryableModel({
           model: baseModel,
           retries: [fallbackRetryable],
         });
@@ -644,7 +644,7 @@ describe('generateImage', () => {
 
         // Act
         const resultPromise = generateImage({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [fallbackRetryable],
           }),
@@ -673,7 +673,7 @@ describe('generateImage', () => {
 
         // Act
         await generateImage({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [{ model: fallbackModel, options: { size: `1024x1024` } }],
           }),
@@ -698,7 +698,7 @@ describe('generateImage', () => {
 
         // Act
         await generateImage({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [{ model: fallbackModel, options: { seed: 42 } }],
           }),
@@ -725,7 +725,7 @@ describe('generateImage', () => {
 
         // Act
         const result = await generateImage({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [noImageGenerated(fallbackModel)],
           }),
@@ -751,7 +751,7 @@ describe('generateImage', () => {
 
         // Act
         const result = await generateImage({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [serviceOverloaded(fallbackModel)],
           }),
@@ -777,7 +777,7 @@ describe('generateImage', () => {
 
         // Act
         const result = await generateImage({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [serviceUnavailable(fallbackModel)],
           }),
@@ -804,7 +804,7 @@ describe('generateImage', () => {
 
         // Act
         const result = await generateImage({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [requestTimeout(fallbackModel)],
           }),
