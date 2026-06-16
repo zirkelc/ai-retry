@@ -1,25 +1,13 @@
-# Migrating from v1 to v2
+# Migrating to the condition API
 
-v2 promotes the **condition-based API** (previously shipped under `ai-retry/experimental/*`) to the package's primary, stable API. This guide explains how to move from the v1 function-style retryables to the new condition API.
+The **condition-based API** (per-model entry points + `createRetryableModel`) is the recommended way to configure retries. This guide shows how to move existing code from the function-style retryables to the condition API.
 
 > [!TIP]
-> Nothing forces an immediate rewrite. The v1 function-style retryables and the root `createRetryable` still work in v2 (they are deprecated, not removed). You can migrate incrementally.
-
-## Version compatibility
-
-| Version | AI SDK | Primary API |
-| --- | --- | --- |
-| `ai-retry@0.x` | AI SDK v5 | function-style retryables |
-| `ai-retry@1.x` | AI SDK v6 | function-style retryables |
-| `ai-retry@2.x` | AI SDK v6 | condition-based retryables |
-
-There is **no AI SDK version bump** between v1 and v2: both target AI SDK v6 and the same peer-dependency ranges. The only change is the public API surface.
-
-If you are not ready to migrate, pin to `ai-retry@1` and read the [v1 README](https://github.com/zirkelc/ai-retry/blob/v1/README.md).
+> Nothing forces an immediate rewrite. The function-style retryables and the root `createRetryable` are deprecated but still work — they ship in the same package as the condition API, so you can migrate incrementally.
 
 ## What still works
 
-If you wrote code like this in v1, it **still compiles and runs unchanged in v2**:
+The following keeps compiling and running unchanged:
 
 ```ts
 import { createRetryable } from 'ai-retry';
@@ -92,5 +80,5 @@ Full example:
 
 ## Reference
 
-- [v2 README](./README.md) — full condition API documentation
-- [v1 README](https://github.com/zirkelc/ai-retry/blob/v1/README.md) — function-style retryable documentation
+- [README](./README.md) — full condition API documentation
+- [Earlier README](https://github.com/zirkelc/ai-retry/blob/v1/README.md) — full function-style retryable documentation
