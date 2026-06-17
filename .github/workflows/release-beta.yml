@@ -29,9 +29,20 @@ jobs:
       # https://github.com/googleapis/release-please-action
       - name: Release Please
         uses: googleapis/release-please-action@v4
+        id: release
         with:
           # https://github.com/googleapis/release-please-action?tab=readme-ov-file#github-credentials
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
           target-branch: ai-sdk-v7
           config-file: release-please-config.beta.json
           manifest-file: .release-please-manifest.beta.json
+
+      # Auto-merge the beta release PR so every push to this branch can cut a
+      # new beta. Gated: GitHub auto-merge waits for the branch's required
+      # status checks (Lint/Test) before merging. Once merged, release-please
+      # tags + creates the GitHub release, which triggers the publish workflow.
+      - name: Enable auto-merge on the beta release PR
+        if: ${{ steps.release.outputs.pr }}
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+        run: gh pr merge --squash --auto "${{ fromJSON(steps.release.outputs.pr).number }}"
