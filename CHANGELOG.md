@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.0.0-beta.1](https://github.com/zirkelc/ai-retry/compare/v2.0.0-beta.0...v2.0.0-beta.1) (2026-06-17)
+
+
+### Features
+
+* **telemetry:** rename experimental_telemetry option to telemetry ([4c0aa9e](https://github.com/zirkelc/ai-retry/commit/4c0aa9e8dac33717cf1252f3520f0091d15b4e6f))
+
+
+### Bug Fixes
+
+* **ci:** resolve repo for gh pr merge without a checkout ([1f67d8c](https://github.com/zirkelc/ai-retry/commit/1f67d8c3d2c6f04a5accf76db7d5058c4b048c7e))
+
+
+### Continuous Integration
+
+* auto-merge beta release PRs after required checks pass ([59f7a2e](https://github.com/zirkelc/ai-retry/commit/59f7a2e1ebca8adad223769ff2eb4ff2ebf36e0a))
+
 ## [2.0.0-beta.0](https://github.com/zirkelc/ai-retry/compare/v1.10.0...v2.0.0-beta.0) (2026-06-17)
 
 
