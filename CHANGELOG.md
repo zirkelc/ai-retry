@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.11.0](https://github.com/zirkelc/ai-retry/compare/v1.10.0...v1.11.0) (2026-06-17)
+
+
+### Features
+
+* promote condition-based retryables to the primary API ([298f050](https://github.com/zirkelc/ai-retry/commit/298f050955f842902dca1b8d99ad624bf65fa7e8))
+
 ## [1.10.0](https://github.com/zirkelc/ai-retry/compare/v1.9.1...v1.10.0) (2026-06-08)
 
 
