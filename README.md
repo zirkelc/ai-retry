@@ -25,9 +25,16 @@ Two retry shapes are supported:
 >
 > - `ai-retry@0.x` — AI SDK v5
 > - `ai-retry@1.x` — AI SDK v6
+> - `ai-retry@beta` — AI SDK v7 (beta, see the [`ai-sdk-v7` branch](https://github.com/zirkelc/ai-retry/tree/ai-sdk-v7))
 
 ```bash
 npm install ai-retry
+```
+
+A beta release for AI SDK v7 is available on the [`ai-sdk-v7` branch](https://github.com/zirkelc/ai-retry/tree/ai-sdk-v7). Install it with the `beta` tag:
+
+```bash
+npm install ai-retry@beta
 ```
 
 ### Usage
