@@ -281,15 +281,12 @@ export class RetryableEmbeddingModel
       return this.currentModel.doEmbed(callOptions);
     }
 
-    const recorder = await createRetryTelemetry(
-      this.options.experimental_telemetry,
-      {
-        operation: 'doEmbed',
-        genAiOperation: 'embeddings',
-        provider: startModel.provider,
-        modelId: startModel.modelId,
-      },
-    );
+    const recorder = await createRetryTelemetry(this.telemetrySettings, {
+      operation: 'doEmbed',
+      genAiOperation: 'embeddings',
+      provider: startModel.provider,
+      modelId: startModel.modelId,
+    });
 
     /**
      * Shared attempts array, threaded into `withRetry` so it stays populated

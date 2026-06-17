@@ -96,7 +96,7 @@ const reliableModel = new MockLanguageModelV4({
 const model = createRetryableModel({
   model: flakyModel,
   retries: [httpStatus(529, 'overloaded').switch({ model: reliableModel })],
-  experimental_telemetry: { isEnabled: true, functionId: 'telemetry-example' },
+  telemetry: { isEnabled: true, functionId: 'telemetry-example' },
 });
 
 /** Disable the AI SDK's own retries so each trace shows one model call. */
@@ -106,7 +106,7 @@ const { text } = await generateText({
   model,
   prompt: 'Say hello.',
   maxRetries: 0,
-  experimental_telemetry: telemetry,
+  telemetry: telemetry,
 });
 console.log('generateText:', text);
 
@@ -114,7 +114,7 @@ const result = streamText({
   model,
   prompt: 'Say hello, streaming.',
   maxRetries: 0,
-  experimental_telemetry: telemetry,
+  telemetry: telemetry,
 });
 let streamed = '';
 for await (const chunk of result.textStream) streamed += chunk;

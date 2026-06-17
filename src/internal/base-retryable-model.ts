@@ -69,6 +69,14 @@ export abstract class BaseRetryableModel<
   }
 
   /**
+   * Resolve the telemetry settings, preferring `telemetry` over the deprecated
+   * `experimental_telemetry` alias.
+   */
+  protected get telemetrySettings(): RetryableModelOptions<MODEL>['telemetry'] {
+    return this.options.telemetry ?? this.options.experimental_telemetry;
+  }
+
+  /**
    * Check if retries are disabled
    */
   protected isDisabled(): boolean {

@@ -259,13 +259,20 @@ export type FailureContext<
 /**
  * Telemetry configuration for retry instrumentation.
  *
- * Mirrors the AI SDK's `experimental_telemetry` shape so the two can be
- * configured the same way. When enabled, each request emits an OpenTelemetry
- * span for the operation with a child span per attempt. Spans created here
- * nest under any active span (e.g. the AI SDK's `ai.generateText.doGenerate`)
- * via OpenTelemetry context propagation.
+ * Talks to OpenTelemetry directly and independently of the AI SDK: when
+ * enabled, each request emits a span for the operation with a child span per
+ * attempt. Spans created here nest under any active span (e.g. the AI SDK's
+ * `ai.generateText.doGenerate`, when that integration is registered) via
+ * OpenTelemetry context propagation.
  *
- * Requires the optional peer dependency `@opentelemetry/api` to be installed.
+ * The shape resembles the AI SDK's `telemetry` settings but is opt-in and
+ * deliberately keeps a `tracer` field (which the AI SDK moved to its
+ * `@ai-sdk/otel` integration), so retry spans work without adopting that
+ * integration.
+ *
+ * Requires the optional peer dependency `@opentelemetry/api` to be installed
+ * (in AI SDK v7 it is no longer a transitive dependency of `ai`; install
+ * `@ai-sdk/otel` or `@opentelemetry/api` directly).
  */
 export interface RetryTelemetrySettings {
   /**
@@ -310,6 +317,12 @@ export interface RetryableModelOptions<
    *
    * Telemetry configuration. When enabled, emits OpenTelemetry spans for
    * retry operations and attempts. Requires `@opentelemetry/api`.
+   */
+  telemetry?: RetryTelemetrySettings;
+
+  /**
+   * @deprecated Use `telemetry` instead. Kept as an alias for compatibility;
+   * when both are set, `telemetry` takes precedence.
    */
   experimental_telemetry?: RetryTelemetrySettings;
 

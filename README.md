@@ -715,11 +715,11 @@ const retryableModel = createRetryableModel({
 > [!NOTE]
 > Experimental: span names and attributes may change in patch versions.
 
-`ai-retry` can emit [OpenTelemetry](https://opentelemetry.io/) spans for each request and every retry attempt. Spans are created on the active OpenTelemetry context, so they nest automatically under the AI SDK's own spans (e.g. `ai.generateText.doGenerate`) when you also enable `experimental_telemetry` on `generateText` / `streamText`. A single trace then shows the individual attempts — which model each used, why it was retried, and the backoff between them — that the SDK's own span otherwise hides.
+`ai-retry` can emit [OpenTelemetry](https://opentelemetry.io/) spans for each request and every retry attempt. Spans are created on the active OpenTelemetry context, so they nest automatically under the AI SDK's own spans (e.g. `ai.generateText.doGenerate`) when that integration is active — in AI SDK v7 that means installing [`@ai-sdk/otel`](https://ai-sdk.dev/docs/ai-sdk-core/telemetry) and registering it with `registerTelemetry(new OpenTelemetry())`. A single trace then shows the individual attempts — which model each used, why it was retried, and the backoff between them — that the SDK's own span otherwise hides. Retry telemetry works on its own too: it talks to OpenTelemetry directly, so it does not require `@ai-sdk/otel`.
 
 #### Setup
 
-Telemetry uses the optional peer dependency `@opentelemetry/api` (already present if you use the AI SDK). Register an OpenTelemetry SDK once at startup, then opt in per model:
+Telemetry uses the optional peer dependency `@opentelemetry/api`. In AI SDK v7 it is no longer a transitive dependency of `ai`, so install `@ai-sdk/otel` (which brings it in) or `@opentelemetry/api` directly. Register an OpenTelemetry SDK once at startup, then opt in per model:
 
 ```typescript
 import { createRetryableModel } from 'ai-retry/language-model';
@@ -727,11 +727,14 @@ import { createRetryableModel } from 'ai-retry/language-model';
 const retryableModel = createRetryableModel({
   model: openai('gpt-4o'),
   retries: [anthropic('claude-sonnet-4-5')],
-  experimental_telemetry: { isEnabled: true },
+  telemetry: { isEnabled: true },
 });
 ```
 
-The settings mirror the AI SDK's `experimental_telemetry` shape:
+> [!NOTE]
+> `telemetry` replaces the now-deprecated `experimental_telemetry` option. The old name still works as an alias; when both are set, `telemetry` wins.
+
+The settings resemble the AI SDK's `telemetry` shape, but stay opt-in and keep a `tracer` field (which the AI SDK moved into `@ai-sdk/otel`):
 
 ```ts
 interface RetryTelemetrySettings {
@@ -844,6 +847,8 @@ interface RetryableModelOptions<
   retries: Array<Retryable<MODEL> | MODEL>;
   disabled?: boolean | (() => boolean);
   reset?: Reset;
+  telemetry?: RetryTelemetrySettings;
+  /** @deprecated use `telemetry` */
   experimental_telemetry?: RetryTelemetrySettings;
   onError?: (context: RetryContext<MODEL>) => void;
   onRetry?: (
@@ -860,7 +865,7 @@ interface RetryableModelOptions<
 - `retries` — array of conditions (`.switch(...)` / `.retry(...)` outputs), models, or retry objects to try on failure.
 - `disabled` — disable all retry logic. `boolean` or `() => boolean`. Default `false`.
 - `reset` — controls when to reset back to the base model after a successful retry. Default `'after-request'`.
-- `experimental_telemetry` — OpenTelemetry instrumentation. See [Telemetry](#telemetry).
+- `telemetry` — OpenTelemetry instrumentation. See [Telemetry](#telemetry). (`experimental_telemetry` is a deprecated alias.)
 - `onError` — fires when an error occurs.
 - `onRetry` — fires before a retry attempt. May return `OnRetryOverrides` (or a promise of one) to override `options.*` for that attempt only. See [Dynamic call options](#dynamic-call-options).
 - `onSuccess` — fires after a successful request.
