@@ -28,7 +28,7 @@ export const isLanguageModel = (model: unknown): model is LanguageModel =>
   'specificationVersion' in model &&
   'doGenerate' in model &&
   'doStream' in model &&
-  model.specificationVersion === 'v3';
+  model.specificationVersion === 'v4';
 
 export const isEmbeddingModel = (model: unknown): model is EmbeddingModel =>
   isObject(model) &&
@@ -36,7 +36,7 @@ export const isEmbeddingModel = (model: unknown): model is EmbeddingModel =>
   'modelId' in model &&
   'specificationVersion' in model &&
   'doEmbed' in model &&
-  model.specificationVersion === 'v3';
+  model.specificationVersion === 'v4';
 
 export const isImageModel = (model: unknown): model is ImageModel =>
   isObject(model) &&
@@ -44,7 +44,7 @@ export const isImageModel = (model: unknown): model is ImageModel =>
   'modelId' in model &&
   'specificationVersion' in model &&
   'doGenerate' in model &&
-  model.specificationVersion === 'v3' &&
+  model.specificationVersion === 'v4' &&
   !('doStream' in model) &&
   !('doEmbed' in model);
 

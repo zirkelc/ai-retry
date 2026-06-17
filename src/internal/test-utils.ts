@@ -73,7 +73,7 @@ const generateMockModelId = () => {
 };
 
 export class MockLanguageModel implements LanguageModel {
-  readonly specificationVersion = 'v3';
+  readonly specificationVersion = 'v4';
 
   readonly supportedUrls: LanguageModel['supportedUrls'];
   readonly provider: LanguageModel['provider'];
@@ -110,7 +110,7 @@ export class MockLanguageModel implements LanguageModel {
 }
 
 export class MockEmbeddingModel implements EmbeddingModel {
-  readonly specificationVersion = 'v3';
+  readonly specificationVersion = 'v4';
 
   readonly provider: EmbeddingModel['provider'];
   readonly modelId: EmbeddingModel['modelId'];
@@ -137,7 +137,7 @@ export class MockEmbeddingModel implements EmbeddingModel {
 }
 
 export class MockImageModel implements ImageModel {
-  readonly specificationVersion = 'v3';
+  readonly specificationVersion = 'v4';
 
   readonly provider: ImageModel['provider'];
   readonly modelId: ImageModel['modelId'];

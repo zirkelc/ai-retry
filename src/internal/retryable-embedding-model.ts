@@ -20,7 +20,7 @@ export class RetryableEmbeddingModel
   extends BaseRetryableModel<EmbeddingModel>
   implements EmbeddingModel
 {
-  readonly specificationVersion = 'v3';
+  readonly specificationVersion = 'v4';
 
   get modelId() {
     return this.currentModel.modelId;

@@ -30,7 +30,7 @@ export class RetryableLanguageModel
   extends BaseRetryableModel<LanguageModel>
   implements LanguageModel
 {
-  readonly specificationVersion = 'v3';
+  readonly specificationVersion = 'v4';
 
   get modelId() {
     return this.currentModel.modelId;

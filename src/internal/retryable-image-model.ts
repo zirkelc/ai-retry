@@ -20,7 +20,7 @@ export class RetryableImageModel
   extends BaseRetryableModel<ImageModel>
   implements ImageModel
 {
-  readonly specificationVersion = 'v3';
+  readonly specificationVersion = 'v4';
 
   get modelId() {
     return this.currentModel.modelId;

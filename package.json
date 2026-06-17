@@ -45,15 +45,15 @@
     "prepare": "husky"
   },
   "devDependencies": {
-    "@ai-sdk/anthropic": "3.0.23",
-    "@ai-sdk/azure": "3.0.19",
-    "@ai-sdk/gateway": "3.0.23",
-    "@ai-sdk/google": "^3.0.33",
-    "@ai-sdk/groq": "3.0.15",
-    "@ai-sdk/openai": "3.0.19",
-    "@ai-sdk/provider": "3.0.5",
-    "@ai-sdk/provider-utils": "4.0.9",
-    "@ai-sdk/test-server": "1.0.3",
+    "@ai-sdk/anthropic": "4.0.0-beta.67",
+    "@ai-sdk/azure": "4.0.0-beta.76",
+    "@ai-sdk/gateway": "4.0.0-beta.110",
+    "@ai-sdk/google": "4.0.0-beta.82",
+    "@ai-sdk/groq": "4.0.0-beta.54",
+    "@ai-sdk/openai": "4.0.0-beta.74",
+    "@ai-sdk/provider": "4.0.0-beta.19",
+    "@ai-sdk/provider-utils": "5.0.0-beta.49",
+    "@ai-sdk/test-server": "2.0.0-beta.7",
     "@arethetypeswrong/cli": "^0.18.2",
     "@langfuse/otel": "^5.3.0",
     "@langfuse/tracing": "^5.3.0",
@@ -63,7 +63,7 @@
     "@opentelemetry/sdk-trace-base": "^2.7.1",
     "@total-typescript/tsconfig": "^1.0.4",
     "@types/node": "^25.0.10",
-    "ai": "6.0.50",
+    "ai": "7.0.0-beta.179",
     "husky": "^9.1.7",
     "lint-staged": "^16.4.0",
     "msw": "^2.12.7",
@@ -78,10 +78,10 @@
     "zod": "^4.3.6"
   },
   "peerDependencies": {
-    "@ai-sdk/provider": "^3.0.0",
-    "@ai-sdk/provider-utils": "^4.0.0",
+    "@ai-sdk/provider": "^4.0.0-beta.0",
+    "@ai-sdk/provider-utils": "^5.0.0-beta.0",
     "@opentelemetry/api": "^1.9.0",
-    "ai": "6.x",
+    "ai": "^7.0.0-beta.0",
     "zod": "^4.0.0"
   },
   "peerDependenciesMeta": {

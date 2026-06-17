@@ -1,0 +1,37 @@
+# Prerelease (beta) line for the next major, cut from the `ai-sdk-v7` branch.
+#
+# Isolated from the stable release on `main`: it uses its OWN config and
+# manifest (`*.beta.json`) so the `ai-sdk-v7` branch never touches main's
+# `release-please-config.json` / `.release-please-manifest.json`. When this
+# branch is merged into `main`, main cuts a clean stable release with its own
+# config, and these beta files + this workflow can be deleted.
+
+name: Release Beta
+
+on:
+  push:
+    branches:
+      - ai-sdk-v7
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write # needed for github release
+  pull-requests: write # needed for the release PR
+
+jobs:
+  release:
+    name: Release Beta
+    runs-on: ubuntu-latest
+    steps:
+      # https://github.com/googleapis/release-please-action
+      - name: Release Please
+        uses: googleapis/release-please-action@v4
+        with:
+          # https://github.com/googleapis/release-please-action?tab=readme-ov-file#github-credentials
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          target-branch: ai-sdk-v7
+          config-file: release-please-config.beta.json
+          manifest-file: .release-please-manifest.beta.json

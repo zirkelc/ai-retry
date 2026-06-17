@@ -25,7 +25,7 @@ import {
   simulateReadableStream,
   streamText,
 } from 'ai';
-import { MockLanguageModelV3 } from 'ai/test';
+import { MockLanguageModelV4 } from 'ai/test';
 import {
   createRetryableModel,
   httpStatus,
@@ -46,7 +46,7 @@ const overloaded = () =>
   });
 
 /** A primary model that always reports itself as overloaded (HTTP 529). */
-const flakyModel = new MockLanguageModelV3({
+const flakyModel = new MockLanguageModelV4({
   provider: 'mock',
   modelId: 'flaky-primary',
   doGenerate: async () => {
@@ -63,7 +63,7 @@ const flakyModel = new MockLanguageModelV3({
 });
 
 /** A reliable fallback model that returns a static answer. */
-const reliableModel = new MockLanguageModelV3({
+const reliableModel = new MockLanguageModelV4({
   provider: 'mock',
   modelId: 'reliable-fallback',
   doGenerate: async () => ({

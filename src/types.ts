@@ -1,13 +1,13 @@
 import type {
-  EmbeddingModelV3,
-  ImageModelV3,
-  ImageModelV3CallOptions,
-  LanguageModelV3,
-  LanguageModelV3CallOptions,
-  LanguageModelV3GenerateResult,
-  LanguageModelV3Prompt,
-  LanguageModelV3StreamPart,
-  SharedV3ProviderOptions,
+  EmbeddingModelV4,
+  ImageModelV4,
+  ImageModelV4CallOptions,
+  LanguageModelV4,
+  LanguageModelV4CallOptions,
+  LanguageModelV4GenerateResult,
+  LanguageModelV4Prompt,
+  LanguageModelV4StreamPart,
+  SharedV4ProviderOptions,
 } from '@ai-sdk/provider';
 import type { AttributeValue, Tracer } from '@opentelemetry/api';
 import type { gateway } from 'ai';
@@ -18,13 +18,13 @@ type Literals<T> = T extends string
     : T // It's a literal, keep it
   : never;
 
-export type LanguageModel = LanguageModelV3;
-export type EmbeddingModel = EmbeddingModelV3;
-export type ImageModel = ImageModelV3;
-export type LanguageModelCallOptions = LanguageModelV3CallOptions;
-export type LanguageModelStreamPart = LanguageModelV3StreamPart;
-export type ImageModelCallOptions = ImageModelV3CallOptions;
-export type ProviderOptions = SharedV3ProviderOptions;
+export type LanguageModel = LanguageModelV4;
+export type EmbeddingModel = EmbeddingModelV4;
+export type ImageModel = ImageModelV4;
+export type LanguageModelCallOptions = LanguageModelV4CallOptions;
+export type LanguageModelStreamPart = LanguageModelV4StreamPart;
+export type ImageModelCallOptions = ImageModelV4CallOptions;
+export type ProviderOptions = SharedV4ProviderOptions;
 
 export type GatewayLanguageModelId = Parameters<
   (typeof gateway)['languageModel']
@@ -75,7 +75,7 @@ export type ResolvedModel<MODEL extends AnyResolvableModel> =
 /**
  * Result from a generateText call.
  */
-export type LanguageModelResult = LanguageModelV3GenerateResult;
+export type LanguageModelResult = LanguageModelV4GenerateResult;
 
 /**
  * Call options that can be overridden during retry for language models.
@@ -381,7 +381,8 @@ export type Retry<MODEL extends AnyResolvableModel> = {
    * If both `providerOptions` and `options.providerOptions` are set,
    * `options.providerOptions` takes precedence.
    */
-  providerOptions?: SharedV3ProviderOptions;
+  // TODO remove in this version
+  providerOptions?: SharedV4ProviderOptions;
 };
 
 /**
