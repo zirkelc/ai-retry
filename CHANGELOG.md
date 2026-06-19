@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.0-beta.3](https://github.com/zirkelc/ai-retry/compare/v2.0.0-beta.2...v2.0.0-beta.3) (2026-06-19)
+
+
+### Miscellaneous Chores
+
+* **deps:** update AI SDK v7 packages to latest beta ([b2b3828](https://github.com/zirkelc/ai-retry/commit/b2b382853ffc0f30417aad2e9447c0982988f61f))
+
 ## [2.0.0-beta.2](https://github.com/zirkelc/ai-retry/compare/v2.0.0-beta.1...v2.0.0-beta.2) (2026-06-19)
 
 
