@@ -286,10 +286,6 @@ export interface RetryTelemetrySettings {
    */
   tracer?: Tracer;
   /**
-   * Identifier for this function. Used to group telemetry data by function.
-   */
-  functionId?: string;
-  /**
    * Additional information to include in the telemetry data. Recorded on the
    * operation span as `ai_retry.metadata.<key>` attributes.
    */

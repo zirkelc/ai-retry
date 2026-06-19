@@ -740,7 +740,6 @@ The settings resemble the AI SDK's `telemetry` shape, but stay opt-in and keep a
 interface RetryTelemetrySettings {
   isEnabled?: boolean; // off by default while experimental
   tracer?: Tracer; // defaults to trace.getTracer('ai-retry')
-  functionId?: string; // groups telemetry by function
   metadata?: Record<string, AttributeValue>;
 }
 ```
@@ -770,7 +769,7 @@ ai_retry.doGenerate            outcome=success, attempts=2
 | `ai_retry.model.start`                                                       | the model the request started with (`provider/modelId`)                      |
 | `ai_retry.model.final`                                                       | the model that produced the final outcome                                    |
 | `ai_retry.error.{name,message,status,cause.name,cause.message,cause.status}` | the failing error (on failure); `status` when it carries an HTTP status code |
-| `ai_retry.function.id`, `ai_retry.metadata.*`                                | from the telemetry settings                                                  |
+| `ai_retry.metadata.*`                                                        | from the telemetry settings `metadata`                                       |
 
 **Attempt span** (`ai_retry.attempt`) attributes:
 
@@ -815,16 +814,16 @@ The function-style helpers (`contentFilterTriggered`, `requestTimeout`, `request
 
 Each function-style retryable has a one-line equivalent in the new shape (imports from `ai-retry/language-model` unless noted):
 
-| Function-style (deprecated)                 | Condition API                                                                                                        |
-| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `contentFilterTriggered(m)`                 | `finishReason('content-filter').switch({ model: m })`                                                                |
-| `requestTimeout(m)`                         | `timeout().switch({ model: m, timeout: 60_000 })`                                                                    |
-| `requestNotRetryable(m)`                    | `error.isRetryable(false).switch({ model: m })`                                                                      |
-| `schemaMismatch(m)`                         | `schemaInvalid().switch({ model: m })`                                                                               |
-| `serviceOverloaded(m)`                      | `httpStatus(529).switch({ model: m })`                                                                               |
-| `serviceUnavailable(m)`                     | `httpStatus(503).switch({ model: m })`                                                                               |
-| `noImageGenerated(m)`                       | `noImage().switch({ model: m })` (from `ai-retry/image-model`)                                                       |
-| `retryAfterDelay({ delay, backoffFactor })` | `error.isRetryable(true).retry({ delay, backoffFactor })`                                                            |
+| Function-style (deprecated)                 | Condition API                                                  |
+| ------------------------------------------- | -------------------------------------------------------------- |
+| `contentFilterTriggered(m)`                 | `finishReason('content-filter').switch({ model: m })`          |
+| `requestTimeout(m)`                         | `timeout().switch({ model: m, timeout: 60_000 })`              |
+| `requestNotRetryable(m)`                    | `error.isRetryable(false).switch({ model: m })`                |
+| `schemaMismatch(m)`                         | `schemaInvalid().switch({ model: m })`                         |
+| `serviceOverloaded(m)`                      | `httpStatus(529).switch({ model: m })`                         |
+| `serviceUnavailable(m)`                     | `httpStatus(503).switch({ model: m })`                         |
+| `noImageGenerated(m)`                       | `noImage().switch({ model: m })` (from `ai-retry/image-model`) |
+| `retryAfterDelay({ delay, backoffFactor })` | `error.isRetryable(true).retry({ delay, backoffFactor })`      |
 
 #### Preamble buffering
 
