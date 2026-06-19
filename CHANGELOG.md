@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.0-beta.4](https://github.com/zirkelc/ai-retry/compare/v2.0.0-beta.3...v2.0.0-beta.4) (2026-06-19)
+
+
+### Continuous Integration
+
+* fold the beta release line into ci.yml ([d97e3e6](https://github.com/zirkelc/ai-retry/commit/d97e3e6dd2a2e1319a58ce15fe49ca96859a100c))
+
 ## [2.0.0-beta.3](https://github.com/zirkelc/ai-retry/compare/v2.0.0-beta.2...v2.0.0-beta.3) (2026-06-19)
 
 
