@@ -18,8 +18,8 @@ importers:
         specifier: 4.0.0-beta.110
         version: 4.0.0-beta.110(zod@4.3.6)
       '@ai-sdk/google':
-        specifier: 4.0.0-beta.82
-        version: 4.0.0-beta.82(zod@4.3.6)
+        specifier: 4.0.0-beta.83
+        version: 4.0.0-beta.83(zod@4.3.6)
       '@ai-sdk/groq':
         specifier: 4.0.0-beta.54
         version: 4.0.0-beta.54(zod@4.3.6)
@@ -49,7 +49,7 @@ importers:
         version: 5.5.3(@opentelemetry/api@1.9.0)
       '@langfuse/vercel-ai-sdk':
         specifier: 5.5.0-beta.3
-        version: 5.5.0-beta.3(@opentelemetry/api@1.9.0)(ai@7.0.0-beta.179(zod@4.3.6))(zod@4.3.6)
+        version: 5.5.0-beta.3(@opentelemetry/api@1.9.0)(ai@7.0.0-beta.182(zod@4.3.6))(zod@4.3.6)
       '@opentelemetry/api':
         specifier: 1.9.0
         version: 1.9.0
@@ -69,8 +69,8 @@ importers:
         specifier: ^25.0.10
         version: 25.0.10
       ai:
-        specifier: 7.0.0-beta.179
-        version: 7.0.0-beta.179(zod@4.3.6)
+        specifier: 7.0.0-beta.182
+        version: 7.0.0-beta.182(zod@4.3.6)
       husky:
         specifier: ^9.1.7
         version: 9.1.7
@@ -146,8 +146,8 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/google@4.0.0-beta.82':
-    resolution: {integrity: sha512-4dCqVuPduyUtaI0nzDO58pgfMuk4gHOKLSNxGjNQhRlPyzjnWi2O9PDIyrWGd1B5zKParwiGPvYlug3dq9wd8w==}
+  '@ai-sdk/google@4.0.0-beta.83':
+    resolution: {integrity: sha512-8EkNiXsLTCB0rYx4t89to2wz4h9fIM+q/TrO45zHELi7wS2CkOO9ASx0IgjXqDwU4+3t3+eIK3oB7TUvEACcUg==}
     engines: {node: '>=22'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -2321,7 +2321,7 @@ snapshots:
       '@vercel/oidc': 3.2.0
       zod: 4.3.6
 
-  '@ai-sdk/google@4.0.0-beta.82(zod@4.3.6)':
+  '@ai-sdk/google@4.0.0-beta.83(zod@4.3.6)':
     dependencies:
       '@ai-sdk/provider': 4.0.0-beta.19
       '@ai-sdk/provider-utils': 5.0.0-beta.49(zod@4.3.6)
@@ -2627,12 +2627,12 @@ snapshots:
       '@langfuse/core': 5.5.3(@opentelemetry/api@1.9.0)
       '@opentelemetry/api': 1.9.0
 
-  '@langfuse/vercel-ai-sdk@5.5.0-beta.3(@opentelemetry/api@1.9.0)(ai@7.0.0-beta.179(zod@4.3.6))(zod@4.3.6)':
+  '@langfuse/vercel-ai-sdk@5.5.0-beta.3(@opentelemetry/api@1.9.0)(ai@7.0.0-beta.182(zod@4.3.6))(zod@4.3.6)':
     dependencies:
       '@ai-sdk/otel': 1.0.0-beta.125(zod@4.3.6)
       '@langfuse/core': 5.5.3(@opentelemetry/api@1.9.0)
       '@opentelemetry/api': 1.9.0
-      ai: 7.0.0-beta.179(zod@4.3.6)
+      ai: 7.0.0-beta.182(zod@4.3.6)
     transitivePeerDependencies:
       - zod
 
