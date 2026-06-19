@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.0-beta.2](https://github.com/zirkelc/ai-retry/compare/v2.0.0-beta.1...v2.0.0-beta.2) (2026-06-19)
+
+
+### Features
+
+* **telemetry:** use @ai-sdk/otel in example; drop functionId setting ([be157b2](https://github.com/zirkelc/ai-retry/commit/be157b2593c9738804fddad624b3c67f54ca8e2f))
+
 ## [2.0.0-beta.1](https://github.com/zirkelc/ai-retry/compare/v2.0.0-beta.0...v2.0.0-beta.1) (2026-06-17)
 
 
