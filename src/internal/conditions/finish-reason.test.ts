@@ -1,11 +1,11 @@
 import { generateText } from 'ai';
 import { describe, expect, it } from 'vitest';
 import {
+  Language,
+  MockLanguageModel,
   buildResultContext,
   contentFilterResult,
   createRetryableModel,
-  generateTextResult,
-  MockLanguageModel,
 } from '../test-utils.js';
 import { createResultAPI } from './result.js';
 
@@ -21,7 +21,7 @@ describe('finishReason', () => {
       buildResultContext(contentFilterResult),
     );
     const missed = await cond.evaluate(
-      buildResultContext(generateTextResult('hi')),
+      buildResultContext(Language.result('hi')),
     );
 
     // Assert
@@ -44,12 +44,10 @@ describe('finishReason', () => {
 
   it(`should switch in createRetryableModel when finishReason hits`, async () => {
     // Arrange
-    const baseModel = new MockLanguageModel({
+    const baseModel = MockLanguageModel.from({
       doGenerate: contentFilterResult,
     });
-    const fallback = new MockLanguageModel({
-      doGenerate: generateTextResult('hello'),
-    });
+    const fallback = MockLanguageModel.from('hello');
 
     // Act
     const result = await generateText({

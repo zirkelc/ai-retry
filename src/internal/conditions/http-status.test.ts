@@ -1,11 +1,10 @@
 import { generateText } from 'ai';
 import { describe, expect, it } from 'vitest';
 import {
-  apiError,
+  Errors,
+  MockLanguageModel,
   buildErrorContext,
   createRetryableModel,
-  generateTextResult,
-  MockLanguageModel,
 } from '../test-utils.js';
 import { createErrorAPI } from './error.js';
 
@@ -18,10 +17,10 @@ describe('httpStatus', () => {
 
     // Act
     const matched = await cond.evaluate(
-      buildErrorContext(apiError({ statusCode: 529 })),
+      buildErrorContext(Errors.from({ statusCode: 529 })),
     );
     const missed = await cond.evaluate(
-      buildErrorContext(apiError({ statusCode: 503 })),
+      buildErrorContext(Errors.from({ statusCode: 503 })),
     );
 
     // Assert
@@ -35,10 +34,10 @@ describe('httpStatus', () => {
 
     // Act
     const matched = await cond.evaluate(
-      buildErrorContext(apiError({ message: 'Service overloaded' })),
+      buildErrorContext(Errors.from({ message: 'Service overloaded' })),
     );
     const missed = await cond.evaluate(
-      buildErrorContext(apiError({ message: 'Bad gateway' })),
+      buildErrorContext(Errors.from({ message: 'Bad gateway' })),
     );
 
     // Assert
@@ -53,12 +52,12 @@ describe('httpStatus', () => {
     // Act
     const matched = await cond.evaluate(
       buildErrorContext(
-        apiError({ statusCode: 429, message: 'Rate Limit hit' }),
+        Errors.from({ statusCode: 429, message: 'Rate Limit hit' }),
       ),
     );
     const missed = await cond.evaluate(
       buildErrorContext(
-        apiError({ statusCode: 429, message: 'Too many requests' }),
+        Errors.from({ statusCode: 429, message: 'Too many requests' }),
       ),
     );
 
@@ -73,13 +72,13 @@ describe('httpStatus', () => {
 
     // Act
     const matched500 = await cond.evaluate(
-      buildErrorContext(apiError({ statusCode: 500, message: 'no match' })),
+      buildErrorContext(Errors.from({ statusCode: 500, message: 'no match' })),
     );
     const matched599 = await cond.evaluate(
-      buildErrorContext(apiError({ statusCode: 599, message: 'no match' })),
+      buildErrorContext(Errors.from({ statusCode: 599, message: 'no match' })),
     );
     const missed = await cond.evaluate(
-      buildErrorContext(apiError({ statusCode: 404, message: 'no match' })),
+      buildErrorContext(Errors.from({ statusCode: 404, message: 'no match' })),
     );
 
     // Assert
@@ -98,18 +97,20 @@ describe('httpStatus', () => {
 
     // Act
     const byStatus = await cond.evaluate(
-      buildErrorContext(apiError({ statusCode: 529 })),
+      buildErrorContext(Errors.from({ statusCode: 529 })),
     );
     const byString = await cond.evaluate(
-      buildErrorContext(apiError({ message: 'overloaded' })),
+      buildErrorContext(Errors.from({ message: 'overloaded' })),
     );
     const byRegex = await cond.evaluate(
       buildErrorContext(
-        apiError({ statusCode: 429, message: 'Rate-Limit reached' }),
+        Errors.from({ statusCode: 429, message: 'Rate-Limit reached' }),
       ),
     );
     const noMatch = await cond.evaluate(
-      buildErrorContext(apiError({ statusCode: 401, message: 'Unauthorized' })),
+      buildErrorContext(
+        Errors.from({ statusCode: 401, message: 'Unauthorized' }),
+      ),
     );
 
     // Assert
@@ -132,12 +133,10 @@ describe('httpStatus', () => {
 
   it(`should switch to fallback in createRetryableModel`, async () => {
     // Arrange
-    const baseModel = new MockLanguageModel({
-      doGenerate: apiError({ statusCode: 529, message: 'overloaded' }),
+    const baseModel = MockLanguageModel.from({
+      doGenerate: Errors.from({ statusCode: 529, message: 'overloaded' }),
     });
-    const fallback = new MockLanguageModel({
-      doGenerate: generateTextResult('hello'),
-    });
+    const fallback = MockLanguageModel.from('hello');
 
     // Act
     const result = await generateText({

@@ -11,8 +11,11 @@ import { createRetryableModel } from './create-retryable-model.js';
 describe('createRetryableModel', () => {
   it('should return EmbeddingModel for a model instance', () => {
     const retryable = createRetryableModel({
-      model: new MockEmbeddingModel(),
-      retries: [new MockEmbeddingModel(), { model: new MockEmbeddingModel() }],
+      model: MockEmbeddingModel.from(),
+      retries: [
+        MockEmbeddingModel.from(),
+        { model: MockEmbeddingModel.from() },
+      ],
     });
 
     assertType<EmbeddingModel>(retryable);

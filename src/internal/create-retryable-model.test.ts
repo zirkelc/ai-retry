@@ -8,8 +8,8 @@ import type { EmbeddingModel, LanguageModel } from '../types.js';
 describe('createRetryableModel', () => {
   describe('language model', () => {
     it('should create retryable model from language model instance', () => {
-      const model = new MockLanguageModel();
-      const fallbackModel = new MockLanguageModel();
+      const model = MockLanguageModel.from();
+      const fallbackModel = MockLanguageModel.from();
 
       const retryable = createRetryableModel({
         model,
@@ -24,7 +24,7 @@ describe('createRetryableModel', () => {
     });
 
     it('should create retryable model from gateway string', () => {
-      const fallbackModel = new MockLanguageModel();
+      const fallbackModel = MockLanguageModel.from();
 
       const retryable = createRetryableModel({
         model: 'openai/gpt-4.1',
@@ -41,8 +41,8 @@ describe('createRetryableModel', () => {
 
   describe('embedding model', () => {
     it('should create retryable model from embedding model instance', () => {
-      const model = new MockEmbeddingModel();
-      const fallbackModel = new MockEmbeddingModel();
+      const model = MockEmbeddingModel.from();
+      const fallbackModel = MockEmbeddingModel.from();
 
       const retryable = createRetryableModel({
         model,
@@ -60,8 +60,8 @@ describe('createRetryableModel', () => {
 
 describe('createRetryableModel type tests', () => {
   it('should return LanguageModel type for language model instance', () => {
-    const model = new MockLanguageModel();
-    const fallbackModel = new MockLanguageModel();
+    const model = MockLanguageModel.from();
+    const fallbackModel = MockLanguageModel.from();
 
     const retryable = createRetryableModel({
       model,
@@ -72,7 +72,7 @@ describe('createRetryableModel type tests', () => {
   });
 
   it('should return LanguageModel type for gateway string', () => {
-    const fallbackModel = new MockLanguageModel();
+    const fallbackModel = MockLanguageModel.from();
 
     const retryable = createRetryableModel({
       model: 'openai:gpt-4',
@@ -83,8 +83,8 @@ describe('createRetryableModel type tests', () => {
   });
 
   it('should return EmbeddingModel type for embedding model instance', () => {
-    const model = new MockEmbeddingModel();
-    const fallbackModel = new MockEmbeddingModel();
+    const model = MockEmbeddingModel.from();
+    const fallbackModel = MockEmbeddingModel.from();
 
     const retryable = createRetryableModel({
       model,

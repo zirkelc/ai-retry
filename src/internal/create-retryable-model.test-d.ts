@@ -14,15 +14,15 @@ import type {
 
 describe('createRetryableModel', () => {
   it('should return LanguageModel type for language model instance', () => {
-    const model = new MockLanguageModel();
-    const fallbackModel = new MockLanguageModel();
+    const model = MockLanguageModel.from();
+    const fallbackModel = MockLanguageModel.from();
 
     const retryable = createRetryableModel({
       model,
       retries: [
         fallbackModel,
         {
-          model: new MockLanguageModel(),
+          model: MockLanguageModel.from(),
         },
       ],
     });
@@ -32,7 +32,7 @@ describe('createRetryableModel', () => {
   });
 
   it('should return LanguageModel type for gateway string', () => {
-    const fallbackModel = new MockLanguageModel();
+    const fallbackModel = MockLanguageModel.from();
 
     const retryable = createRetryableModel({
       model: 'openai/gpt-4.1',
@@ -73,12 +73,12 @@ describe('createRetryableModel', () => {
   });
 
   it('should return EmbeddingModel type for embedding model instance', () => {
-    const model = new MockEmbeddingModel();
-    const fallbackModel = new MockEmbeddingModel();
+    const model = MockEmbeddingModel.from();
+    const fallbackModel = MockEmbeddingModel.from();
 
     const retryable = createRetryableModel({
       model,
-      retries: [fallbackModel, { model: new MockEmbeddingModel() }],
+      retries: [fallbackModel, { model: MockEmbeddingModel.from() }],
     });
 
     assertType<EmbeddingModel>(retryable);

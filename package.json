@@ -64,6 +64,7 @@
     "@total-typescript/tsconfig": "^1.0.4",
     "@types/node": "^25.0.10",
     "ai": "6.0.50",
+    "ai-test-kit": "2.0.0-next.2",
     "husky": "^9.1.7",
     "lint-staged": "^16.4.0",
     "msw": "^2.12.7",

@@ -1,9 +1,9 @@
 import { APICallError, generateImage } from 'ai';
 import { describe, expect, it } from 'vitest';
 import {
-  apiError,
-  createRetryableModel,
+  Errors,
   MockImageModel,
+  createRetryableModel,
   validBase64Image,
 } from '../../internal/test-utils.js';
 import type { ImageModelGenerate } from '../../types.js';
@@ -23,10 +23,8 @@ describe('error (image)', () => {
   describe('generateImage', () => {
     it('should switch when predicate matches', async () => {
       // Arrange
-      const baseModel = new MockImageModel({
-        doGenerate: apiError({ statusCode: 503 }),
-      });
-      const retryModel = new MockImageModel({ doGenerate: okImage });
+      const baseModel = MockImageModel.from(Errors.from({ statusCode: 503 }));
+      const retryModel = MockImageModel.from(okImage);
 
       // Act
       const out = await generateImage({
@@ -50,10 +48,8 @@ describe('error (image)', () => {
 
     it('should switch on httpStatus match', async () => {
       // Arrange
-      const baseModel = new MockImageModel({
-        doGenerate: apiError({ statusCode: 529 }),
-      });
-      const retryModel = new MockImageModel({ doGenerate: okImage });
+      const baseModel = MockImageModel.from(Errors.from({ statusCode: 529 }));
+      const retryModel = MockImageModel.from(okImage);
 
       // Act
       const out = await generateImage({

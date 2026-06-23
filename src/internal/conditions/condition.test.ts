@@ -1,11 +1,10 @@
 import { generateText } from 'ai';
 import { describe, expect, it } from 'vitest';
 import {
-  apiError,
+  Errors,
+  MockLanguageModel,
   buildErrorContext,
   createRetryableModel,
-  generateTextResult,
-  MockLanguageModel,
 } from '../test-utils.js';
 import { Condition } from './condition.js';
 
@@ -54,7 +53,7 @@ describe('Condition', () => {
     it(`should return a Retry with the target model when predicate matches`, async () => {
       // Arrange
       const cond = new Condition<MockLanguageModel>(() => true);
-      const target = new MockLanguageModel();
+      const target = MockLanguageModel.from();
       const retryable = cond.switch({ model: target });
       const ctx = buildErrorContext(new Error('boom'));
 
@@ -68,7 +67,7 @@ describe('Condition', () => {
     it(`should return undefined when predicate does not match`, async () => {
       // Arrange
       const cond = new Condition<MockLanguageModel>(() => false);
-      const target = new MockLanguageModel();
+      const target = MockLanguageModel.from();
       const retryable = cond.switch({ model: target });
       const ctx = buildErrorContext(new Error('boom'));
 
@@ -82,7 +81,7 @@ describe('Condition', () => {
     it(`should pass extra Retry options through`, async () => {
       // Arrange
       const cond = new Condition<MockLanguageModel>(() => true);
-      const target = new MockLanguageModel();
+      const target = MockLanguageModel.from();
       const retryable = cond.switch({
         model: target,
         maxAttempts: 3,
@@ -120,13 +119,7 @@ describe('Condition', () => {
       // Arrange
       const cond = new Condition<MockLanguageModel>(() => true);
       const retryable = cond.retry({ delay: 100, backoffFactor: 2 });
-      const ctx = buildErrorContext(
-        apiError({
-          message: 'Rate limited',
-          statusCode: 429,
-          responseHeaders: { 'retry-after': '5' },
-        }),
-      );
+      const ctx = buildErrorContext(Errors.rateLimited({ retryAfter: 5 }));
 
       // Act
       const retry = await retryable(ctx);
@@ -144,13 +137,7 @@ describe('Condition', () => {
       // Arrange
       const cond = new Condition<MockLanguageModel>(() => true);
       const retryable = cond.retry();
-      const ctx = buildErrorContext(
-        apiError({
-          message: 'Rate limited',
-          statusCode: 429,
-          responseHeaders: { 'retry-after': '600' }, // 600 seconds = 10 minutes
-        }),
-      );
+      const ctx = buildErrorContext(Errors.rateLimited({ retryAfter: 600 }));
 
       // Act
       const retry = await retryable(ctx);
@@ -169,7 +156,7 @@ describe('Condition', () => {
       const cond = new Condition<MockLanguageModel>(() => true);
       const retryable = cond.retry({ delay: 250, backoffFactor: 2 });
       const ctx = buildErrorContext(
-        apiError({ message: 'Rate limited', statusCode: 429 }),
+        Errors.from({ message: 'Rate limited', statusCode: 429 }),
       );
 
       // Act
@@ -236,12 +223,10 @@ describe('Condition', () => {
   describe('integration with createRetryableModel', () => {
     it(`should switch to fallback when condition matches`, async () => {
       // Arrange
-      const baseModel = new MockLanguageModel({
-        doGenerate: apiError({ statusCode: 500 }),
+      const baseModel = MockLanguageModel.from({
+        doGenerate: Errors.from({ statusCode: 500 }),
       });
-      const fallback = new MockLanguageModel({
-        doGenerate: generateTextResult('hello'),
-      });
+      const fallback = MockLanguageModel.from('hello');
       const cond = new Condition<MockLanguageModel>(() => true);
 
       // Act

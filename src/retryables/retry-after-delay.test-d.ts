@@ -10,7 +10,7 @@ import { retryAfterDelay } from './retry-after-delay.js';
 
 describe('retryAfterDelay types', () => {
   it('should accept language model with options', () => {
-    const model = new MockLanguageModel();
+    const model = MockLanguageModel.from();
     const retryable = retryAfterDelay<MockLanguageModel>({ maxAttempts: 3 });
 
     const retryableModel = createRetryableModel({
@@ -22,7 +22,7 @@ describe('retryAfterDelay types', () => {
   });
 
   it('should accept embedding model with options', () => {
-    const model = new MockEmbeddingModel();
+    const model = MockEmbeddingModel.from();
     const retryable = retryAfterDelay<MockEmbeddingModel>({ maxAttempts: 3 });
 
     const retryableModel = createRetryableModel({
@@ -45,7 +45,7 @@ describe('retryAfterDelay types', () => {
   });
 
   it('should accept image model with options', () => {
-    const model = new MockImageModel();
+    const model = MockImageModel.from();
     const retryable = retryAfterDelay<MockImageModel>({ maxAttempts: 3 });
 
     const retryableModel = createRetryableModel({

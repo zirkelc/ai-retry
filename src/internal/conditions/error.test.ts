@@ -1,11 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
-  abortError,
-  apiError,
+  Errors,
+  MockLanguageModel,
   buildErrorContext,
   buildResultContext,
-  MockLanguageModel,
-  timeoutError,
 } from '../test-utils.js';
 import { createErrorAPI } from './error.js';
 
@@ -58,10 +56,10 @@ describe('error', () => {
 
       // Act
       const matched = await cond.evaluate(
-        buildErrorContext(apiError({ isRetryable: true })),
+        buildErrorContext(Errors.from({ isRetryable: true })),
       );
       const missed = await cond.evaluate(
-        buildErrorContext(apiError({ isRetryable: false })),
+        buildErrorContext(Errors.from({ isRetryable: false })),
       );
 
       // Assert
@@ -75,7 +73,7 @@ describe('error', () => {
 
       // Act
       const matched = await cond.evaluate(
-        buildErrorContext(apiError({ isRetryable: true })),
+        buildErrorContext(Errors.from({ isRetryable: true })),
       );
 
       // Assert
@@ -103,13 +101,13 @@ describe('error', () => {
 
       // Act
       const matched429 = await cond.evaluate(
-        buildErrorContext(apiError({ statusCode: 429 })),
+        buildErrorContext(Errors.from({ statusCode: 429 })),
       );
       const matched503 = await cond.evaluate(
-        buildErrorContext(apiError({ statusCode: 503 })),
+        buildErrorContext(Errors.from({ statusCode: 503 })),
       );
       const missed = await cond.evaluate(
-        buildErrorContext(apiError({ statusCode: 404 })),
+        buildErrorContext(Errors.from({ statusCode: 404 })),
       );
 
       // Assert
@@ -124,10 +122,10 @@ describe('error', () => {
 
       // Act
       const matched = await cond.evaluate(
-        buildErrorContext(apiError({ statusCode: 503 })),
+        buildErrorContext(Errors.from({ statusCode: 503 })),
       );
       const missed = await cond.evaluate(
-        buildErrorContext(apiError({ statusCode: 404 })),
+        buildErrorContext(Errors.from({ statusCode: 404 })),
       );
 
       // Assert
@@ -228,7 +226,7 @@ describe('error', () => {
       const cond = error.isTimeout<MockLanguageModel>();
 
       // Act
-      const matched = await cond.evaluate(buildErrorContext(timeoutError()));
+      const matched = await cond.evaluate(buildErrorContext(Errors.timeout()));
 
       // Assert
       expect(matched).toBe(true);
@@ -239,7 +237,7 @@ describe('error', () => {
       const cond = error.isTimeout<MockLanguageModel>();
 
       // Act
-      const aborted = await cond.evaluate(buildErrorContext(abortError()));
+      const aborted = await cond.evaluate(buildErrorContext(Errors.abort()));
       const plain = await cond.evaluate(buildErrorContext(new Error('boom')));
 
       // Assert
@@ -254,7 +252,7 @@ describe('error', () => {
       const cond = error.isAbort<MockLanguageModel>();
 
       // Act
-      const matched = await cond.evaluate(buildErrorContext(abortError()));
+      const matched = await cond.evaluate(buildErrorContext(Errors.abort()));
 
       // Assert
       expect(matched).toBe(true);
@@ -265,7 +263,7 @@ describe('error', () => {
       const cond = error.isAbort<MockLanguageModel>();
 
       // Act
-      const timedOut = await cond.evaluate(buildErrorContext(timeoutError()));
+      const timedOut = await cond.evaluate(buildErrorContext(Errors.timeout()));
       const plain = await cond.evaluate(buildErrorContext(new Error('boom')));
 
       // Assert

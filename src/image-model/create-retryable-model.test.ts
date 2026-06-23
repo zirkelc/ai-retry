@@ -6,8 +6,8 @@ import { createRetryableModel } from './create-retryable-model.js';
 describe('createRetryableModel', () => {
   it('should create a retryable model from an image model instance', () => {
     // Arrange
-    const model = new MockImageModel();
-    const fallbackModel = new MockImageModel();
+    const model = MockImageModel.from();
+    const fallbackModel = MockImageModel.from();
 
     // Act
     const retryable = createRetryableModel({

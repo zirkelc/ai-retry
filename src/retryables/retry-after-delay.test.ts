@@ -1,7 +1,4 @@
-import {
-  convertArrayToReadableStream,
-  convertAsyncIterableToArray,
-} from '@ai-sdk/provider-utils/test';
+import { Errors, Iterables, Streams } from 'ai-test-kit';
 import {
   APICallError,
   embed,
@@ -32,86 +29,19 @@ import type {
 import { isErrorAttempt } from '../internal/guards.js';
 import { retryAfterDelay } from './retry-after-delay.js';
 
-const rateLimitError = new APICallError({
-  message: 'Rate limit exceeded',
-  url: '',
-  requestBodyValues: {},
-  statusCode: 429,
-  responseHeaders: {},
-  responseBody: '{"error": {"message": "Rate limit exceeded"}}',
-  isRetryable: true,
-  data: {
-    error: {
-      message: 'Rate limit exceeded',
-    },
-  },
+const rateLimitError = Errors.rateLimited();
+
+const rateLimitErrorWithRetryAfter = Errors.rateLimited({ retryAfter: 5 });
+
+const rateLimitErrorWithRetryAfterMs = Errors.rateLimited({
+  retryAfter: { ms: 3000 },
 });
 
-const rateLimitErrorWithRetryAfter = new APICallError({
-  message: 'Rate limit exceeded',
-  url: '',
-  requestBodyValues: {},
-  statusCode: 429,
-  responseHeaders: {
-    'retry-after': '5',
-  },
-  responseBody: '{"error": {"message": "Rate limit exceeded"}}',
-  isRetryable: true,
-  data: {
-    error: {
-      message: 'Rate limit exceeded',
-    },
-  },
+const rateLimitErrorWithRetryAfterDate = Errors.rateLimited({
+  retryAfter: new Date(Date.now() + 4000),
 });
 
-const rateLimitErrorWithRetryAfterMs = new APICallError({
-  message: 'Rate limit exceeded',
-  url: '',
-  requestBodyValues: {},
-  statusCode: 429,
-  responseHeaders: {
-    'retry-after-ms': '3000',
-  },
-  responseBody: '{"error": {"message": "Rate limit exceeded"}}',
-  isRetryable: true,
-  data: {
-    error: {
-      message: 'Rate limit exceeded',
-    },
-  },
-});
-
-const rateLimitErrorWithRetryAfterDate = new APICallError({
-  message: 'Rate limit exceeded',
-  url: '',
-  requestBodyValues: {},
-  statusCode: 429,
-  responseHeaders: {
-    'retry-after': new Date(Date.now() + 4000).toUTCString(),
-  },
-  responseBody: '{"error": {"message": "Rate limit exceeded"}}',
-  isRetryable: true,
-  data: {
-    error: {
-      message: 'Rate limit exceeded',
-    },
-  },
-});
-
-const genericRetryableError = new APICallError({
-  message: 'Service temporarily unavailable',
-  url: '',
-  requestBodyValues: {},
-  statusCode: 503,
-  responseHeaders: {},
-  responseBody: '{"error": {"message": "Service temporarily unavailable"}}',
-  isRetryable: true,
-  data: {
-    error: {
-      message: 'Service temporarily unavailable',
-    },
-  },
-});
+const genericRetryableError = Errors.serviceUnavailable();
 
 describe('retryAfterDelay', () => {
   beforeEach(() => {
@@ -121,8 +51,8 @@ describe('retryAfterDelay', () => {
 
   describe('generateText', () => {
     it('should succeed without errors', async () => {
-      const baseModel = new MockLanguageModel({ doGenerate: mockResult });
-      const retryModel = new MockLanguageModel({ doGenerate: mockResult });
+      const baseModel = MockLanguageModel.from({ doGenerate: mockResult });
+      const retryModel = MockLanguageModel.from({ doGenerate: mockResult });
 
       const promise = generateText({
         model: createRetryableModel({
@@ -142,7 +72,7 @@ describe('retryAfterDelay', () => {
 
     it('should retry with delay', async () => {
       let attempt = 0;
-      const baseModel = new MockLanguageModel({
+      const baseModel = MockLanguageModel.from({
         doGenerate: async () => {
           attempt++;
           if (attempt === 1) {
@@ -169,7 +99,7 @@ describe('retryAfterDelay', () => {
 
     it('should respect retry-after header in seconds', async () => {
       let attempt = 0;
-      const baseModel = new MockLanguageModel({
+      const baseModel = MockLanguageModel.from({
         doGenerate: async () => {
           attempt++;
           if (attempt === 1) {
@@ -196,7 +126,7 @@ describe('retryAfterDelay', () => {
 
     it('should respect retry-after-ms header', async () => {
       let attempt = 0;
-      const baseModel = new MockLanguageModel({
+      const baseModel = MockLanguageModel.from({
         doGenerate: async () => {
           attempt++;
           if (attempt === 1) {
@@ -223,7 +153,7 @@ describe('retryAfterDelay', () => {
 
     it('should respect retry-after header with HTTP date', async () => {
       let attempt = 0;
-      const baseModel = new MockLanguageModel({
+      const baseModel = MockLanguageModel.from({
         doGenerate: async () => {
           attempt++;
           if (attempt === 1) {
@@ -249,7 +179,7 @@ describe('retryAfterDelay', () => {
     });
 
     it('should not retry on non-retryable errors', async () => {
-      const baseModel = new MockLanguageModel({
+      const baseModel = MockLanguageModel.from({
         doGenerate: nonRetryableError,
       });
 
@@ -268,7 +198,7 @@ describe('retryAfterDelay', () => {
 
     it('should use exponential backoff', async () => {
       let attempt = 0;
-      const baseModel = new MockLanguageModel({
+      const baseModel = MockLanguageModel.from({
         doGenerate: async () => {
           attempt++;
           if (attempt < 3) {
@@ -300,7 +230,7 @@ describe('retryAfterDelay', () => {
     });
 
     it('should respect maxAttempts', async () => {
-      const baseModel = new MockLanguageModel({ doGenerate: rateLimitError });
+      const baseModel = MockLanguageModel.from({ doGenerate: rateLimitError });
 
       const result = generateText({
         model: createRetryableModel({
@@ -320,7 +250,7 @@ describe('retryAfterDelay', () => {
 
     it('should retry with base model if no model is provided', async () => {
       let attempt = 0;
-      const baseModel = new MockLanguageModel({
+      const baseModel = MockLanguageModel.from({
         doGenerate: async () => {
           attempt++;
           if (attempt < 3) {
@@ -346,12 +276,12 @@ describe('retryAfterDelay', () => {
     });
 
     it('should retry with fallback model when fallback fails with retryable error', async () => {
-      const baseModel = new MockLanguageModel({
+      const baseModel = MockLanguageModel.from({
         doGenerate: genericRetryableError,
       });
 
       let fallbackAttempt = 0;
-      const fallbackModel = new MockLanguageModel({
+      const fallbackModel = MockLanguageModel.from({
         doGenerate: async () => {
           fallbackAttempt++;
           if (fallbackAttempt === 1) {
@@ -393,15 +323,11 @@ describe('retryAfterDelay', () => {
 
   describe('streamText', () => {
     it('should succeed without errors', async () => {
-      const baseModel = new MockLanguageModel({
-        doStream: {
-          stream: convertArrayToReadableStream(mockStreamChunks),
-        },
+      const baseModel = MockLanguageModel.from({
+        doStream: mockStreamChunks,
       });
-      const retryModel = new MockLanguageModel({
-        doStream: {
-          stream: convertArrayToReadableStream(mockStreamChunks),
-        },
+      const retryModel = MockLanguageModel.from({
+        doStream: mockStreamChunks,
       });
 
       const result = streamText({
@@ -412,7 +338,7 @@ describe('retryAfterDelay', () => {
         prompt: 'Hello!',
       });
 
-      const chunks = await convertAsyncIterableToArray(result.fullStream);
+      const chunks = await Iterables.toArray(result.fullStream);
 
       expect(baseModel.doStream).toHaveBeenCalledTimes(1);
       expect(retryModel.doStream).toHaveBeenCalledTimes(0);
@@ -421,14 +347,14 @@ describe('retryAfterDelay', () => {
 
     it('should retry with delay', async () => {
       let attempt = 0;
-      const baseModel = new MockLanguageModel({
+      const baseModel = MockLanguageModel.from({
         doStream: async () => {
           attempt++;
           if (attempt === 1) {
             throw rateLimitError;
           }
           return {
-            stream: convertArrayToReadableStream(mockStreamChunks),
+            stream: Streams.from(mockStreamChunks),
           };
         },
       });
@@ -442,26 +368,26 @@ describe('retryAfterDelay', () => {
       });
 
       await vi.runAllTimersAsync();
-      const chunks = await convertAsyncIterableToArray(result.fullStream);
+      const chunks = await Iterables.toArray(result.fullStream);
 
       expect(baseModel.doStream).toHaveBeenCalledTimes(2);
       expect(chunksToText(chunks)).toBe(mockResultText);
     });
 
     it('should retry with fallback model when fallback fails with retryable error', async () => {
-      const baseModel = new MockLanguageModel({
+      const baseModel = MockLanguageModel.from({
         doStream: genericRetryableError,
       });
 
       let fallbackAttempt = 0;
-      const fallbackModel = new MockLanguageModel({
+      const fallbackModel = MockLanguageModel.from({
         doStream: async () => {
           fallbackAttempt++;
           if (fallbackAttempt === 1) {
             throw rateLimitError;
           }
           return {
-            stream: convertArrayToReadableStream(mockStreamChunks),
+            stream: Streams.from(mockStreamChunks),
           };
         },
       });
@@ -488,7 +414,7 @@ describe('retryAfterDelay', () => {
       });
 
       await vi.runAllTimersAsync();
-      const chunks = await convertAsyncIterableToArray(result.fullStream);
+      const chunks = await Iterables.toArray(result.fullStream);
 
       expect(baseModel.doStream).toHaveBeenCalledTimes(1);
       expect(fallbackModel.doStream).toHaveBeenCalledTimes(2);
@@ -498,7 +424,7 @@ describe('retryAfterDelay', () => {
 
   describe('embed', () => {
     it('should succeed without errors', async () => {
-      const baseModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
+      const baseModel = MockEmbeddingModel.from(mockEmbeddings);
 
       const promise = embed({
         model: createRetryableModel({
@@ -517,14 +443,12 @@ describe('retryAfterDelay', () => {
 
     it('should retry with delay', async () => {
       let attempt = 0;
-      const baseModel = new MockEmbeddingModel({
-        doEmbed: async () => {
-          attempt++;
-          if (attempt === 1) {
-            throw rateLimitError;
-          }
-          return mockEmbeddings;
-        },
+      const baseModel = MockEmbeddingModel.from(async () => {
+        attempt++;
+        if (attempt === 1) {
+          throw rateLimitError;
+        }
+        return mockEmbeddings;
       });
 
       const promise = embed({
@@ -544,14 +468,12 @@ describe('retryAfterDelay', () => {
 
     it('should respect retry-after header', async () => {
       let attempt = 0;
-      const baseModel = new MockEmbeddingModel({
-        doEmbed: async () => {
-          attempt++;
-          if (attempt === 1) {
-            throw rateLimitErrorWithRetryAfter;
-          }
-          return mockEmbeddings;
-        },
+      const baseModel = MockEmbeddingModel.from(async () => {
+        attempt++;
+        if (attempt === 1) {
+          throw rateLimitErrorWithRetryAfter;
+        }
+        return mockEmbeddings;
       });
 
       const promise = embed({
@@ -570,19 +492,15 @@ describe('retryAfterDelay', () => {
     });
 
     it('should retry with fallback model when fallback fails with retryable error', async () => {
-      const baseModel = new MockEmbeddingModel({
-        doEmbed: genericRetryableError,
-      });
+      const baseModel = MockEmbeddingModel.from(genericRetryableError);
 
       let fallbackAttempt = 0;
-      const fallbackModel = new MockEmbeddingModel({
-        doEmbed: async () => {
-          fallbackAttempt++;
-          if (fallbackAttempt === 1) {
-            throw rateLimitError;
-          }
-          return mockEmbeddings;
-        },
+      const fallbackModel = MockEmbeddingModel.from(async () => {
+        fallbackAttempt++;
+        if (fallbackAttempt === 1) {
+          throw rateLimitError;
+        }
+        return mockEmbeddings;
       });
 
       const fallbackOnError: Retryable<EmbeddingModel> = (context) => {
@@ -618,7 +536,7 @@ describe('retryAfterDelay', () => {
   describe('generateImage', () => {
     it('should succeed without errors', async () => {
       // Arrange
-      const baseModel = new MockImageModel({ doGenerate: mockImageResult });
+      const baseModel = MockImageModel.from(mockImageResult);
 
       // Act
       const promise = generateImage({
@@ -640,14 +558,12 @@ describe('retryAfterDelay', () => {
     it('should retry with delay on retryable error', async () => {
       // Arrange
       let attempt = 0;
-      const baseModel = new MockImageModel({
-        doGenerate: async () => {
-          attempt++;
-          if (attempt === 1) {
-            throw rateLimitError;
-          }
-          return mockImageResult;
-        },
+      const baseModel = MockImageModel.from(async () => {
+        attempt++;
+        if (attempt === 1) {
+          throw rateLimitError;
+        }
+        return mockImageResult;
       });
 
       // Act
@@ -669,19 +585,15 @@ describe('retryAfterDelay', () => {
 
     it('should retry with fallback model when fallback fails with retryable error', async () => {
       // Arrange
-      const baseModel = new MockImageModel({
-        doGenerate: genericRetryableError,
-      });
+      const baseModel = MockImageModel.from(genericRetryableError);
 
       let fallbackAttempt = 0;
-      const fallbackModel = new MockImageModel({
-        doGenerate: async () => {
-          fallbackAttempt++;
-          if (fallbackAttempt === 1) {
-            throw rateLimitError;
-          }
-          return mockImageResult;
-        },
+      const fallbackModel = MockImageModel.from(async () => {
+        fallbackAttempt++;
+        if (fallbackAttempt === 1) {
+          throw rateLimitError;
+        }
+        return mockImageResult;
       });
 
       const fallbackOnError: Retryable<ImageModel> = (context) => {

@@ -1,14 +1,10 @@
-import {
-  convertArrayToReadableStream,
-  convertAsyncIterableToArray,
-} from '@ai-sdk/provider-utils/test';
+import { Iterables } from 'ai-test-kit';
 import { generateText, streamText } from 'ai';
 import { describe, expect, it } from 'vitest';
 import {
+  MockLanguageModel,
   chunksToText,
   createRetryableModel,
-  generateTextResult,
-  MockLanguageModel,
 } from '../../internal/test-utils.js';
 import type {
   LanguageModelResult,
@@ -43,12 +39,8 @@ describe('result', () => {
   describe('generateText', () => {
     it('should switch when predicate matches the result content', async () => {
       // Arrange
-      const baseModel = new MockLanguageModel({
-        doGenerate: generateTextResult(flaggedText),
-      });
-      const retryModel = new MockLanguageModel({
-        doGenerate: generateTextResult(okText),
-      });
+      const baseModel = MockLanguageModel.from(flaggedText);
+      const retryModel = MockLanguageModel.from(okText);
 
       // Act
       const out = await generateText({
@@ -68,12 +60,8 @@ describe('result', () => {
 
     it('should not switch when predicate misses', async () => {
       // Arrange
-      const baseModel = new MockLanguageModel({
-        doGenerate: generateTextResult(okText),
-      });
-      const retryModel = new MockLanguageModel({
-        doGenerate: generateTextResult(okText),
-      });
+      const baseModel = MockLanguageModel.from(okText);
+      const retryModel = MockLanguageModel.from(okText);
 
       // Act
       const out = await generateText({
@@ -95,11 +83,11 @@ describe('result', () => {
   describe('streamText', () => {
     it('should pass through stream when result conditions cannot fire', async () => {
       // Arrange
-      const baseModel = new MockLanguageModel({
-        doStream: { stream: convertArrayToReadableStream(okStream) },
+      const baseModel = MockLanguageModel.from({
+        doStream: okStream,
       });
-      const retryModel = new MockLanguageModel({
-        doStream: { stream: convertArrayToReadableStream(okStream) },
+      const retryModel = MockLanguageModel.from({
+        doStream: okStream,
       });
 
       // Act
@@ -111,7 +99,7 @@ describe('result', () => {
         prompt: 'Hello!',
         maxRetries: 0,
       });
-      const chunks = await convertAsyncIterableToArray(out.fullStream);
+      const chunks = await Iterables.toArray(out.fullStream);
 
       // Assert
       expect(baseModel.doStream).toHaveBeenCalledTimes(1);

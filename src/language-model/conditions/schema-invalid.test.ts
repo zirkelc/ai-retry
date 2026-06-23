@@ -2,9 +2,8 @@ import { generateText, Output } from 'ai';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import {
-  createRetryableModel,
-  generateTextResult,
   MockLanguageModel,
+  createRetryableModel,
 } from '../../internal/test-utils.js';
 import { schemaInvalid } from './index.js';
 
@@ -20,12 +19,8 @@ describe('schemaInvalid', () => {
   describe('generateText', () => {
     it('should not switch when JSON matches the schema', async () => {
       // Arrange
-      const baseModel = new MockLanguageModel({
-        doGenerate: generateTextResult(validJson),
-      });
-      const retryModel = new MockLanguageModel({
-        doGenerate: generateTextResult(validJson),
-      });
+      const baseModel = MockLanguageModel.from(validJson);
+      const retryModel = MockLanguageModel.from(validJson);
 
       // Act
       const out = await generateText({
@@ -46,12 +41,8 @@ describe('schemaInvalid', () => {
 
     it('should switch when JSON does not match the schema', async () => {
       // Arrange
-      const baseModel = new MockLanguageModel({
-        doGenerate: generateTextResult(invalidJson),
-      });
-      const retryModel = new MockLanguageModel({
-        doGenerate: generateTextResult(validJson),
-      });
+      const baseModel = MockLanguageModel.from(invalidJson);
+      const retryModel = MockLanguageModel.from(validJson);
 
       // Act
       const out = await generateText({

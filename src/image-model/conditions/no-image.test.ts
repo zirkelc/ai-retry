@@ -1,8 +1,9 @@
+import { Errors } from 'ai-test-kit';
 import { APICallError, generateImage, NoImageGeneratedError } from 'ai';
 import { describe, expect, it } from 'vitest';
 import {
-  createRetryableModel,
   MockImageModel,
+  createRetryableModel,
   validBase64Image,
 } from '../../internal/test-utils.js';
 import type { ImageModelGenerate } from '../../types.js';
@@ -22,10 +23,10 @@ describe('noImage', () => {
   describe('generateImage', () => {
     it('should switch on NoImageGeneratedError', async () => {
       // Arrange
-      const baseModel = new MockImageModel({
-        doGenerate: new NoImageGeneratedError({ message: 'no image' }),
-      });
-      const retryModel = new MockImageModel({ doGenerate: okImage });
+      const baseModel = MockImageModel.from(
+        new NoImageGeneratedError({ message: 'no image' }),
+      );
+      const retryModel = MockImageModel.from(okImage);
 
       // Act
       const out = await generateImage({
@@ -44,18 +45,8 @@ describe('noImage', () => {
 
     it('should not switch on other errors', async () => {
       // Arrange
-      const baseModel = new MockImageModel({
-        doGenerate: new APICallError({
-          message: 'boom',
-          url: '',
-          requestBodyValues: {},
-          statusCode: 500,
-          responseHeaders: {},
-          responseBody: '',
-          isRetryable: false,
-        }),
-      });
-      const retryModel = new MockImageModel({ doGenerate: okImage });
+      const baseModel = MockImageModel.from(Errors.internalServerError());
+      const retryModel = MockImageModel.from(okImage);
 
       // Act
       const out = generateImage({

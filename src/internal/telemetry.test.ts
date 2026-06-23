@@ -1,3 +1,4 @@
+import { Errors } from 'ai-test-kit';
 import {
   context,
   SpanStatusCode,
@@ -9,22 +10,17 @@ import type { InMemorySpanExporter } from '@opentelemetry/sdk-trace-base';
 import { APICallError } from 'ai';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
+  MockEmbeddingModel,
+  MockImageModel,
+  MockLanguageModel,
+  Streams,
   attemptSpans,
   createRetryableModel,
   createSpanExporter,
-  drainStream,
-  embeddingCallOptions,
   errorStreamChunks,
   findSpan,
-  generateTextResult,
-  imageCallOptions,
-  languageCallOptions,
-  MockEmbeddingModel,
   mockEmbeddings,
-  MockImageModel,
   mockImageResult,
-  MockLanguageModel,
-  mockStream,
   retryableError,
   successStreamChunks,
 } from './test-utils.js';
@@ -47,13 +43,11 @@ describe('telemetry', () => {
   describe('generateText', () => {
     it('should not emit spans when telemetry is not configured', async () => {
       // Arrange
-      const baseModel = new MockLanguageModel({
-        doGenerate: generateTextResult('ok'),
-      });
+      const baseModel = MockLanguageModel.from('ok');
       const model = createRetryableModel({ model: baseModel, retries: [] });
 
       // Act
-      await model.doGenerate(languageCallOptions);
+      await model.doGenerate(MockLanguageModel.callOptions());
 
       // Assert
       expect(exporter.getFinishedSpans().length).toBe(0);
@@ -61,9 +55,7 @@ describe('telemetry', () => {
 
     it('should not emit spans when telemetry is disabled', async () => {
       // Arrange
-      const baseModel = new MockLanguageModel({
-        doGenerate: generateTextResult('ok'),
-      });
+      const baseModel = MockLanguageModel.from('ok');
       const model = createRetryableModel({
         model: baseModel,
         retries: [],
@@ -71,7 +63,7 @@ describe('telemetry', () => {
       });
 
       // Act
-      await model.doGenerate(languageCallOptions);
+      await model.doGenerate(MockLanguageModel.callOptions());
 
       // Assert
       expect(exporter.getFinishedSpans().length).toBe(0);
@@ -79,9 +71,7 @@ describe('telemetry', () => {
 
     it('should emit an operation span and one attempt span on success', async () => {
       // Arrange
-      const baseModel = new MockLanguageModel({
-        doGenerate: generateTextResult('ok'),
-      });
+      const baseModel = MockLanguageModel.from('ok');
       const model = createRetryableModel({
         model: baseModel,
         retries: [],
@@ -89,7 +79,7 @@ describe('telemetry', () => {
       });
 
       // Act
-      await model.doGenerate(languageCallOptions);
+      await model.doGenerate(MockLanguageModel.callOptions());
 
       // Assert
       const operation = findSpan(exporter, 'ai_retry.doGenerate');
@@ -135,10 +125,8 @@ describe('telemetry', () => {
 
     it('should record the failed attempt and the successful fallback', async () => {
       // Arrange
-      const baseModel = new MockLanguageModel({ doGenerate: retryableError });
-      const fallbackModel = new MockLanguageModel({
-        doGenerate: generateTextResult('ok'),
-      });
+      const baseModel = MockLanguageModel.from({ doGenerate: retryableError });
+      const fallbackModel = MockLanguageModel.from('ok');
       const fallback: Retryable<LanguageModel> = (ctx) =>
         isErrorAttempt(ctx.current)
           ? { model: fallbackModel, maxAttempts: 1 }
@@ -150,7 +138,7 @@ describe('telemetry', () => {
       });
 
       // Act
-      await model.doGenerate(languageCallOptions);
+      await model.doGenerate(MockLanguageModel.callOptions());
 
       // Assert
       const attempts = attemptSpans(exporter);
@@ -194,7 +182,7 @@ describe('telemetry', () => {
       // Arrange
       const cause = new Error('underlying socket failure');
       cause.name = 'SocketError';
-      const wrappedError = new APICallError({
+      const wrappedError = Errors.from({
         message: 'upstream request failed',
         url: '',
         requestBodyValues: {},
@@ -202,10 +190,8 @@ describe('telemetry', () => {
         isRetryable: true,
         cause,
       });
-      const baseModel = new MockLanguageModel({ doGenerate: wrappedError });
-      const fallbackModel = new MockLanguageModel({
-        doGenerate: generateTextResult('ok'),
-      });
+      const baseModel = MockLanguageModel.from({ doGenerate: wrappedError });
+      const fallbackModel = MockLanguageModel.from('ok');
       const fallback: Retryable<LanguageModel> = (ctx) =>
         isErrorAttempt(ctx.current)
           ? { model: fallbackModel, maxAttempts: 1 }
@@ -217,7 +203,7 @@ describe('telemetry', () => {
       });
 
       // Act
-      await model.doGenerate(languageCallOptions);
+      await model.doGenerate(MockLanguageModel.callOptions());
 
       // Assert
       const attempt = attemptSpans(exporter)[0]!;
@@ -237,8 +223,8 @@ describe('telemetry', () => {
 
     it('should mark the operation and final attempt as failed when all attempts fail', async () => {
       // Arrange
-      const baseModel = new MockLanguageModel({ doGenerate: retryableError });
-      const fallbackModel = new MockLanguageModel({
+      const baseModel = MockLanguageModel.from({ doGenerate: retryableError });
+      const fallbackModel = MockLanguageModel.from({
         doGenerate: retryableError,
       });
       const fallback: Retryable<LanguageModel> = (ctx) =>
@@ -253,7 +239,7 @@ describe('telemetry', () => {
       });
 
       // Act
-      const result = model.doGenerate(languageCallOptions);
+      const result = model.doGenerate(MockLanguageModel.callOptions());
 
       // Assert
       await expect(result).rejects.toThrow();
@@ -274,10 +260,8 @@ describe('telemetry', () => {
 
     it('should record the retry timeout on the attempt that runs under it', async () => {
       // Arrange
-      const baseModel = new MockLanguageModel({ doGenerate: retryableError });
-      const fallbackModel = new MockLanguageModel({
-        doGenerate: generateTextResult('ok'),
-      });
+      const baseModel = MockLanguageModel.from({ doGenerate: retryableError });
+      const fallbackModel = MockLanguageModel.from('ok');
       const fallback: Retryable<LanguageModel> = (ctx) =>
         isErrorAttempt(ctx.current)
           ? { model: fallbackModel, maxAttempts: 1, timeout: 5000 }
@@ -289,7 +273,7 @@ describe('telemetry', () => {
       });
 
       // Act
-      await model.doGenerate(languageCallOptions);
+      await model.doGenerate(MockLanguageModel.callOptions());
 
       // Assert
       const attempts = attemptSpans(exporter);
@@ -303,9 +287,7 @@ describe('telemetry', () => {
 
     it('should record functionId and metadata on the operation span', async () => {
       // Arrange
-      const baseModel = new MockLanguageModel({
-        doGenerate: generateTextResult('ok'),
-      });
+      const baseModel = MockLanguageModel.from('ok');
       const model = createRetryableModel({
         model: baseModel,
         retries: [],
@@ -318,7 +300,7 @@ describe('telemetry', () => {
       });
 
       // Act
-      await model.doGenerate(languageCallOptions);
+      await model.doGenerate(MockLanguageModel.callOptions());
 
       // Assert
       const operation = findSpan(exporter, 'ai_retry.doGenerate');
@@ -333,9 +315,7 @@ describe('telemetry', () => {
       context.setGlobalContextManager(contextManager);
 
       try {
-        const baseModel = new MockLanguageModel({
-          doGenerate: generateTextResult('ok'),
-        });
+        const baseModel = MockLanguageModel.from('ok');
         const model = createRetryableModel({
           model: baseModel,
           retries: [],
@@ -345,7 +325,7 @@ describe('telemetry', () => {
 
         // Act
         await context.with(trace.setSpan(context.active(), outer), async () => {
-          await model.doGenerate(languageCallOptions);
+          await model.doGenerate(MockLanguageModel.callOptions());
         });
         outer.end();
 
@@ -364,8 +344,8 @@ describe('telemetry', () => {
   describe('streamText', () => {
     it('should emit a doStream operation and attempt span on a successful stream', async () => {
       // Arrange
-      const baseModel = new MockLanguageModel({
-        doStream: mockStream(successStreamChunks('hi')),
+      const baseModel = MockLanguageModel.from({
+        doStream: successStreamChunks('hi'),
       });
       const model = createRetryableModel({
         model: baseModel,
@@ -374,8 +354,8 @@ describe('telemetry', () => {
       });
 
       // Act
-      const { stream } = await model.doStream(languageCallOptions);
-      await drainStream(stream);
+      const { stream } = await model.doStream(MockLanguageModel.callOptions());
+      await Streams.toArray(stream);
 
       // Assert
       const operation = findSpan(exporter, 'ai_retry.doStream');
@@ -396,11 +376,11 @@ describe('telemetry', () => {
 
     it('should record a mid-stream error retry across two attempt spans', async () => {
       // Arrange
-      const baseModel = new MockLanguageModel({
-        doStream: mockStream(errorStreamChunks(retryableError)),
+      const baseModel = MockLanguageModel.from({
+        doStream: errorStreamChunks(retryableError),
       });
-      const fallbackModel = new MockLanguageModel({
-        doStream: mockStream(successStreamChunks('hi')),
+      const fallbackModel = MockLanguageModel.from({
+        doStream: successStreamChunks('hi'),
       });
       const fallback: Retryable<LanguageModel> = (ctx) =>
         isErrorAttempt(ctx.current)
@@ -413,8 +393,8 @@ describe('telemetry', () => {
       });
 
       // Act
-      const { stream } = await model.doStream(languageCallOptions);
-      await drainStream(stream);
+      const { stream } = await model.doStream(MockLanguageModel.callOptions());
+      await Streams.toArray(stream);
 
       // Assert
       const attempts = attemptSpans(exporter);
@@ -441,8 +421,8 @@ describe('telemetry', () => {
   describe('embed', () => {
     it('should record telemetry for embedding retries', async () => {
       // Arrange
-      const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
-      const fallbackModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
+      const baseModel = MockEmbeddingModel.from(retryableError);
+      const fallbackModel = MockEmbeddingModel.from(mockEmbeddings);
       const fallback: Retryable<EmbeddingModel> = (ctx) =>
         isErrorAttempt(ctx.current)
           ? { model: fallbackModel, maxAttempts: 1 }
@@ -454,7 +434,7 @@ describe('telemetry', () => {
       });
 
       // Act
-      await model.doEmbed(embeddingCallOptions);
+      await model.doEmbed(MockEmbeddingModel.callOptions());
 
       // Assert
       const operation = findSpan(exporter, 'ai_retry.doEmbed');
@@ -472,8 +452,8 @@ describe('telemetry', () => {
   describe('generateImage', () => {
     it('should record telemetry for image generation retries', async () => {
       // Arrange
-      const baseModel = new MockImageModel({ doGenerate: retryableError });
-      const fallbackModel = new MockImageModel({ doGenerate: mockImageResult });
+      const baseModel = MockImageModel.from(retryableError);
+      const fallbackModel = MockImageModel.from(mockImageResult);
       const fallback: Retryable<ImageModel> = (ctx) =>
         isErrorAttempt(ctx.current)
           ? { model: fallbackModel, maxAttempts: 1 }
@@ -485,7 +465,7 @@ describe('telemetry', () => {
       });
 
       // Act
-      await model.doGenerate(imageCallOptions);
+      await model.doGenerate(MockImageModel.callOptions());
 
       // Assert
       const operation = findSpan(exporter, 'ai_retry.doGenerate');

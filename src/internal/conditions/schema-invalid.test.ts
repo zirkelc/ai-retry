@@ -1,11 +1,7 @@
 import { generateText, Output } from 'ai';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import {
-  createRetryableModel,
-  generateTextResult,
-  MockLanguageModel,
-} from '../test-utils.js';
+import { MockLanguageModel, createRetryableModel } from '../test-utils.js';
 import { createResultAPI } from './result.js';
 
 const { schemaInvalid } = createResultAPI<MockLanguageModel>();
@@ -22,12 +18,8 @@ const notJson = 'this is not json';
 describe('schemaInvalid', () => {
   it(`should not switch when JSON matches schema`, async () => {
     // Arrange
-    const baseModel = new MockLanguageModel({
-      doGenerate: generateTextResult(validJson),
-    });
-    const fallback = new MockLanguageModel({
-      doGenerate: generateTextResult(validJson),
-    });
+    const baseModel = MockLanguageModel.from(validJson);
+    const fallback = MockLanguageModel.from(validJson);
 
     // Act
     const result = await generateText({
@@ -48,12 +40,8 @@ describe('schemaInvalid', () => {
 
   it(`should switch when JSON does not match schema`, async () => {
     // Arrange
-    const baseModel = new MockLanguageModel({
-      doGenerate: generateTextResult(invalidJson),
-    });
-    const fallback = new MockLanguageModel({
-      doGenerate: generateTextResult(validJson),
-    });
+    const baseModel = MockLanguageModel.from(invalidJson);
+    const fallback = MockLanguageModel.from(validJson);
 
     // Act
     const result = await generateText({
@@ -74,12 +62,8 @@ describe('schemaInvalid', () => {
 
   it(`should switch when response is not valid JSON`, async () => {
     // Arrange
-    const baseModel = new MockLanguageModel({
-      doGenerate: generateTextResult(notJson),
-    });
-    const fallback = new MockLanguageModel({
-      doGenerate: generateTextResult(validJson),
-    });
+    const baseModel = MockLanguageModel.from(notJson);
+    const fallback = MockLanguageModel.from(validJson);
 
     // Act
     const result = await generateText({
@@ -100,12 +84,8 @@ describe('schemaInvalid', () => {
 
   it(`should not switch when no schema is provided`, async () => {
     // Arrange
-    const baseModel = new MockLanguageModel({
-      doGenerate: generateTextResult(notJson),
-    });
-    const fallback = new MockLanguageModel({
-      doGenerate: generateTextResult(validJson),
-    });
+    const baseModel = MockLanguageModel.from(notJson);
+    const fallback = MockLanguageModel.from(validJson);
 
     // Act
     const result = await generateText({

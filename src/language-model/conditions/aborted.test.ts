@@ -1,45 +1,22 @@
-import {
-  convertArrayToReadableStream,
-  convertAsyncIterableToArray,
-} from '@ai-sdk/provider-utils/test';
+import { Iterables } from 'ai-test-kit';
 import { generateText, streamText } from 'ai';
 import { describe, expect, it } from 'vitest';
 import {
-  abortError,
+  Errors,
+  MockLanguageModel,
   chunksToText,
   createRetryableModel,
-  generateTextResult,
-  MockLanguageModel,
-  timeoutError,
+  mockResultText,
+  mockStreamChunks,
 } from '../../internal/test-utils.js';
-import type { LanguageModelStreamPart } from '../../types.js';
 import { aborted } from './index.js';
-
-const okText = 'Hello, world!';
-
-const okStream: LanguageModelStreamPart[] = [
-  { type: 'stream-start', warnings: [] },
-  { type: 'text-start', id: '1' },
-  { type: 'text-delta', id: '1', delta: okText },
-  { type: 'text-end', id: '1' },
-  {
-    type: 'finish',
-    finishReason: { unified: 'stop', raw: undefined },
-    usage: {
-      inputTokens: { total: 10, noCache: 0, cacheRead: 0, cacheWrite: 0 },
-      outputTokens: { total: 20, text: 0, reasoning: 0 },
-    },
-  },
-];
 
 describe('aborted', () => {
   describe('generateText', () => {
     it('should switch on AbortError with a fresh deadline', async () => {
       // Arrange
-      const baseModel = new MockLanguageModel({ doGenerate: abortError() });
-      const retryModel = new MockLanguageModel({
-        doGenerate: generateTextResult(okText),
-      });
+      const baseModel = MockLanguageModel.from({ doGenerate: Errors.abort() });
+      const retryModel = MockLanguageModel.from(mockResultText);
 
       // Act
       const result = await generateText({
@@ -54,15 +31,15 @@ describe('aborted', () => {
       // Assert
       expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
       expect(retryModel.doGenerate).toHaveBeenCalledTimes(1);
-      expect(result.text).toBe(okText);
+      expect(result.text).toBe(mockResultText);
     });
 
     it('should not switch on TimeoutError', async () => {
       // Arrange
-      const baseModel = new MockLanguageModel({ doGenerate: timeoutError() });
-      const retryModel = new MockLanguageModel({
-        doGenerate: generateTextResult(okText),
+      const baseModel = MockLanguageModel.from({
+        doGenerate: Errors.timeout(),
       });
+      const retryModel = MockLanguageModel.from(mockResultText);
 
       // Act
       const result = generateText({
@@ -84,9 +61,9 @@ describe('aborted', () => {
   describe('streamText', () => {
     it('should switch on AbortError with a fresh deadline', async () => {
       // Arrange
-      const baseModel = new MockLanguageModel({ doStream: abortError() });
-      const retryModel = new MockLanguageModel({
-        doStream: { stream: convertArrayToReadableStream(okStream) },
+      const baseModel = MockLanguageModel.from({ doStream: Errors.abort() });
+      const retryModel = MockLanguageModel.from({
+        doStream: mockStreamChunks,
       });
       let streamError: unknown;
 
@@ -102,13 +79,13 @@ describe('aborted', () => {
           streamError = data.error;
         },
       });
-      const chunks = await convertAsyncIterableToArray(result.fullStream);
+      const chunks = await Iterables.toArray(result.fullStream);
 
       // Assert
       expect(baseModel.doStream).toHaveBeenCalledTimes(1);
       expect(retryModel.doStream).toHaveBeenCalledTimes(1);
       expect(streamError).toBeUndefined();
-      expect(chunksToText(chunks)).toBe(okText);
+      expect(chunksToText(chunks)).toBe(mockResultText);
     });
   });
 });

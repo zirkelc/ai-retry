@@ -12,8 +12,8 @@ import { createRetryableModel } from './create-retryable-model.js';
 describe('createRetryableModel', () => {
   it('should return LanguageModel for a model instance', () => {
     const retryable = createRetryableModel({
-      model: new MockLanguageModel(),
-      retries: [new MockLanguageModel(), { model: new MockLanguageModel() }],
+      model: MockLanguageModel.from(),
+      retries: [MockLanguageModel.from(), { model: MockLanguageModel.from() }],
     });
 
     assertType<LanguageModel>(retryable);

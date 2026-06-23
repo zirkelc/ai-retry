@@ -1,8 +1,9 @@
+import { Errors } from 'ai-test-kit';
 import { APICallError, embed, RetryError } from 'ai';
 import { describe, expect, it, vi } from 'vitest';
 import {
-  createRetryableModel,
   MockEmbeddingModel,
+  createRetryableModel,
   mockEmbeddings,
   nonRetryableError,
   retryableError,
@@ -23,9 +24,7 @@ type OnFailure = Required<RetryableModelOptions<EmbeddingModel>>['onFailure'];
 describe('embed', () => {
   it('should embed successfully when no errors occur', async () => {
     // Arrange
-    const baseModel = new MockEmbeddingModel({
-      doEmbed: mockEmbeddings,
-    });
+    const baseModel = MockEmbeddingModel.from(mockEmbeddings);
     const retryableModel = createRetryableModel({
       model: baseModel,
       retries: [],
@@ -46,10 +45,8 @@ describe('embed', () => {
     describe('error-based retries', () => {
       it('should retry with errors', async () => {
         // Arrange
-        const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
-        const fallbackModel = new MockEmbeddingModel({
-          doEmbed: mockEmbeddings,
-        });
+        const baseModel = MockEmbeddingModel.from(retryableError);
+        const fallbackModel = MockEmbeddingModel.from(mockEmbeddings);
 
         const fallbackRetryable = (context: RetryContext<EmbeddingModel>) => {
           if (
@@ -79,13 +76,9 @@ describe('embed', () => {
 
       it('should not retry without errors', async () => {
         // Arrange
-        const baseModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
-        const fallbackModel1 = new MockEmbeddingModel({
-          doEmbed: mockEmbeddings,
-        });
-        const fallbackModel2 = new MockEmbeddingModel({
-          doEmbed: mockEmbeddings,
-        });
+        const baseModel = MockEmbeddingModel.from(mockEmbeddings);
+        const fallbackModel1 = MockEmbeddingModel.from(mockEmbeddings);
+        const fallbackModel2 = MockEmbeddingModel.from(mockEmbeddings);
 
         // Act
         const result = await embed({
@@ -105,13 +98,9 @@ describe('embed', () => {
 
       it('should use plain embedding models for error-based attempts', async () => {
         // Arrange
-        const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
-        const fallbackModel1 = new MockEmbeddingModel({
-          doEmbed: mockEmbeddings,
-        });
-        const fallbackModel2 = new MockEmbeddingModel({
-          doEmbed: mockEmbeddings,
-        });
+        const baseModel = MockEmbeddingModel.from(retryableError);
+        const fallbackModel1 = MockEmbeddingModel.from(mockEmbeddings);
+        const fallbackModel2 = MockEmbeddingModel.from(mockEmbeddings);
 
         const fallbackRetryable = (context: RetryContext<EmbeddingModel>) => {
           if (
@@ -144,10 +133,8 @@ describe('embed', () => {
   describe('disabled', () => {
     it('should not retry when disabled is true', async () => {
       // Arrange
-      const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
-      const fallbackModel = new MockEmbeddingModel({
-        doEmbed: mockEmbeddings,
-      });
+      const baseModel = MockEmbeddingModel.from(retryableError);
+      const fallbackModel = MockEmbeddingModel.from(mockEmbeddings);
 
       const fallbackRetryable: Retryable<EmbeddingModel> = () => {
         return { model: fallbackModel, maxAttempts: 1 };
@@ -174,10 +161,8 @@ describe('embed', () => {
 
     it('should retry when disabled is false', async () => {
       // Arrange
-      const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
-      const fallbackModel = new MockEmbeddingModel({
-        doEmbed: mockEmbeddings,
-      });
+      const baseModel = MockEmbeddingModel.from(retryableError);
+      const fallbackModel = MockEmbeddingModel.from(mockEmbeddings);
 
       const fallbackRetryable: Retryable<EmbeddingModel> = () => {
         return { model: fallbackModel, maxAttempts: 1 };
@@ -203,10 +188,8 @@ describe('embed', () => {
 
     it('should not retry when disabled is a function returning true', async () => {
       // Arrange
-      const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
-      const fallbackModel = new MockEmbeddingModel({
-        doEmbed: mockEmbeddings,
-      });
+      const baseModel = MockEmbeddingModel.from(retryableError);
+      const fallbackModel = MockEmbeddingModel.from(mockEmbeddings);
 
       const fallbackRetryable: Retryable<EmbeddingModel> = () => {
         return { model: fallbackModel, maxAttempts: 1 };
@@ -236,10 +219,8 @@ describe('embed', () => {
 
     it('should retry when disabled is a function returning false', async () => {
       // Arrange
-      const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
-      const fallbackModel = new MockEmbeddingModel({
-        doEmbed: mockEmbeddings,
-      });
+      const baseModel = MockEmbeddingModel.from(retryableError);
+      const fallbackModel = MockEmbeddingModel.from(mockEmbeddings);
 
       const fallbackRetryable: Retryable<EmbeddingModel> = () => {
         return { model: fallbackModel, maxAttempts: 1 };
@@ -268,10 +249,8 @@ describe('embed', () => {
 
     it('should work normally when disabled is undefined (default)', async () => {
       // Arrange
-      const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
-      const fallbackModel = new MockEmbeddingModel({
-        doEmbed: mockEmbeddings,
-      });
+      const baseModel = MockEmbeddingModel.from(retryableError);
+      const fallbackModel = MockEmbeddingModel.from(mockEmbeddings);
 
       const fallbackRetryable: Retryable<EmbeddingModel> = () => {
         return { model: fallbackModel, maxAttempts: 1 };
@@ -299,8 +278,8 @@ describe('embed', () => {
   describe('onError', () => {
     it('should call onError handler when an error occurs', async () => {
       // Arrange
-      const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
-      const fallbackModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
+      const baseModel = MockEmbeddingModel.from(retryableError);
+      const fallbackModel = MockEmbeddingModel.from(mockEmbeddings);
       const onErrorSpy = vi.fn<OnError>();
 
       // Act
@@ -325,11 +304,9 @@ describe('embed', () => {
 
     it('should call onError handler for each error in multiple attempts', async () => {
       // Arrange
-      const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
-      const fallbackModel = new MockEmbeddingModel({
-        doEmbed: nonRetryableError,
-      });
-      const finalModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
+      const baseModel = MockEmbeddingModel.from(retryableError);
+      const fallbackModel = MockEmbeddingModel.from(nonRetryableError);
+      const finalModel = MockEmbeddingModel.from(mockEmbeddings);
       const onErrorSpy = vi.fn<OnError>();
 
       // Act
@@ -362,8 +339,8 @@ describe('embed', () => {
 
     it('should call onError handler before onRetry handler', async () => {
       // Arrange
-      const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
-      const fallbackModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
+      const baseModel = MockEmbeddingModel.from(retryableError);
+      const fallbackModel = MockEmbeddingModel.from(mockEmbeddings);
       const onErrorSpy = vi.fn<OnError>();
       const onRetrySpy = vi.fn<OnRetry>();
 
@@ -398,7 +375,7 @@ describe('embed', () => {
 
     it('should NOT call onError handler when embedding succeeds', async () => {
       // Arrange
-      const baseModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
+      const baseModel = MockEmbeddingModel.from(mockEmbeddings);
       const onErrorSpy = vi.fn<OnError>();
 
       // Act
@@ -419,8 +396,8 @@ describe('embed', () => {
   describe('onRetry', () => {
     it('should call onRetry handler for error-based retries', async () => {
       // Arrange
-      const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
-      const fallbackModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
+      const baseModel = MockEmbeddingModel.from(retryableError);
+      const fallbackModel = MockEmbeddingModel.from(mockEmbeddings);
       const onRetrySpy = vi.fn<OnRetry>();
 
       // Act
@@ -448,13 +425,9 @@ describe('embed', () => {
 
     it('should call onRetry handler for each retry attempt', async () => {
       // Arrange
-      const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
-      const fallbackModel1 = new MockEmbeddingModel({
-        doEmbed: nonRetryableError,
-      });
-      const fallbackModel2 = new MockEmbeddingModel({
-        doEmbed: mockEmbeddings,
-      });
+      const baseModel = MockEmbeddingModel.from(retryableError);
+      const fallbackModel1 = MockEmbeddingModel.from(nonRetryableError);
+      const fallbackModel2 = MockEmbeddingModel.from(mockEmbeddings);
       const onRetrySpy = vi.fn<OnRetry>();
 
       // Act
@@ -493,7 +466,7 @@ describe('embed', () => {
 
     it('should NOT call onRetry on first attempt', async () => {
       // Arrange
-      const baseModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
+      const baseModel = MockEmbeddingModel.from(mockEmbeddings);
       const onRetrySpy = vi.fn<OnRetry>();
 
       // Act
@@ -513,10 +486,8 @@ describe('embed', () => {
     describe('overrides', () => {
       it('should override values for the upcoming retry attempt', async () => {
         // Arrange
-        const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
-        const fallbackModel = new MockEmbeddingModel({
-          doEmbed: mockEmbeddings,
-        });
+        const baseModel = MockEmbeddingModel.from(retryableError);
+        const fallbackModel = MockEmbeddingModel.from(mockEmbeddings);
 
         // Act
         await embed({
@@ -536,10 +507,8 @@ describe('embed', () => {
 
       it('should override providerOptions for the upcoming retry attempt', async () => {
         // Arrange
-        const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
-        const fallbackModel = new MockEmbeddingModel({
-          doEmbed: mockEmbeddings,
-        });
+        const baseModel = MockEmbeddingModel.from(retryableError);
+        const fallbackModel = MockEmbeddingModel.from(mockEmbeddings);
         const sanitizedProviderOptions = { openai: { dimensions: 256 } };
 
         // Act
@@ -565,10 +534,8 @@ describe('embed', () => {
 
       it('should let onRetry overrides beat Retry.options', async () => {
         // Arrange
-        const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
-        const fallbackModel = new MockEmbeddingModel({
-          doEmbed: mockEmbeddings,
-        });
+        const baseModel = MockEmbeddingModel.from(retryableError);
+        const fallbackModel = MockEmbeddingModel.from(mockEmbeddings);
 
         // Act
         await embed({
@@ -590,10 +557,8 @@ describe('embed', () => {
 
       it('should fall back to Retry.options when onRetry returns undefined', async () => {
         // Arrange
-        const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
-        const fallbackModel = new MockEmbeddingModel({
-          doEmbed: mockEmbeddings,
-        });
+        const baseModel = MockEmbeddingModel.from(retryableError);
+        const fallbackModel = MockEmbeddingModel.from(mockEmbeddings);
 
         // Act
         await embed({
@@ -615,10 +580,8 @@ describe('embed', () => {
 
       it('should support async onRetry returning overrides', async () => {
         // Arrange
-        const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
-        const fallbackModel = new MockEmbeddingModel({
-          doEmbed: mockEmbeddings,
-        });
+        const baseModel = MockEmbeddingModel.from(retryableError);
+        const fallbackModel = MockEmbeddingModel.from(mockEmbeddings);
 
         // Act
         await embed({
@@ -644,7 +607,7 @@ describe('embed', () => {
   describe('onSuccess', () => {
     it('should call onSuccess with base model when no retry occurs', async () => {
       // Arrange
-      const baseModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
+      const baseModel = MockEmbeddingModel.from(mockEmbeddings);
       const onSuccessSpy = vi.fn<OnSuccess>();
 
       // Act
@@ -669,8 +632,8 @@ describe('embed', () => {
 
     it('should call onSuccess with fallback model after retry', async () => {
       // Arrange
-      const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
-      const fallbackModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
+      const baseModel = MockEmbeddingModel.from(retryableError);
+      const fallbackModel = MockEmbeddingModel.from(mockEmbeddings);
       const onSuccessSpy = vi.fn<OnSuccess>();
 
       // Act
@@ -695,10 +658,8 @@ describe('embed', () => {
 
     it('should NOT call onSuccess when all retries fail', async () => {
       // Arrange
-      const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
-      const fallbackModel = new MockEmbeddingModel({
-        doEmbed: nonRetryableError,
-      });
+      const baseModel = MockEmbeddingModel.from(retryableError);
+      const fallbackModel = MockEmbeddingModel.from(nonRetryableError);
       const onSuccessSpy = vi.fn<OnSuccess>();
 
       // Act & Assert
@@ -719,7 +680,7 @@ describe('embed', () => {
   describe('onFailure', () => {
     it('should call onFailure with raw error when no retry is available', async () => {
       // Arrange
-      const baseModel = new MockEmbeddingModel({ doEmbed: nonRetryableError });
+      const baseModel = MockEmbeddingModel.from(nonRetryableError);
       const onFailureSpy = vi.fn<OnFailure>();
 
       // Act
@@ -745,10 +706,8 @@ describe('embed', () => {
 
     it('should call onFailure with RetryError when retries are exhausted', async () => {
       // Arrange
-      const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
-      const fallbackModel = new MockEmbeddingModel({
-        doEmbed: nonRetryableError,
-      });
+      const baseModel = MockEmbeddingModel.from(retryableError);
+      const fallbackModel = MockEmbeddingModel.from(nonRetryableError);
       const onFailureSpy = vi.fn<OnFailure>();
 
       // Act
@@ -774,7 +733,7 @@ describe('embed', () => {
 
     it('should NOT call onFailure on success', async () => {
       // Arrange
-      const baseModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
+      const baseModel = MockEmbeddingModel.from(mockEmbeddings);
       const onFailureSpy = vi.fn<OnFailure>();
       const onSuccessSpy = vi.fn<OnSuccess>();
 
@@ -798,8 +757,8 @@ describe('embed', () => {
   describe('attempt options', () => {
     it('should include call options in error attempts', async () => {
       // Arrange
-      const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
-      const fallbackModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
+      const baseModel = MockEmbeddingModel.from(retryableError);
+      const fallbackModel = MockEmbeddingModel.from(mockEmbeddings);
       const onErrorSpy = vi.fn<OnError>();
 
       // Act
@@ -824,11 +783,9 @@ describe('embed', () => {
 
     it('should reflect overridden options in retry attempts', async () => {
       // Arrange
-      const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
-      const fallbackModel = new MockEmbeddingModel({
-        doEmbed: nonRetryableError,
-      });
-      const finalModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
+      const baseModel = MockEmbeddingModel.from(retryableError);
+      const fallbackModel = MockEmbeddingModel.from(nonRetryableError);
+      const finalModel = MockEmbeddingModel.from(mockEmbeddings);
       const onErrorSpy = vi.fn<OnError>();
       const overrideValues = ['overridden value'];
 
@@ -866,14 +823,10 @@ describe('embed', () => {
     describe('maxAttempts', () => {
       it('should try each model only once by default', async () => {
         // Arrange
-        const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
-        const fallbackModel1 = new MockEmbeddingModel({
-          doEmbed: retryableError,
-        });
-        const fallbackModel2 = new MockEmbeddingModel({
-          doEmbed: retryableError,
-        });
-        const finalModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
+        const baseModel = MockEmbeddingModel.from(retryableError);
+        const fallbackModel1 = MockEmbeddingModel.from(retryableError);
+        const fallbackModel2 = MockEmbeddingModel.from(retryableError);
+        const finalModel = MockEmbeddingModel.from(mockEmbeddings);
 
         // Act
         await embed({
@@ -897,14 +850,10 @@ describe('embed', () => {
 
       it('should try models multiple times if maxAttempts is set', async () => {
         // Arrange
-        const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
-        const fallbackModel1 = new MockEmbeddingModel({
-          doEmbed: retryableError,
-        });
-        const fallbackModel2 = new MockEmbeddingModel({
-          doEmbed: retryableError,
-        });
-        const finalModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
+        const baseModel = MockEmbeddingModel.from(retryableError);
+        const fallbackModel1 = MockEmbeddingModel.from(retryableError);
+        const fallbackModel2 = MockEmbeddingModel.from(retryableError);
+        const finalModel = MockEmbeddingModel.from(mockEmbeddings);
 
         // Act
         await embed({
@@ -931,10 +880,8 @@ describe('embed', () => {
     describe('maxRetries', () => {
       it('should ignore maxRetries setting when retryable matches', async () => {
         // Arrange
-        const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
-        const fallbackModel = new MockEmbeddingModel({
-          doEmbed: nonRetryableError,
-        });
+        const baseModel = MockEmbeddingModel.from(retryableError);
+        const fallbackModel = MockEmbeddingModel.from(nonRetryableError);
 
         // Act & Assert
         try {
@@ -956,7 +903,7 @@ describe('embed', () => {
 
       it('should respect maxRetries setting when no retryable matches', async () => {
         // Arrange
-        const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
+        const baseModel = MockEmbeddingModel.from(retryableError);
 
         // Act & Assert
         try {
@@ -980,10 +927,8 @@ describe('embed', () => {
       it('should apply delay before retrying', async () => {
         // Arrange
         vi.useFakeTimers();
-        const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
-        const fallbackModel = new MockEmbeddingModel({
-          doEmbed: mockEmbeddings,
-        });
+        const baseModel = MockEmbeddingModel.from(retryableError);
+        const fallbackModel = MockEmbeddingModel.from(mockEmbeddings);
         const delayMs = 100;
 
         // Act
@@ -1008,13 +953,9 @@ describe('embed', () => {
       it('should apply different delays for multiple retries', async () => {
         // Arrange
         vi.useFakeTimers();
-        const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
-        const fallbackModel1 = new MockEmbeddingModel({
-          doEmbed: retryableError,
-        });
-        const fallbackModel2 = new MockEmbeddingModel({
-          doEmbed: mockEmbeddings,
-        });
+        const baseModel = MockEmbeddingModel.from(retryableError);
+        const fallbackModel1 = MockEmbeddingModel.from(retryableError);
+        const fallbackModel2 = MockEmbeddingModel.from(mockEmbeddings);
         const delay1 = 50;
         const delay2 = 50;
 
@@ -1043,10 +984,8 @@ describe('embed', () => {
 
       it('should not delay when delay is not specified', async () => {
         // Arrange
-        const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
-        const fallbackModel = new MockEmbeddingModel({
-          doEmbed: mockEmbeddings,
-        });
+        const baseModel = MockEmbeddingModel.from(retryableError);
+        const fallbackModel = MockEmbeddingModel.from(mockEmbeddings);
 
         // Act
         await embed({
@@ -1066,10 +1005,8 @@ describe('embed', () => {
     describe('providerOptions', () => {
       it('should override base model providerOptions with retry model providerOptions', async () => {
         // Arrange
-        const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
-        const fallbackModel = new MockEmbeddingModel({
-          doEmbed: mockEmbeddings,
-        });
+        const baseModel = MockEmbeddingModel.from(retryableError);
+        const fallbackModel = MockEmbeddingModel.from(mockEmbeddings);
         const originalProviderOptions = { openai: { user: 'original-user' } };
         const retryProviderOptions = { openai: { user: 'retry-user' } };
 
@@ -1111,34 +1048,25 @@ describe('embed', () => {
         let fallbackModelSignal: AbortSignal | undefined;
         // Use TimeoutError (from AbortSignal.timeout()) which should be retried,
         // as opposed to AbortError (from user cancellation) which should NOT be retried
-        const timeoutError = new DOMException(
-          'The operation timed out',
-          'TimeoutError',
-        );
+        const timeoutError = Errors.timeout();
 
-        const baseModel = new MockEmbeddingModel({
-          doEmbed: async (opts: any) => {
-            baseModelSignal = opts.abortSignal;
-            throw timeoutError;
-          },
+        const baseModel = MockEmbeddingModel.from(async (opts: any) => {
+          baseModelSignal = opts.abortSignal;
+          throw timeoutError;
         });
 
-        const fallbackModel = new MockEmbeddingModel({
-          doEmbed: async (opts: any) => {
-            fallbackModelSignal = opts.abortSignal;
-            // Verify the new signal is not aborted
-            if (opts.abortSignal?.aborted) {
-              throw new Error('Should not be aborted with fresh signal');
-            }
-            return mockEmbeddings;
-          },
+        const fallbackModel = MockEmbeddingModel.from(async (opts: any) => {
+          fallbackModelSignal = opts.abortSignal;
+          // Verify the new signal is not aborted
+          if (opts.abortSignal?.aborted) {
+            throw new Error('Should not be aborted with fresh signal');
+          }
+          return mockEmbeddings;
         });
 
         // Create an already-aborted signal (simulates timeout that already fired)
         const controller = new AbortController();
-        controller.abort(
-          new DOMException('The operation timed out', 'TimeoutError'),
-        );
+        controller.abort(Errors.timeout());
 
         // Act
         await embed({
@@ -1172,10 +1100,8 @@ describe('embed', () => {
     describe('values', () => {
       it('should override values on retry', async () => {
         // Arrange
-        const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
-        const fallbackModel = new MockEmbeddingModel({
-          doEmbed: mockEmbeddings,
-        });
+        const baseModel = MockEmbeddingModel.from(retryableError);
+        const fallbackModel = MockEmbeddingModel.from(mockEmbeddings);
         const overrideValues = ['modified value'];
 
         // Act
@@ -1199,10 +1125,8 @@ describe('embed', () => {
     describe('headers', () => {
       it('should override headers on retry', async () => {
         // Arrange
-        const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
-        const fallbackModel = new MockEmbeddingModel({
-          doEmbed: mockEmbeddings,
-        });
+        const baseModel = MockEmbeddingModel.from(retryableError);
+        const fallbackModel = MockEmbeddingModel.from(mockEmbeddings);
         // Use lowercase headers to match what AI SDK expects
         const retryHeaders = { 'x-retry': 'retry' };
 
@@ -1232,13 +1156,9 @@ describe('embed', () => {
   describe('RetryError', () => {
     it('should throw RetryError when all retry attempts are exhausted', async () => {
       // Arrange
-      const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
-      const fallbackModel1 = new MockEmbeddingModel({
-        doEmbed: nonRetryableError,
-      });
-      const fallbackModel2 = new MockEmbeddingModel({
-        doEmbed: retryableError,
-      });
+      const baseModel = MockEmbeddingModel.from(retryableError);
+      const fallbackModel1 = MockEmbeddingModel.from(nonRetryableError);
+      const fallbackModel2 = MockEmbeddingModel.from(retryableError);
 
       // Act & Assert
       try {
@@ -1266,7 +1186,7 @@ describe('embed', () => {
 
     it('should throw original error directly on first attempt with no retryables', async () => {
       // Arrange
-      const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
+      const baseModel = MockEmbeddingModel.from(retryableError);
 
       // Act & Assert
       try {
@@ -1289,9 +1209,7 @@ describe('embed', () => {
 
     it('should throw original error directly when retryable returns undefined', async () => {
       // Arrange
-      const baseModel = new MockEmbeddingModel({
-        doEmbed: nonRetryableError,
-      });
+      const baseModel = MockEmbeddingModel.from(nonRetryableError);
 
       // Act & Assert
       try {
@@ -1318,16 +1236,12 @@ describe('embed', () => {
       it(`should reset to base model on every request`, async () => {
         // Arrange
         let callCount = 0;
-        const baseModel = new MockEmbeddingModel({
-          doEmbed: async () => {
-            callCount++;
-            if (callCount <= 1) throw retryableError;
-            return mockEmbeddings;
-          },
+        const baseModel = MockEmbeddingModel.from(async () => {
+          callCount++;
+          if (callCount <= 1) throw retryableError;
+          return mockEmbeddings;
         });
-        const fallbackModel = new MockEmbeddingModel({
-          doEmbed: mockEmbeddings,
-        });
+        const fallbackModel = MockEmbeddingModel.from(mockEmbeddings);
 
         const retryableModel = createRetryableModel({
           model: baseModel,
@@ -1357,10 +1271,8 @@ describe('embed', () => {
     describe(`after-N-requests`, () => {
       it(`should use sticky model for N subsequent requests then reset`, async () => {
         // Arrange
-        const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
-        const fallbackModel = new MockEmbeddingModel({
-          doEmbed: mockEmbeddings,
-        });
+        const baseModel = MockEmbeddingModel.from(retryableError);
+        const fallbackModel = MockEmbeddingModel.from(mockEmbeddings);
 
         const retryableModel = createRetryableModel({
           model: baseModel,
@@ -1393,10 +1305,8 @@ describe('embed', () => {
 
       it(`should not set sticky model when no retry occurred`, async () => {
         // Arrange
-        const baseModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
-        const fallbackModel = new MockEmbeddingModel({
-          doEmbed: mockEmbeddings,
-        });
+        const baseModel = MockEmbeddingModel.from(mockEmbeddings);
+        const fallbackModel = MockEmbeddingModel.from(mockEmbeddings);
 
         const retryableModel = createRetryableModel({
           model: baseModel,
@@ -1416,18 +1326,14 @@ describe('embed', () => {
       it(`should reset counter when a new sticky model is set`, async () => {
         // Arrange
         let fallback1CallCount = 0;
-        const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
-        const fallbackModel1 = new MockEmbeddingModel({
-          doEmbed: async () => {
-            fallback1CallCount++;
-            /** Fail on second use (when used as sticky on request 2) */
-            if (fallback1CallCount >= 2) throw retryableError;
-            return mockEmbeddings;
-          },
+        const baseModel = MockEmbeddingModel.from(retryableError);
+        const fallbackModel1 = MockEmbeddingModel.from(async () => {
+          fallback1CallCount++;
+          /** Fail on second use (when used as sticky on request 2) */
+          if (fallback1CallCount >= 2) throw retryableError;
+          return mockEmbeddings;
         });
-        const fallbackModel2 = new MockEmbeddingModel({
-          doEmbed: mockEmbeddings,
-        });
+        const fallbackModel2 = MockEmbeddingModel.from(mockEmbeddings);
 
         const retryableModel = createRetryableModel({
           model: baseModel,
@@ -1462,10 +1368,8 @@ describe('embed', () => {
         // Arrange
         vi.useFakeTimers();
 
-        const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
-        const fallbackModel = new MockEmbeddingModel({
-          doEmbed: mockEmbeddings,
-        });
+        const baseModel = MockEmbeddingModel.from(retryableError);
+        const fallbackModel = MockEmbeddingModel.from(mockEmbeddings);
 
         const retryableModel = createRetryableModel({
           model: baseModel,
