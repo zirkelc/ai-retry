@@ -20,7 +20,7 @@ export class RetryableImageModel
   extends BaseRetryableModel<ImageModel>
   implements ImageModel
 {
-  readonly specificationVersion = 'v3';
+  readonly specificationVersion = 'v4';
 
   get modelId() {
     return this.currentModel.modelId;
@@ -276,15 +276,12 @@ export class RetryableImageModel
       return this.currentModel.doGenerate(callOptions);
     }
 
-    const recorder = await createRetryTelemetry(
-      this.options.experimental_telemetry,
-      {
-        operation: 'doGenerate',
-        genAiOperation: 'generate_content',
-        provider: startModel.provider,
-        modelId: startModel.modelId,
-      },
-    );
+    const recorder = await createRetryTelemetry(this.telemetrySettings, {
+      operation: 'doGenerate',
+      genAiOperation: 'generate_content',
+      provider: startModel.provider,
+      modelId: startModel.modelId,
+    });
 
     /**
      * Shared attempts array, threaded into `withRetry` so it stays populated

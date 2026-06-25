@@ -30,7 +30,7 @@ export class RetryableLanguageModel
   extends BaseRetryableModel<LanguageModel>
   implements LanguageModel
 {
-  readonly specificationVersion = 'v3';
+  readonly specificationVersion = 'v4';
 
   get modelId() {
     return this.currentModel.modelId;
@@ -386,15 +386,12 @@ export class RetryableLanguageModel
       return this.currentModel.doGenerate(callOptions);
     }
 
-    const recorder = await createRetryTelemetry(
-      this.options.experimental_telemetry,
-      {
-        operation: 'doGenerate',
-        genAiOperation: 'chat',
-        provider: startModel.provider,
-        modelId: startModel.modelId,
-      },
-    );
+    const recorder = await createRetryTelemetry(this.telemetrySettings, {
+      operation: 'doGenerate',
+      genAiOperation: 'chat',
+      provider: startModel.provider,
+      modelId: startModel.modelId,
+    });
 
     /**
      * Shared attempts array, threaded into `withRetry` so it stays populated
@@ -454,15 +451,12 @@ export class RetryableLanguageModel
       return this.currentModel.doStream(callOptions);
     }
 
-    const recorder = await createRetryTelemetry(
-      this.options.experimental_telemetry,
-      {
-        operation: 'doStream',
-        genAiOperation: 'chat',
-        provider: startModel.provider,
-        modelId: startModel.modelId,
-      },
-    );
+    const recorder = await createRetryTelemetry(this.telemetrySettings, {
+      operation: 'doStream',
+      genAiOperation: 'chat',
+      provider: startModel.provider,
+      modelId: startModel.modelId,
+    });
 
     /**
      * Perform the initial call to doStream with retry logic to handle errors before any data is streamed.

@@ -1,5 +1,5 @@
 import { openai } from '@ai-sdk/openai';
-import type { LanguageModelV3 } from '@ai-sdk/provider';
+import type { LanguageModelV4 } from '@ai-sdk/provider';
 import { generateText, Output } from 'ai';
 import { createRetryableModel, schemaInvalid } from 'ai-retry/language-model';
 import { z } from 'zod';
@@ -7,9 +7,9 @@ import { z } from 'zod';
 /**
  * Creates a mock language model that returns a fixed JSON string.
  */
-function createMockModel(modelId: string, response: string): LanguageModelV3 {
+function createMockModel(modelId: string, response: string): LanguageModelV4 {
   return {
-    specificationVersion: `v3`,
+    specificationVersion: `v4`,
     provider: `mock`,
     modelId,
     supportedUrls: {},

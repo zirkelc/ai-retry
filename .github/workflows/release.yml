@@ -11,6 +11,7 @@ on:
 
 permissions:
   id-token: write # needed for npm publish with provenance
+  contents: write # needed to force-move the major version tag (vMAJOR.x)
 
 jobs:
   release:
@@ -32,12 +33,30 @@ jobs:
       - run: pnpm test
       - name: Publish to npm
         run: |
-          # Check if this is a prerelease (beta)
           VERSION=$(node -p "require('./package.json').version")
-          if [[ "$VERSION" == *"-beta."* ]]; then
-            echo "Publishing beta version: $VERSION"
-            pnpm publish --provenance --no-git-checks --tag beta
+          if [[ "$VERSION" == *-* ]]; then
+            # Prerelease: publish under a dist-tag named after the channel,
+            # e.g. 2.0.0-next.3 -> next. Keeps `latest` on the stable line.
+            CHANNEL="${VERSION#*-}"
+            CHANNEL="${CHANNEL%%.*}"
+            echo "Publishing prerelease $VERSION under dist-tag: $CHANNEL"
+            pnpm publish --provenance --no-git-checks --tag "$CHANNEL"
           else
             echo "Publishing stable version: $VERSION"
             pnpm publish --provenance --no-git-checks
           fi
+
+      # Force-move the floating major tag (e.g. v2.x) to the released commit so
+      # links like /tree/v2.x always resolve to the latest release in that major
+      # line. Skipped for prereleases (so an -rc/-next never yanks the stable
+      # vX.x tag) and for manual workflow_dispatch runs (no release payload).
+      # Uses the default GITHUB_TOKEN: the repo has no tag protection, and its
+      # pushes don't re-trigger workflows.
+      - name: Update major version tag
+        if: ${{ github.event_name == 'release' && !github.event.release.prerelease }}
+        env:
+          TAG: ${{ github.event.release.tag_name }} # e.g. v2.12.0
+        run: |
+          major="${TAG%%.*}"               # v2.12.0 -> v2
+          git tag -f "${major}.x"          # tag the checked-out release commit -> v2.x
+          git push -f origin "${major}.x"

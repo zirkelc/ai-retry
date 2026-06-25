@@ -25,16 +25,10 @@ Two retry shapes are supported:
 >
 > - `ai-retry@0.x` — AI SDK v5
 > - `ai-retry@1.x` — AI SDK v6
-> - `ai-retry@beta` — AI SDK v7 (beta, see the [`ai-sdk-v7` branch](https://github.com/zirkelc/ai-retry/tree/ai-sdk-v7))
+> - `ai-retry@2.x` — AI SDK v7
 
 ```bash
 npm install ai-retry
-```
-
-A beta release for AI SDK v7 is available on the [`ai-sdk-v7` branch](https://github.com/zirkelc/ai-retry/tree/ai-sdk-v7). Install it with the `beta` tag:
-
-```bash
-npm install ai-retry@beta
 ```
 
 ### Usage
@@ -721,11 +715,11 @@ const retryableModel = createRetryableModel({
 > [!NOTE]
 > Experimental: span names and attributes may change in patch versions.
 
-`ai-retry` can emit [OpenTelemetry](https://opentelemetry.io/) spans for each request and every retry attempt. Spans are created on the active OpenTelemetry context, so they nest automatically under the AI SDK's own spans (e.g. `ai.generateText.doGenerate`) when you also enable `experimental_telemetry` on `generateText` / `streamText`. A single trace then shows the individual attempts — which model each used, why it was retried, and the backoff between them — that the SDK's own span otherwise hides.
+`ai-retry` can emit [OpenTelemetry](https://opentelemetry.io/) spans for each request and every retry attempt. Spans are created on the active OpenTelemetry context, so they nest automatically under the AI SDK's own spans (e.g. `ai.generateText.doGenerate`) when that integration is active — in AI SDK v7 that means installing [`@ai-sdk/otel`](https://ai-sdk.dev/docs/ai-sdk-core/telemetry) and registering it with `registerTelemetry(new OpenTelemetry())`. A single trace then shows the individual attempts — which model each used, why it was retried, and the backoff between them — that the SDK's own span otherwise hides. Retry telemetry works on its own too: it talks to OpenTelemetry directly, so it does not require `@ai-sdk/otel`.
 
 #### Setup
 
-Telemetry uses the optional peer dependency `@opentelemetry/api` (already present if you use the AI SDK). Register an OpenTelemetry SDK once at startup, then opt in per model:
+Telemetry uses the optional peer dependency `@opentelemetry/api`. In AI SDK v7 it is no longer a transitive dependency of `ai`, so install `@ai-sdk/otel` (which brings it in) or `@opentelemetry/api` directly. Register an OpenTelemetry SDK once at startup, then opt in per model:
 
 ```typescript
 import { createRetryableModel } from 'ai-retry/language-model';
@@ -733,17 +727,19 @@ import { createRetryableModel } from 'ai-retry/language-model';
 const retryableModel = createRetryableModel({
   model: openai('gpt-4o'),
   retries: [anthropic('claude-sonnet-4-5')],
-  experimental_telemetry: { isEnabled: true },
+  telemetry: { isEnabled: true },
 });
 ```
 
-The settings mirror the AI SDK's `experimental_telemetry` shape:
+> [!NOTE]
+> `telemetry` replaces the now-deprecated `experimental_telemetry` option. The old name still works as an alias; when both are set, `telemetry` wins.
+
+The settings resemble the AI SDK's `telemetry` shape, but stay opt-in and keep a `tracer` field (which the AI SDK moved into `@ai-sdk/otel`):
 
 ```ts
 interface RetryTelemetrySettings {
   isEnabled?: boolean; // off by default while experimental
   tracer?: Tracer; // defaults to trace.getTracer('ai-retry')
-  functionId?: string; // groups telemetry by function
   metadata?: Record<string, AttributeValue>;
 }
 ```
@@ -773,7 +769,7 @@ ai_retry.doGenerate            outcome=success, attempts=2
 | `ai_retry.model.start`                                                       | the model the request started with (`provider/modelId`)                      |
 | `ai_retry.model.final`                                                       | the model that produced the final outcome                                    |
 | `ai_retry.error.{name,message,status,cause.name,cause.message,cause.status}` | the failing error (on failure); `status` when it carries an HTTP status code |
-| `ai_retry.function.id`, `ai_retry.metadata.*`                                | from the telemetry settings                                                  |
+| `ai_retry.metadata.*`                                                        | from the telemetry settings `metadata`                                       |
 
 **Attempt span** (`ai_retry.attempt`) attributes:
 
@@ -814,20 +810,20 @@ Result-based conditions (`finishReason`, `schemaInvalid`, `result(...)`) apply t
 The function-style helpers (`contentFilterTriggered`, `requestTimeout`, `requestNotRetryable`, `retryAfterDelay`, `schemaMismatch`, `serviceOverloaded`, `serviceUnavailable`, `noImageGenerated`) are still exported from `ai-retry/retryables` for backwards compatibility, but they are deprecated in favor of the condition API documented above.
 
 > [!NOTE]
-> Full documentation for the deprecated function-style retryables lives in the [earlier README](https://github.com/zirkelc/ai-retry/blob/v1/README.md). New code should use the condition API. See the [migration guide](./MIGRATION.md) to convert existing code.
+> Full documentation for the deprecated function-style retryables lives in the [earlier README](https://github.com/zirkelc/ai-retry/blob/v1.x/README.md). New code should use the condition API. See the [migration guide](./MIGRATION.md) to convert existing code.
 
 Each function-style retryable has a one-line equivalent in the new shape (imports from `ai-retry/language-model` unless noted):
 
-| Function-style (deprecated)                 | Condition API                                                                                                        |
-| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `contentFilterTriggered(m)`                 | `finishReason('content-filter').switch({ model: m })`                                                                |
-| `requestTimeout(m)`                         | `timeout().switch({ model: m, timeout: 60_000 })`                                                                    |
-| `requestNotRetryable(m)`                    | `error.isRetryable(false).switch({ model: m })`                                                                      |
-| `schemaMismatch(m)`                         | `schemaInvalid().switch({ model: m })`                                                                               |
-| `serviceOverloaded(m)`                      | `httpStatus(529).switch({ model: m })`                                                                               |
-| `serviceUnavailable(m)`                     | `httpStatus(503).switch({ model: m })`                                                                               |
-| `noImageGenerated(m)`                       | `noImage().switch({ model: m })` (from `ai-retry/image-model`)                                                       |
-| `retryAfterDelay({ delay, backoffFactor })` | `error.isRetryable(true).retry({ delay, backoffFactor })`                                                            |
+| Function-style (deprecated)                 | Condition API                                                  |
+| ------------------------------------------- | -------------------------------------------------------------- |
+| `contentFilterTriggered(m)`                 | `finishReason('content-filter').switch({ model: m })`          |
+| `requestTimeout(m)`                         | `timeout().switch({ model: m, timeout: 60_000 })`              |
+| `requestNotRetryable(m)`                    | `error.isRetryable(false).switch({ model: m })`                |
+| `schemaMismatch(m)`                         | `schemaInvalid().switch({ model: m })`                         |
+| `serviceOverloaded(m)`                      | `httpStatus(529).switch({ model: m })`                         |
+| `serviceUnavailable(m)`                     | `httpStatus(503).switch({ model: m })`                         |
+| `noImageGenerated(m)`                       | `noImage().switch({ model: m })` (from `ai-retry/image-model`) |
+| `retryAfterDelay({ delay, backoffFactor })` | `error.isRetryable(true).retry({ delay, backoffFactor })`      |
 
 #### Preamble buffering
 
@@ -850,6 +846,8 @@ interface RetryableModelOptions<
   retries: Array<Retryable<MODEL> | MODEL>;
   disabled?: boolean | (() => boolean);
   reset?: Reset;
+  telemetry?: RetryTelemetrySettings;
+  /** @deprecated use `telemetry` */
   experimental_telemetry?: RetryTelemetrySettings;
   onError?: (context: RetryContext<MODEL>) => void;
   onRetry?: (
@@ -866,7 +864,7 @@ interface RetryableModelOptions<
 - `retries` — array of conditions (`.switch(...)` / `.retry(...)` outputs), models, or retry objects to try on failure.
 - `disabled` — disable all retry logic. `boolean` or `() => boolean`. Default `false`.
 - `reset` — controls when to reset back to the base model after a successful retry. Default `'after-request'`.
-- `experimental_telemetry` — OpenTelemetry instrumentation. See [Telemetry](#telemetry).
+- `telemetry` — OpenTelemetry instrumentation. See [Telemetry](#telemetry). (`experimental_telemetry` is a deprecated alias.)
 - `onError` — fires when an error occurs.
 - `onRetry` — fires before a retry attempt. May return `OnRetryOverrides` (or a promise of one) to override `options.*` for that attempt only. See [Dynamic call options](#dynamic-call-options).
 - `onSuccess` — fires after a successful request.

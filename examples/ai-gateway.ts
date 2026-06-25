@@ -7,7 +7,7 @@ const retryableLanguageModel = createRetryableModel({
   model: 'openai/gpt-4.1',
   retries: [
     'anthropic/claude-sonnet-4',
-    { model: 'xai/grok-4' },
+    { model: 'xai/grok-4.3' },
     gateway('openai/gpt-4.1'),
   ],
 });

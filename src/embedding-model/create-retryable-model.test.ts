@@ -19,7 +19,7 @@ describe('createRetryableModel', () => {
     expect(retryable).toBeInstanceOf(RetryableEmbeddingModel);
     expect(retryable.provider).toBe(model.provider);
     expect(retryable.modelId).toBe(model.modelId);
-    expect(retryable.specificationVersion).toBe('v3');
+    expect(retryable.specificationVersion).toBe('v4');
   });
 
   it('should resolve a gateway string base model to a gateway embedding model', () => {

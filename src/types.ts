@@ -1,13 +1,13 @@
 import type {
-  EmbeddingModelV3,
-  ImageModelV3,
-  ImageModelV3CallOptions,
-  LanguageModelV3,
-  LanguageModelV3CallOptions,
-  LanguageModelV3GenerateResult,
-  LanguageModelV3Prompt,
-  LanguageModelV3StreamPart,
-  SharedV3ProviderOptions,
+  EmbeddingModelV4,
+  ImageModelV4,
+  ImageModelV4CallOptions,
+  LanguageModelV4,
+  LanguageModelV4CallOptions,
+  LanguageModelV4GenerateResult,
+  LanguageModelV4Prompt,
+  LanguageModelV4StreamPart,
+  SharedV4ProviderOptions,
 } from '@ai-sdk/provider';
 import type { AttributeValue, Tracer } from '@opentelemetry/api';
 import type { gateway } from 'ai';
@@ -18,13 +18,13 @@ type Literals<T> = T extends string
     : T // It's a literal, keep it
   : never;
 
-export type LanguageModel = LanguageModelV3;
-export type EmbeddingModel = EmbeddingModelV3;
-export type ImageModel = ImageModelV3;
-export type LanguageModelCallOptions = LanguageModelV3CallOptions;
-export type LanguageModelStreamPart = LanguageModelV3StreamPart;
-export type ImageModelCallOptions = ImageModelV3CallOptions;
-export type ProviderOptions = SharedV3ProviderOptions;
+export type LanguageModel = LanguageModelV4;
+export type EmbeddingModel = EmbeddingModelV4;
+export type ImageModel = ImageModelV4;
+export type LanguageModelCallOptions = LanguageModelV4CallOptions;
+export type LanguageModelStreamPart = LanguageModelV4StreamPart;
+export type ImageModelCallOptions = ImageModelV4CallOptions;
+export type ProviderOptions = SharedV4ProviderOptions;
 
 export type GatewayLanguageModelId = Parameters<
   (typeof gateway)['languageModel']
@@ -75,7 +75,7 @@ export type ResolvedModel<MODEL extends AnyResolvableModel> =
 /**
  * Result from a generateText call.
  */
-export type LanguageModelResult = LanguageModelV3GenerateResult;
+export type LanguageModelResult = LanguageModelV4GenerateResult;
 
 /**
  * Call options that can be overridden during retry for language models.
@@ -259,13 +259,20 @@ export type FailureContext<
 /**
  * Telemetry configuration for retry instrumentation.
  *
- * Mirrors the AI SDK's `experimental_telemetry` shape so the two can be
- * configured the same way. When enabled, each request emits an OpenTelemetry
- * span for the operation with a child span per attempt. Spans created here
- * nest under any active span (e.g. the AI SDK's `ai.generateText.doGenerate`)
- * via OpenTelemetry context propagation.
+ * Talks to OpenTelemetry directly and independently of the AI SDK: when
+ * enabled, each request emits a span for the operation with a child span per
+ * attempt. Spans created here nest under any active span (e.g. the AI SDK's
+ * `ai.generateText.doGenerate`, when that integration is registered) via
+ * OpenTelemetry context propagation.
  *
- * Requires the optional peer dependency `@opentelemetry/api` to be installed.
+ * The shape resembles the AI SDK's `telemetry` settings but is opt-in and
+ * deliberately keeps a `tracer` field (which the AI SDK moved to its
+ * `@ai-sdk/otel` integration), so retry spans work without adopting that
+ * integration.
+ *
+ * Requires the optional peer dependency `@opentelemetry/api` to be installed
+ * (in AI SDK v7 it is no longer a transitive dependency of `ai`; install
+ * `@ai-sdk/otel` or `@opentelemetry/api` directly).
  */
 export interface RetryTelemetrySettings {
   /**
@@ -278,10 +285,6 @@ export interface RetryTelemetrySettings {
    * OpenTelemetry SDK is registered.
    */
   tracer?: Tracer;
-  /**
-   * Identifier for this function. Used to group telemetry data by function.
-   */
-  functionId?: string;
   /**
    * Additional information to include in the telemetry data. Recorded on the
    * operation span as `ai_retry.metadata.<key>` attributes.
@@ -310,6 +313,12 @@ export interface RetryableModelOptions<
    *
    * Telemetry configuration. When enabled, emits OpenTelemetry spans for
    * retry operations and attempts. Requires `@opentelemetry/api`.
+   */
+  telemetry?: RetryTelemetrySettings;
+
+  /**
+   * @deprecated Use `telemetry` instead. Kept as an alias for compatibility;
+   * when both are set, `telemetry` takes precedence.
    */
   experimental_telemetry?: RetryTelemetrySettings;
 
@@ -381,7 +390,8 @@ export type Retry<MODEL extends AnyResolvableModel> = {
    * If both `providerOptions` and `options.providerOptions` are set,
    * `options.providerOptions` takes precedence.
    */
-  providerOptions?: SharedV3ProviderOptions;
+  // TODO remove in this version
+  providerOptions?: SharedV4ProviderOptions;
 };
 
 /**

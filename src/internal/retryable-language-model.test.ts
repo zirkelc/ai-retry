@@ -2271,7 +2271,10 @@ describe('streamText', () => {
               "type": "start",
             },
             {
-              "request": {},
+              "request": {
+                "body": undefined,
+                "messages": undefined,
+              },
               "type": "start-step",
               "warnings": [],
             },
@@ -2317,7 +2320,6 @@ describe('streamText', () => {
               },
               "type": "finish-step",
               "usage": {
-                "cachedInputTokens": 0,
                 "inputTokenDetails": {
                   "cacheReadTokens": 0,
                   "cacheWriteTokens": 0,
@@ -2330,7 +2332,6 @@ describe('streamText', () => {
                 },
                 "outputTokens": 20,
                 "raw": undefined,
-                "reasoningTokens": 0,
                 "totalTokens": 30,
               },
             },
@@ -2338,7 +2339,6 @@ describe('streamText', () => {
               "finishReason": "stop",
               "rawFinishReason": "stop",
               "totalUsage": {
-                "cachedInputTokens": 0,
                 "inputTokenDetails": {
                   "cacheReadTokens": 0,
                   "cacheWriteTokens": 0,
@@ -2350,7 +2350,6 @@ describe('streamText', () => {
                   "textTokens": 20,
                 },
                 "outputTokens": 20,
-                "reasoningTokens": 0,
                 "totalTokens": 30,
               },
               "type": "finish",
@@ -2394,7 +2393,10 @@ describe('streamText', () => {
               "type": "start",
             },
             {
-              "request": {},
+              "request": {
+                "body": undefined,
+                "messages": undefined,
+              },
               "type": "start-step",
               "warnings": [],
             },
@@ -2440,7 +2442,6 @@ describe('streamText', () => {
               },
               "type": "finish-step",
               "usage": {
-                "cachedInputTokens": 0,
                 "inputTokenDetails": {
                   "cacheReadTokens": 0,
                   "cacheWriteTokens": 0,
@@ -2453,7 +2454,6 @@ describe('streamText', () => {
                 },
                 "outputTokens": 20,
                 "raw": undefined,
-                "reasoningTokens": 0,
                 "totalTokens": 30,
               },
             },
@@ -2461,7 +2461,6 @@ describe('streamText', () => {
               "finishReason": "stop",
               "rawFinishReason": "stop",
               "totalUsage": {
-                "cachedInputTokens": 0,
                 "inputTokenDetails": {
                   "cacheReadTokens": 0,
                   "cacheWriteTokens": 0,
@@ -2473,7 +2472,6 @@ describe('streamText', () => {
                   "textTokens": 20,
                 },
                 "outputTokens": 20,
-                "reasoningTokens": 0,
                 "totalTokens": 30,
               },
               "type": "finish",
@@ -2521,7 +2519,10 @@ describe('streamText', () => {
               "type": "start",
             },
             {
-              "request": {},
+              "request": {
+                "body": undefined,
+                "messages": undefined,
+              },
               "type": "start-step",
               "warnings": [],
             },
@@ -2567,7 +2568,6 @@ describe('streamText', () => {
               },
               "type": "finish-step",
               "usage": {
-                "cachedInputTokens": 0,
                 "inputTokenDetails": {
                   "cacheReadTokens": 0,
                   "cacheWriteTokens": 0,
@@ -2580,7 +2580,6 @@ describe('streamText', () => {
                 },
                 "outputTokens": 20,
                 "raw": undefined,
-                "reasoningTokens": 0,
                 "totalTokens": 30,
               },
             },
@@ -2588,7 +2587,6 @@ describe('streamText', () => {
               "finishReason": "stop",
               "rawFinishReason": "stop",
               "totalUsage": {
-                "cachedInputTokens": 0,
                 "inputTokenDetails": {
                   "cacheReadTokens": 0,
                   "cacheWriteTokens": 0,
@@ -2600,7 +2598,6 @@ describe('streamText', () => {
                   "textTokens": 20,
                 },
                 "outputTokens": 20,
-                "reasoningTokens": 0,
                 "totalTokens": 30,
               },
               "type": "finish",
@@ -2642,79 +2639,80 @@ describe('streamText', () => {
         expect(baseModel.doStream).toHaveBeenCalledTimes(1);
         expect(fallbackModel.doStream).toHaveBeenCalledTimes(0);
         expect(chunks).toMatchInlineSnapshot(`
-        [
-          {
-            "type": "start",
-          },
-          {
-            "request": {},
-            "type": "start-step",
-            "warnings": [],
-          },
-          {
-            "id": "1",
-            "type": "text-start",
-          },
-          {
-            "id": "1",
-            "providerMetadata": undefined,
-            "text": "Hello",
-            "type": "text-delta",
-          },
-          {
-            "error": [Error: Overloaded],
-            "type": "error",
-          },
-          {
-            "finishReason": "error",
-            "providerMetadata": undefined,
-            "rawFinishReason": undefined,
-            "response": {
-              "headers": undefined,
-              "id": "aitxt-mock-id",
-              "modelId": "mock-model-146",
-              "timestamp": 1970-01-01T00:00:00.000Z,
+          [
+            {
+              "type": "start",
             },
-            "type": "finish-step",
-            "usage": {
-              "inputTokenDetails": {
-                "cacheReadTokens": undefined,
-                "cacheWriteTokens": undefined,
-                "noCacheTokens": undefined,
+            {
+              "request": {
+                "body": undefined,
+                "messages": undefined,
               },
-              "inputTokens": undefined,
-              "outputTokenDetails": {
-                "reasoningTokens": undefined,
-                "textTokens": undefined,
-              },
-              "outputTokens": undefined,
-              "raw": undefined,
-              "totalTokens": undefined,
+              "type": "start-step",
+              "warnings": [],
             },
-          },
-          {
-            "finishReason": "error",
-            "rawFinishReason": undefined,
-            "totalUsage": {
-              "cachedInputTokens": undefined,
-              "inputTokenDetails": {
-                "cacheReadTokens": undefined,
-                "cacheWriteTokens": undefined,
-                "noCacheTokens": undefined,
-              },
-              "inputTokens": undefined,
-              "outputTokenDetails": {
-                "reasoningTokens": undefined,
-                "textTokens": undefined,
-              },
-              "outputTokens": undefined,
-              "reasoningTokens": undefined,
-              "totalTokens": undefined,
+            {
+              "id": "1",
+              "type": "text-start",
             },
-            "type": "finish",
-          },
-        ]
-      `);
+            {
+              "id": "1",
+              "providerMetadata": undefined,
+              "text": "Hello",
+              "type": "text-delta",
+            },
+            {
+              "error": [Error: Overloaded],
+              "type": "error",
+            },
+            {
+              "finishReason": "error",
+              "providerMetadata": undefined,
+              "rawFinishReason": undefined,
+              "response": {
+                "headers": undefined,
+                "id": "aitxt-mock-id",
+                "modelId": "mock-model-146",
+                "timestamp": 1970-01-01T00:00:00.000Z,
+              },
+              "type": "finish-step",
+              "usage": {
+                "inputTokenDetails": {
+                  "cacheReadTokens": undefined,
+                  "cacheWriteTokens": undefined,
+                  "noCacheTokens": undefined,
+                },
+                "inputTokens": undefined,
+                "outputTokenDetails": {
+                  "reasoningTokens": undefined,
+                  "textTokens": undefined,
+                },
+                "outputTokens": undefined,
+                "raw": undefined,
+                "totalTokens": undefined,
+              },
+            },
+            {
+              "finishReason": "error",
+              "rawFinishReason": undefined,
+              "totalUsage": {
+                "inputTokenDetails": {
+                  "cacheReadTokens": undefined,
+                  "cacheWriteTokens": undefined,
+                  "noCacheTokens": undefined,
+                },
+                "inputTokens": undefined,
+                "outputTokenDetails": {
+                  "reasoningTokens": undefined,
+                  "textTokens": undefined,
+                },
+                "outputTokens": undefined,
+                "totalTokens": undefined,
+              },
+              "type": "finish",
+            },
+          ]
+        `);
 
         vi.useRealTimers();
       });
@@ -2760,69 +2758,70 @@ describe('streamText', () => {
         expect(onErrorArg).toEqual({ error });
 
         expect(chunks).toMatchInlineSnapshot(`
-        [
-          {
-            "type": "start",
-          },
-          {
-            "request": {},
-            "type": "start-step",
-            "warnings": [],
-          },
-          {
-            "error": [Error: Overloaded],
-            "type": "error",
-          },
-          {
-            "finishReason": "error",
-            "providerMetadata": undefined,
-            "rawFinishReason": undefined,
-            "response": {
-              "headers": undefined,
-              "id": "aitxt-mock-id",
-              "modelId": "mock-model-148",
-              "timestamp": 1970-01-01T00:00:00.000Z,
+          [
+            {
+              "type": "start",
             },
-            "type": "finish-step",
-            "usage": {
-              "inputTokenDetails": {
-                "cacheReadTokens": undefined,
-                "cacheWriteTokens": undefined,
-                "noCacheTokens": undefined,
+            {
+              "request": {
+                "body": undefined,
+                "messages": undefined,
               },
-              "inputTokens": undefined,
-              "outputTokenDetails": {
-                "reasoningTokens": undefined,
-                "textTokens": undefined,
-              },
-              "outputTokens": undefined,
-              "raw": undefined,
-              "totalTokens": undefined,
+              "type": "start-step",
+              "warnings": [],
             },
-          },
-          {
-            "finishReason": "error",
-            "rawFinishReason": undefined,
-            "totalUsage": {
-              "cachedInputTokens": undefined,
-              "inputTokenDetails": {
-                "cacheReadTokens": undefined,
-                "cacheWriteTokens": undefined,
-                "noCacheTokens": undefined,
-              },
-              "inputTokens": undefined,
-              "outputTokenDetails": {
-                "reasoningTokens": undefined,
-                "textTokens": undefined,
-              },
-              "outputTokens": undefined,
-              "reasoningTokens": undefined,
-              "totalTokens": undefined,
+            {
+              "error": [Error: Overloaded],
+              "type": "error",
             },
-            "type": "finish",
-          },
-        ]
-      `);
+            {
+              "finishReason": "error",
+              "providerMetadata": undefined,
+              "rawFinishReason": undefined,
+              "response": {
+                "headers": undefined,
+                "id": "aitxt-mock-id",
+                "modelId": "mock-model-148",
+                "timestamp": 1970-01-01T00:00:00.000Z,
+              },
+              "type": "finish-step",
+              "usage": {
+                "inputTokenDetails": {
+                  "cacheReadTokens": undefined,
+                  "cacheWriteTokens": undefined,
+                  "noCacheTokens": undefined,
+                },
+                "inputTokens": undefined,
+                "outputTokenDetails": {
+                  "reasoningTokens": undefined,
+                  "textTokens": undefined,
+                },
+                "outputTokens": undefined,
+                "raw": undefined,
+                "totalTokens": undefined,
+              },
+            },
+            {
+              "finishReason": "error",
+              "rawFinishReason": undefined,
+              "totalUsage": {
+                "inputTokenDetails": {
+                  "cacheReadTokens": undefined,
+                  "cacheWriteTokens": undefined,
+                  "noCacheTokens": undefined,
+                },
+                "inputTokens": undefined,
+                "outputTokenDetails": {
+                  "reasoningTokens": undefined,
+                  "textTokens": undefined,
+                },
+                "outputTokens": undefined,
+                "totalTokens": undefined,
+              },
+              "type": "finish",
+            },
+          ]
+        `);
 
         vi.useRealTimers();
       });
@@ -3026,7 +3025,10 @@ describe('streamText', () => {
               "type": "start",
             },
             {
-              "request": {},
+              "request": {
+                "body": undefined,
+                "messages": undefined,
+              },
               "type": "start-step",
               "warnings": [],
             },
@@ -3072,7 +3074,6 @@ describe('streamText', () => {
               },
               "type": "finish-step",
               "usage": {
-                "cachedInputTokens": 0,
                 "inputTokenDetails": {
                   "cacheReadTokens": 0,
                   "cacheWriteTokens": 0,
@@ -3085,7 +3086,6 @@ describe('streamText', () => {
                 },
                 "outputTokens": 20,
                 "raw": undefined,
-                "reasoningTokens": 0,
                 "totalTokens": 30,
               },
             },
@@ -3093,7 +3093,6 @@ describe('streamText', () => {
               "finishReason": "stop",
               "rawFinishReason": "stop",
               "totalUsage": {
-                "cachedInputTokens": 0,
                 "inputTokenDetails": {
                   "cacheReadTokens": 0,
                   "cacheWriteTokens": 0,
@@ -3105,7 +3104,6 @@ describe('streamText', () => {
                   "textTokens": 20,
                 },
                 "outputTokens": 20,
-                "reasoningTokens": 0,
                 "totalTokens": 30,
               },
               "type": "finish",
@@ -3154,7 +3152,10 @@ describe('streamText', () => {
               "type": "start",
             },
             {
-              "request": {},
+              "request": {
+                "body": undefined,
+                "messages": undefined,
+              },
               "type": "start-step",
               "warnings": [],
             },
@@ -3188,7 +3189,6 @@ describe('streamText', () => {
               },
               "type": "finish-step",
               "usage": {
-                "cachedInputTokens": 0,
                 "inputTokenDetails": {
                   "cacheReadTokens": 0,
                   "cacheWriteTokens": 0,
@@ -3201,7 +3201,6 @@ describe('streamText', () => {
                 },
                 "outputTokens": 20,
                 "raw": undefined,
-                "reasoningTokens": 0,
                 "totalTokens": 30,
               },
             },
@@ -3209,7 +3208,6 @@ describe('streamText', () => {
               "finishReason": "content-filter",
               "rawFinishReason": "content-filter",
               "totalUsage": {
-                "cachedInputTokens": 0,
                 "inputTokenDetails": {
                   "cacheReadTokens": 0,
                   "cacheWriteTokens": 0,
@@ -3221,7 +3219,6 @@ describe('streamText', () => {
                   "textTokens": 20,
                 },
                 "outputTokens": 20,
-                "reasoningTokens": 0,
                 "totalTokens": 30,
               },
               "type": "finish",
@@ -3275,7 +3272,10 @@ describe('streamText', () => {
               "type": "start",
             },
             {
-              "request": {},
+              "request": {
+                "body": undefined,
+                "messages": undefined,
+              },
               "type": "start-step",
               "warnings": [],
             },
@@ -3321,7 +3321,6 @@ describe('streamText', () => {
               },
               "type": "finish-step",
               "usage": {
-                "cachedInputTokens": 0,
                 "inputTokenDetails": {
                   "cacheReadTokens": 0,
                   "cacheWriteTokens": 0,
@@ -3334,7 +3333,6 @@ describe('streamText', () => {
                 },
                 "outputTokens": 20,
                 "raw": undefined,
-                "reasoningTokens": 0,
                 "totalTokens": 30,
               },
             },
@@ -3342,7 +3340,6 @@ describe('streamText', () => {
               "finishReason": "stop",
               "rawFinishReason": "stop",
               "totalUsage": {
-                "cachedInputTokens": 0,
                 "inputTokenDetails": {
                   "cacheReadTokens": 0,
                   "cacheWriteTokens": 0,
@@ -3354,7 +3351,6 @@ describe('streamText', () => {
                   "textTokens": 20,
                 },
                 "outputTokens": 20,
-                "reasoningTokens": 0,
                 "totalTokens": 30,
               },
               "type": "finish",
@@ -3408,7 +3404,10 @@ describe('streamText', () => {
               "type": "start",
             },
             {
-              "request": {},
+              "request": {
+                "body": undefined,
+                "messages": undefined,
+              },
               "type": "start-step",
               "warnings": [],
             },
@@ -3454,7 +3453,6 @@ describe('streamText', () => {
               },
               "type": "finish-step",
               "usage": {
-                "cachedInputTokens": 0,
                 "inputTokenDetails": {
                   "cacheReadTokens": 0,
                   "cacheWriteTokens": 0,
@@ -3467,7 +3465,6 @@ describe('streamText', () => {
                 },
                 "outputTokens": 20,
                 "raw": undefined,
-                "reasoningTokens": 0,
                 "totalTokens": 30,
               },
             },
@@ -3475,7 +3472,6 @@ describe('streamText', () => {
               "finishReason": "stop",
               "rawFinishReason": "stop",
               "totalUsage": {
-                "cachedInputTokens": 0,
                 "inputTokenDetails": {
                   "cacheReadTokens": 0,
                   "cacheWriteTokens": 0,
@@ -3487,7 +3483,6 @@ describe('streamText', () => {
                   "textTokens": 20,
                 },
                 "outputTokens": 20,
-                "reasoningTokens": 0,
                 "totalTokens": 30,
               },
               "type": "finish",
@@ -4651,7 +4646,7 @@ describe('streamText', () => {
             "type": "start",
           },
           {
-            "error": [AI_RetryError: Failed after 3 attempts. Last error: Rate limit exceeded],
+            "error": [AI_RetryError: Failed after 3 attempts. Last error: AI_APICallError: Rate limit exceeded],
             "type": "error",
           },
         ]

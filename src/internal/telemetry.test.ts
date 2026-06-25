@@ -59,7 +59,7 @@ describe('telemetry', () => {
       const model = createRetryableModel({
         model: baseModel,
         retries: [],
-        experimental_telemetry: { isEnabled: false, tracer },
+        telemetry: { isEnabled: false, tracer },
       });
 
       // Act
@@ -75,7 +75,7 @@ describe('telemetry', () => {
       const model = createRetryableModel({
         model: baseModel,
         retries: [],
-        experimental_telemetry: { isEnabled: true, tracer },
+        telemetry: { isEnabled: true, tracer },
       });
 
       // Act
@@ -134,7 +134,7 @@ describe('telemetry', () => {
       const model = createRetryableModel({
         model: baseModel,
         retries: [fallback],
-        experimental_telemetry: { isEnabled: true, tracer },
+        telemetry: { isEnabled: true, tracer },
       });
 
       // Act
@@ -199,7 +199,7 @@ describe('telemetry', () => {
       const model = createRetryableModel({
         model: baseModel,
         retries: [fallback],
-        experimental_telemetry: { isEnabled: true, tracer },
+        telemetry: { isEnabled: true, tracer },
       });
 
       // Act
@@ -235,7 +235,7 @@ describe('telemetry', () => {
       const model = createRetryableModel({
         model: baseModel,
         retries: [fallback],
-        experimental_telemetry: { isEnabled: true, tracer },
+        telemetry: { isEnabled: true, tracer },
       });
 
       // Act
@@ -269,7 +269,7 @@ describe('telemetry', () => {
       const model = createRetryableModel({
         model: baseModel,
         retries: [fallback],
-        experimental_telemetry: { isEnabled: true, tracer },
+        telemetry: { isEnabled: true, tracer },
       });
 
       // Act
@@ -285,16 +285,15 @@ describe('telemetry', () => {
       expect(attempts[1]!.attributes['ai_retry.attempt.timeout_ms']).toBe(5000);
     });
 
-    it('should record functionId and metadata on the operation span', async () => {
+    it('should record metadata on the operation span', async () => {
       // Arrange
       const baseModel = MockLanguageModel.from('ok');
       const model = createRetryableModel({
         model: baseModel,
         retries: [],
-        experimental_telemetry: {
+        telemetry: {
           isEnabled: true,
           tracer,
-          functionId: 'my-fn',
           metadata: { env: 'test' },
         },
       });
@@ -304,8 +303,25 @@ describe('telemetry', () => {
 
       // Assert
       const operation = findSpan(exporter, 'ai_retry.doGenerate');
-      expect(operation.attributes['ai_retry.function.id']).toBe('my-fn');
       expect(operation.attributes['ai_retry.metadata.env']).toBe('test');
+    });
+
+    it('should honor the deprecated experimental_telemetry alias', async () => {
+      // Arrange
+      const baseModel = MockLanguageModel.from('ok');
+      const model = createRetryableModel({
+        model: baseModel,
+        retries: [],
+        experimental_telemetry: { isEnabled: true, tracer },
+      });
+
+      // Act
+      await model.doGenerate(MockLanguageModel.callOptions());
+
+      // Assert
+      const operation = findSpan(exporter, 'ai_retry.doGenerate');
+      expect(operation.attributes['ai_retry.outcome']).toBe('success');
+      expect(attemptSpans(exporter).length).toBe(1);
     });
 
     it('should nest the operation span under a surrounding active span', async () => {
@@ -319,7 +335,7 @@ describe('telemetry', () => {
         const model = createRetryableModel({
           model: baseModel,
           retries: [],
-          experimental_telemetry: { isEnabled: true, tracer },
+          telemetry: { isEnabled: true, tracer },
         });
         const outer = tracer.startSpan('outer');
 
@@ -350,7 +366,7 @@ describe('telemetry', () => {
       const model = createRetryableModel({
         model: baseModel,
         retries: [],
-        experimental_telemetry: { isEnabled: true, tracer },
+        telemetry: { isEnabled: true, tracer },
       });
 
       // Act
@@ -389,7 +405,7 @@ describe('telemetry', () => {
       const model = createRetryableModel({
         model: baseModel,
         retries: [fallback],
-        experimental_telemetry: { isEnabled: true, tracer },
+        telemetry: { isEnabled: true, tracer },
       });
 
       // Act
@@ -430,7 +446,7 @@ describe('telemetry', () => {
       const model = createRetryableModel({
         model: baseModel,
         retries: [fallback],
-        experimental_telemetry: { isEnabled: true, tracer },
+        telemetry: { isEnabled: true, tracer },
       });
 
       // Act
@@ -461,7 +477,7 @@ describe('telemetry', () => {
       const model = createRetryableModel({
         model: baseModel,
         retries: [fallback],
-        experimental_telemetry: { isEnabled: true, tracer },
+        telemetry: { isEnabled: true, tracer },
       });
 
       // Act
