@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.0-beta.5](https://github.com/zirkelc/ai-retry/compare/v2.0.0-beta.4...v2.0.0-beta.5) (2026-06-25)
+
+
+### Miscellaneous Chores
+
+* **deps:** target AI SDK v7 stable (GA) ([dab6f6b](https://github.com/zirkelc/ai-retry/commit/dab6f6bf32c021881eaa24452faf9e3647357770))
+
 ## [2.0.0-beta.4](https://github.com/zirkelc/ai-retry/compare/v2.0.0-beta.3...v2.0.0-beta.4) (2026-06-19)
 
 
