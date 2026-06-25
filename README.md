@@ -23,9 +23,9 @@ Two retry shapes are supported:
 > [!NOTE]
 > Version compatibility:
 >
-> - `ai-retry@0.x` — AI SDK v5
-> - `ai-retry@1.x` — AI SDK v6
-> - `ai-retry@2.x` — AI SDK v7
+> - Use [`ai-retry@0.x`](https://github.com/zirkelc/ai-retry/tree/v0.x) for AI SDK v5 
+> - Use [`ai-retry@1.x`](https://github.com/zirkelc/ai-retry/tree/v1.x) for AI SDK v6
+> - Use [`ai-retry@2.x`](https://github.com/zirkelc/ai-retry/tree/v2.x) for AI SDK v7
 
 ```bash
 npm install ai-retry
