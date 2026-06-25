@@ -5,15 +5,6 @@ on:
     branches:
       - main
       - ai-sdk-v7
-    # CI is branch-only, so the floating `vMAJOR.x` tags moved by release.yml
-    # never trigger it (and release.yml uses GITHUB_TOKEN, whose pushes don't
-    # re-trigger workflows). IF that tag-move is ever switched to a PAT AND a
-    # `tags:` trigger is added here, also uncomment `tags-ignore` so the moved
-    # `*.x` tags don't kick off CI. Do NOT enable `tags-ignore` on its own:
-    # alongside `branches` it would make CI run on every other tag (e.g. each
-    # vX.Y.Z release tag).
-    # tags-ignore:
-    #   - '*.x'
   pull_request:
 
 concurrency:
