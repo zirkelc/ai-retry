@@ -28,7 +28,8 @@ Two retry shapes are supported:
 > - Use [`ai-retry@2.x`](https://github.com/zirkelc/ai-retry/tree/v2.x) for AI SDK v7
 
 ```bash
-npm install ai-retry
+npm install ai-retry@1 # for AI SDK v6
+npm install ai-retry@2 # for AI SDK v7
 ```
 
 ### Usage
