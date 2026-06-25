@@ -2,15 +2,15 @@ import { Errors } from 'ai-test-kit';
 import { APICallError, generateImage, NoImageGeneratedError } from 'ai';
 import { describe, expect, it } from 'vitest';
 import {
+  Image,
   MockImageModel,
   createRetryableModel,
-  validBase64Image,
 } from '../../internal/test-utils.js';
 import type { ImageModelGenerate } from '../../types.js';
 import { noImage } from './index.js';
 
 const okImage: ImageModelGenerate = {
-  images: [validBase64Image],
+  images: [Image.png()],
   warnings: [],
   response: {
     timestamp: new Date(0),

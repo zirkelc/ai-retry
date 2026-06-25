@@ -8,7 +8,7 @@ import {
 import { type TextStreamPart } from 'ai';
 import { Errors, Streams } from 'ai-test-kit';
 import { Embedding, MockEmbeddingModel } from 'ai-test-kit/embedding';
-import { Image, MockImageModel, validBase64Image } from 'ai-test-kit/image';
+import { Image, MockImageModel } from 'ai-test-kit/image';
 import { Language, MockLanguageModel, Options } from 'ai-test-kit/language';
 import type {
   EmbeddingModel,
@@ -47,7 +47,6 @@ export {
   MockLanguageModel,
   Options,
   Streams,
-  validBase64Image,
 };
 
 export type LanguageModelGenerateFn = LanguageModel['doGenerate'];
@@ -165,9 +164,7 @@ export const mockEmbeddings: EmbeddingModelEmbed = Embedding.result(
 );
 
 /** A successful image generation result. */
-export const mockImageResult: ImageModelGenerate = Image.result([
-  validBase64Image,
-]);
+export const mockImageResult: ImageModelGenerate = Image.result([Image.png()]);
 
 /** Stream parts for a successful stream: content then a `stop` finish. */
 export const successStreamChunks = (

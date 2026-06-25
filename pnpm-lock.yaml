@@ -66,8 +66,8 @@ importers:
         specifier: 6.0.50
         version: 6.0.50(zod@4.3.6)
       ai-test-kit:
-        specifier: 2.0.0-next.2
-        version: 2.0.0-next.2(@ai-sdk/provider-utils@4.0.9(zod@4.3.6))(@ai-sdk/provider@3.0.5)(ai@6.0.50(zod@4.3.6))(vitest@4.0.18(@opentelemetry/api@1.9.0)(@types/node@25.0.10)(msw@2.12.7(@types/node@25.0.10)(typescript@5.9.3))(tsx@4.21.0)(yaml@2.8.3))
+        specifier: 2.0.0
+        version: 2.0.0(@ai-sdk/provider-utils@4.0.9(zod@4.3.6))(@ai-sdk/provider@3.0.5)(ai@6.0.50(zod@4.3.6))
       husky:
         specifier: ^9.1.7
         version: 9.1.7
@@ -1262,13 +1262,12 @@ packages:
     engines: {node: '>=0.4.0'}
     hasBin: true
 
-  ai-test-kit@2.0.0-next.2:
-    resolution: {integrity: sha512-+6dF5RLTsZ5FcHEWeRivIsr2J2xoFlKy/3ag3XVhQocg5I7CMKS6dVmx2tVD6GueO8MqZ7iIZWK7LegLOBr2vA==}
+  ai-test-kit@2.0.0:
+    resolution: {integrity: sha512-46KDB5YKddJgS4jtSK17mNUuBD8C+scAwUT7XuRA/rIyT+1AJ/XgKeR9cRb4Bq0K1yARkO35lww7mLBL6pbNtg==}
     peerDependencies:
       '@ai-sdk/provider': ^3.0.0
       '@ai-sdk/provider-utils': ^4.0.0
       ai: 5.x || 6.x
-      vitest: '>=3'
 
   ai@6.0.50:
     resolution: {integrity: sha512-JlwqjkRTa6GR2CF+JksCuh1+jeZATJvvja53cj880bJsEgkMpS+rqjwr1E397WeRjkmoicbGGD8QxIDaFbsWHg==}
@@ -3155,12 +3154,12 @@ snapshots:
 
   acorn@8.15.0: {}
 
-  ai-test-kit@2.0.0-next.2(@ai-sdk/provider-utils@4.0.9(zod@4.3.6))(@ai-sdk/provider@3.0.5)(ai@6.0.50(zod@4.3.6))(vitest@4.0.18(@opentelemetry/api@1.9.0)(@types/node@25.0.10)(msw@2.12.7(@types/node@25.0.10)(typescript@5.9.3))(tsx@4.21.0)(yaml@2.8.3)):
+  ai-test-kit@2.0.0(@ai-sdk/provider-utils@4.0.9(zod@4.3.6))(@ai-sdk/provider@3.0.5)(ai@6.0.50(zod@4.3.6)):
     dependencies:
       '@ai-sdk/provider': 3.0.5
       '@ai-sdk/provider-utils': 4.0.9(zod@4.3.6)
+      '@vitest/spy': 4.0.18
       ai: 6.0.50(zod@4.3.6)
-      vitest: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@25.0.10)(msw@2.12.7(@types/node@25.0.10)(typescript@5.9.3))(tsx@4.21.0)(yaml@2.8.3)
 
   ai@6.0.50(zod@4.3.6):
     dependencies:
