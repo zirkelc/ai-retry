@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.11.1](https://github.com/zirkelc/ai-retry/compare/v1.11.0...v1.11.1) (2026-06-25)
+
+
+### Documentation
+
+* document AI SDK v7 beta release and install tag ([e5c0ebd](https://github.com/zirkelc/ai-retry/commit/e5c0ebd28163779384327061bc6efa912d0e0a96))
+
+
+### Tests
+
+* adopt ai-test-kit and refactor test fixtures ([a11c3fb](https://github.com/zirkelc/ai-retry/commit/a11c3fbbee0c5fee46388e64c2365f70e9431f41))
+* verify nested and/or/not condition composition ([d7ebee6](https://github.com/zirkelc/ai-retry/commit/d7ebee6ad7d57166cc50a59ba32d7695685d2ef1))
+
+
+### Miscellaneous Chores
+
+* upgrade ai-test-kit to 2.0.0 ([9f69749](https://github.com/zirkelc/ai-retry/commit/9f6974960051f6418ec3eb73c2890c4312e69e6d))
+
 ## [1.11.0](https://github.com/zirkelc/ai-retry/compare/v1.10.0...v1.11.0) (2026-06-17)
 
 
