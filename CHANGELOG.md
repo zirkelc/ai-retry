@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.0.0](https://github.com/zirkelc/ai-retry/compare/v1.11.1...v2.0.0) (2026-06-25)
+
+
+### ⚠ BREAKING CHANGES
+
+* requires AI SDK v7 (ai@7, @ai-sdk/provider@4, @ai-sdk/provider-utils@5). Release-As: 2.0.0-beta.0
+
+### Features
+
+* AI SDK v7 support ([#68](https://github.com/zirkelc/ai-retry/issues/68)) ([95feb92](https://github.com/zirkelc/ai-retry/commit/95feb92d20583b7a9089b75cae9c70f6dd69f5f0))
+
 ## [1.11.1](https://github.com/zirkelc/ai-retry/compare/v1.11.0...v1.11.1) (2026-06-25)
 
 
