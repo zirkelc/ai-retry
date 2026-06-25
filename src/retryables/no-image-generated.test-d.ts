@@ -8,7 +8,7 @@ import { noImageGenerated } from './no-image-generated.js';
 
 describe('noImageGenerated', () => {
   it('should accept image model instance', () => {
-    const model = new MockImageModel();
+    const model = MockImageModel.from();
     const retryable = noImageGenerated(model);
 
     const retryableModel = createRetryableModel({
@@ -20,7 +20,7 @@ describe('noImageGenerated', () => {
   });
 
   it('should accept image model with options', () => {
-    const model = new MockImageModel();
+    const model = MockImageModel.from();
     const retryable = noImageGenerated(model, { maxAttempts: 3 });
 
     const retryableModel = createRetryableModel({

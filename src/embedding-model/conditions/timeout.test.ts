@@ -1,10 +1,9 @@
 import { embed } from 'ai';
 import { describe, expect, it } from 'vitest';
 import {
-  abortError,
-  createRetryableModel,
+  Errors,
   MockEmbeddingModel,
-  timeoutError,
+  createRetryableModel,
 } from '../../internal/test-utils.js';
 import type { EmbeddingModelEmbed } from '../../types.js';
 import { timeout } from './index.js';
@@ -18,8 +17,8 @@ describe('timeout (embedding)', () => {
   describe('embed', () => {
     it('should switch on TimeoutError', async () => {
       // Arrange
-      const baseModel = new MockEmbeddingModel({ doEmbed: timeoutError() });
-      const retryModel = new MockEmbeddingModel({ doEmbed: okEmbedding });
+      const baseModel = MockEmbeddingModel.from(Errors.timeout());
+      const retryModel = MockEmbeddingModel.from(okEmbedding);
 
       // Act
       const result = await embed({
@@ -39,8 +38,8 @@ describe('timeout (embedding)', () => {
 
     it('should not switch on AbortError', async () => {
       // Arrange
-      const baseModel = new MockEmbeddingModel({ doEmbed: abortError() });
-      const retryModel = new MockEmbeddingModel({ doEmbed: okEmbedding });
+      const baseModel = MockEmbeddingModel.from(Errors.abort());
+      const retryModel = MockEmbeddingModel.from(okEmbedding);
 
       // Act
       const result = embed({

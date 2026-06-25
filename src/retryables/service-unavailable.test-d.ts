@@ -10,7 +10,7 @@ import { serviceUnavailable } from './service-unavailable.js';
 
 describe('serviceUnavailable', () => {
   it('should accept language model instance', () => {
-    const model = new MockLanguageModel();
+    const model = MockLanguageModel.from();
     const retryable = serviceUnavailable(model);
 
     const retryableModel = createRetryableModel({
@@ -22,7 +22,7 @@ describe('serviceUnavailable', () => {
   });
 
   it('should accept embedding model instance', () => {
-    const model = new MockEmbeddingModel();
+    const model = MockEmbeddingModel.from();
     const retryable = serviceUnavailable(model);
 
     const retryableModel = createRetryableModel({
@@ -34,7 +34,7 @@ describe('serviceUnavailable', () => {
   });
 
   it('should accept language model with options', () => {
-    const model = new MockLanguageModel();
+    const model = MockLanguageModel.from();
     const retryable = serviceUnavailable(model, { maxAttempts: 3 });
 
     const retryableModel = createRetryableModel({
@@ -46,7 +46,7 @@ describe('serviceUnavailable', () => {
   });
 
   it('should accept embedding model with options', () => {
-    const model = new MockEmbeddingModel();
+    const model = MockEmbeddingModel.from();
     const retryable = serviceUnavailable(model, { maxAttempts: 3 });
 
     const retryableModel = createRetryableModel({
@@ -69,7 +69,7 @@ describe('serviceUnavailable', () => {
   });
 
   it('should accept image model instance', () => {
-    const model = new MockImageModel();
+    const model = MockImageModel.from();
     const retryable = serviceUnavailable(model);
 
     const retryableModel = createRetryableModel({
@@ -81,7 +81,7 @@ describe('serviceUnavailable', () => {
   });
 
   it('should accept image model with options', () => {
-    const model = new MockImageModel();
+    const model = MockImageModel.from();
     const retryable = serviceUnavailable(model, { maxAttempts: 3 });
 
     const retryableModel = createRetryableModel({

@@ -1,61 +1,29 @@
 # Changelog
 
-## [2.0.0-beta.5](https://github.com/zirkelc/ai-retry/compare/v2.0.0-beta.4...v2.0.0-beta.5) (2026-06-25)
+## [1.11.1](https://github.com/zirkelc/ai-retry/compare/v1.11.0...v1.11.1) (2026-06-25)
+
+
+### Documentation
+
+* document AI SDK v7 beta release and install tag ([e5c0ebd](https://github.com/zirkelc/ai-retry/commit/e5c0ebd28163779384327061bc6efa912d0e0a96))
+
+
+### Tests
+
+* adopt ai-test-kit and refactor test fixtures ([a11c3fb](https://github.com/zirkelc/ai-retry/commit/a11c3fbbee0c5fee46388e64c2365f70e9431f41))
+* verify nested and/or/not condition composition ([d7ebee6](https://github.com/zirkelc/ai-retry/commit/d7ebee6ad7d57166cc50a59ba32d7695685d2ef1))
 
 
 ### Miscellaneous Chores
 
-* **deps:** target AI SDK v7 stable (GA) ([dab6f6b](https://github.com/zirkelc/ai-retry/commit/dab6f6bf32c021881eaa24452faf9e3647357770))
+* upgrade ai-test-kit to 2.0.0 ([9f69749](https://github.com/zirkelc/ai-retry/commit/9f6974960051f6418ec3eb73c2890c4312e69e6d))
 
-## [2.0.0-beta.4](https://github.com/zirkelc/ai-retry/compare/v2.0.0-beta.3...v2.0.0-beta.4) (2026-06-19)
+## [1.11.0](https://github.com/zirkelc/ai-retry/compare/v1.10.0...v1.11.0) (2026-06-17)
 
-
-### Continuous Integration
-
-* fold the beta release line into ci.yml ([d97e3e6](https://github.com/zirkelc/ai-retry/commit/d97e3e6dd2a2e1319a58ce15fe49ca96859a100c))
-
-## [2.0.0-beta.3](https://github.com/zirkelc/ai-retry/compare/v2.0.0-beta.2...v2.0.0-beta.3) (2026-06-19)
-
-
-### Miscellaneous Chores
-
-* **deps:** update AI SDK v7 packages to latest beta ([b2b3828](https://github.com/zirkelc/ai-retry/commit/b2b382853ffc0f30417aad2e9447c0982988f61f))
-
-## [2.0.0-beta.2](https://github.com/zirkelc/ai-retry/compare/v2.0.0-beta.1...v2.0.0-beta.2) (2026-06-19)
-
-
-### Features
-
-* **telemetry:** use @ai-sdk/otel in example; drop functionId setting ([be157b2](https://github.com/zirkelc/ai-retry/commit/be157b2593c9738804fddad624b3c67f54ca8e2f))
-
-## [2.0.0-beta.1](https://github.com/zirkelc/ai-retry/compare/v2.0.0-beta.0...v2.0.0-beta.1) (2026-06-17)
-
-
-### Features
-
-* **telemetry:** rename experimental_telemetry option to telemetry ([4c0aa9e](https://github.com/zirkelc/ai-retry/commit/4c0aa9e8dac33717cf1252f3520f0091d15b4e6f))
-
-
-### Bug Fixes
-
-* **ci:** resolve repo for gh pr merge without a checkout ([1f67d8c](https://github.com/zirkelc/ai-retry/commit/1f67d8c3d2c6f04a5accf76db7d5058c4b048c7e))
-
-
-### Continuous Integration
-
-* auto-merge beta release PRs after required checks pass ([59f7a2e](https://github.com/zirkelc/ai-retry/commit/59f7a2e1ebca8adad223769ff2eb4ff2ebf36e0a))
-
-## [2.0.0-beta.0](https://github.com/zirkelc/ai-retry/compare/v1.10.0...v2.0.0-beta.0) (2026-06-17)
-
-
-### ⚠ BREAKING CHANGES
-
-* requires AI SDK v7 (ai@7, @ai-sdk/provider@4, @ai-sdk/provider-utils@5).
 
 ### Features
 
 * promote condition-based retryables to the primary API ([298f050](https://github.com/zirkelc/ai-retry/commit/298f050955f842902dca1b8d99ad624bf65fa7e8))
-* upgrade to AI SDK v7 (provider spec V4) ([f8db023](https://github.com/zirkelc/ai-retry/commit/f8db0237eb215b6d617615fc77832a4f1ffb07a2))
 
 ## [1.10.0](https://github.com/zirkelc/ai-retry/compare/v1.9.1...v1.10.0) (2026-06-08)
 

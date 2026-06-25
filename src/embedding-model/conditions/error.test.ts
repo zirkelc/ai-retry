@@ -1,9 +1,9 @@
 import { APICallError, embed } from 'ai';
 import { describe, expect, it } from 'vitest';
 import {
-  apiError,
-  createRetryableModel,
+  Errors,
   MockEmbeddingModel,
+  createRetryableModel,
 } from '../../internal/test-utils.js';
 import type { EmbeddingModelEmbed } from '../../types.js';
 import { error } from './index.js';
@@ -17,10 +17,10 @@ describe('error (embedding)', () => {
   describe('embed', () => {
     it('should switch when predicate matches the error', async () => {
       // Arrange
-      const baseModel = new MockEmbeddingModel({
-        doEmbed: apiError({ statusCode: 418 }),
-      });
-      const retryModel = new MockEmbeddingModel({ doEmbed: okEmbedding });
+      const baseModel = MockEmbeddingModel.from(
+        Errors.from({ statusCode: 418 }),
+      );
+      const retryModel = MockEmbeddingModel.from(okEmbedding);
 
       // Act
       const result = await embed({
@@ -44,10 +44,10 @@ describe('error (embedding)', () => {
 
     it('should not switch when predicate misses', async () => {
       // Arrange
-      const baseModel = new MockEmbeddingModel({
-        doEmbed: apiError({ statusCode: 500 }),
-      });
-      const retryModel = new MockEmbeddingModel({ doEmbed: okEmbedding });
+      const baseModel = MockEmbeddingModel.from(
+        Errors.from({ statusCode: 500 }),
+      );
+      const retryModel = MockEmbeddingModel.from(okEmbedding);
 
       // Act
       const result = embed({
@@ -74,14 +74,12 @@ describe('error (embedding)', () => {
     it('should retry the same model when isRetryable=true', async () => {
       // Arrange
       let attempt = 0;
-      const baseModel = new MockEmbeddingModel({
-        doEmbed: async () => {
-          attempt++;
-          if (attempt === 1) {
-            throw apiError({ statusCode: 503, isRetryable: true });
-          }
-          return okEmbedding;
-        },
+      const baseModel = MockEmbeddingModel.from(async () => {
+        attempt++;
+        if (attempt === 1) {
+          throw Errors.from({ statusCode: 503, isRetryable: true });
+        }
+        return okEmbedding;
       });
 
       // Act
@@ -101,10 +99,10 @@ describe('error (embedding)', () => {
 
     it('should switch when isRetryable=false', async () => {
       // Arrange
-      const baseModel = new MockEmbeddingModel({
-        doEmbed: apiError({ statusCode: 400, isRetryable: false }),
-      });
-      const retryModel = new MockEmbeddingModel({ doEmbed: okEmbedding });
+      const baseModel = MockEmbeddingModel.from(
+        Errors.from({ statusCode: 400, isRetryable: false }),
+      );
+      const retryModel = MockEmbeddingModel.from(okEmbedding);
 
       // Act
       const result = await embed({
@@ -126,10 +124,10 @@ describe('error (embedding)', () => {
   describe('error.statusCode', () => {
     it('should switch on matching numeric status', async () => {
       // Arrange
-      const baseModel = new MockEmbeddingModel({
-        doEmbed: apiError({ statusCode: 503 }),
-      });
-      const retryModel = new MockEmbeddingModel({ doEmbed: okEmbedding });
+      const baseModel = MockEmbeddingModel.from(
+        Errors.from({ statusCode: 503 }),
+      );
+      const retryModel = MockEmbeddingModel.from(okEmbedding);
 
       // Act
       const result = await embed({
@@ -151,10 +149,10 @@ describe('error (embedding)', () => {
   describe('error.message', () => {
     it('should switch on case-insensitive substring match', async () => {
       // Arrange
-      const baseModel = new MockEmbeddingModel({
-        doEmbed: apiError({ message: 'Service Overloaded' }),
-      });
-      const retryModel = new MockEmbeddingModel({ doEmbed: okEmbedding });
+      const baseModel = MockEmbeddingModel.from(
+        Errors.from({ message: 'Service Overloaded' }),
+      );
+      const retryModel = MockEmbeddingModel.from(okEmbedding);
 
       // Act
       const result = await embed({

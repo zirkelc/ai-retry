@@ -6,8 +6,8 @@ import { createRetryableModel } from './create-retryable-model.js';
 describe('createRetryableModel', () => {
   it('should create a retryable model from a language model instance', () => {
     // Arrange
-    const model = new MockLanguageModel();
-    const fallbackModel = new MockLanguageModel();
+    const model = MockLanguageModel.from();
+    const fallbackModel = MockLanguageModel.from();
 
     // Act
     const retryable = createRetryableModel({

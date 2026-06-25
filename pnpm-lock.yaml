@@ -43,10 +43,10 @@ importers:
         version: 0.18.2
       '@langfuse/otel':
         specifier: ^5.5.3
-        version: 5.5.3(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.7.1(@opentelemetry/api@1.9.0))(@opentelemetry/exporter-trace-otlp-http@0.218.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.7.1(@opentelemetry/api@1.9.0))
+        version: 5.7.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.7.1(@opentelemetry/api@1.9.0))(@opentelemetry/exporter-trace-otlp-http@0.218.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.7.1(@opentelemetry/api@1.9.0))
       '@langfuse/tracing':
         specifier: ^5.5.3
-        version: 5.5.3(@opentelemetry/api@1.9.0)
+        version: 5.7.0(@opentelemetry/api@1.9.0)
       '@langfuse/vercel-ai-sdk':
         specifier: 5.5.0-beta.3
         version: 5.5.0-beta.3(@opentelemetry/api@1.9.0)(ai@7.0.0(zod@4.3.6))(zod@4.3.6)
@@ -71,6 +71,9 @@ importers:
       ai:
         specifier: 7.0.0
         version: 7.0.0(zod@4.3.6)
+      ai-test-kit:
+        specifier: 3.0.0-next.2
+        version: 3.0.0-next.2(@ai-sdk/provider-utils@5.0.0(zod@4.3.6))(@ai-sdk/provider@4.0.0)(ai@7.0.0(zod@4.3.6))
       husky:
         specifier: ^9.1.7
         version: 9.1.7
@@ -510,13 +513,13 @@ packages:
     resolution: {integrity: sha512-f5DRIOZf7wxogefH03RjMPMdBF7ADTWUMoOs9kaJo06EfwF+aFhMZMDZxHg/Xe12hptN9xoZjGso2fdjapBRIA==}
     engines: {node: '>=10'}
 
-  '@langfuse/core@5.5.3':
-    resolution: {integrity: sha512-F2auGm6l4/QhQ6Y86+f6QqulXNetVsaI3u7ccyqADEtGcDWk1+faSczxuSMJ0X/EfrjVZ+98Luy/FEEah+HDRA==}
+  '@langfuse/core@5.7.0':
+    resolution: {integrity: sha512-kLFYagw3Js5QDesQbMLOzV4L4/0hYndSmAX6em6zDCmA4qMKfdRJMZ5F/fpl9LONFMTu7pU6WGLyUxM80hjYVQ==}
     peerDependencies:
       '@opentelemetry/api': ^1.9.0
 
-  '@langfuse/otel@5.5.3':
-    resolution: {integrity: sha512-j0nPAEFHKorEV8JtBRzZaSShUbjLYk7omtxXxy1bLvNb5QFGO1gF7HFm+fSqnoN70034EvTXYCNFDWpBrAH/vw==}
+  '@langfuse/otel@5.7.0':
+    resolution: {integrity: sha512-x5HANvvDV23btbTijz9eW2DzvX/sZ4orsahYXuwsCApOzEWSgEzd0ZrpHPSz4+epytps1RBe3M6e5gm2EgaAmA==}
     engines: {node: '>=20'}
     peerDependencies:
       '@opentelemetry/api': ^1.9.0
@@ -524,8 +527,8 @@ packages:
       '@opentelemetry/exporter-trace-otlp-http': '>=0.202.0 <1.0.0'
       '@opentelemetry/sdk-trace-base': ^2.0.1
 
-  '@langfuse/tracing@5.5.3':
-    resolution: {integrity: sha512-t/WoFCOtXjdFSFx7A4+nesX0eB4c0gP7ca7j6kv38kIubPE+IniHOhNYPXdAdm5tc3EL+P+gpMCtibCBp8xYsQ==}
+  '@langfuse/tracing@5.7.0':
+    resolution: {integrity: sha512-FCroWXE0510BUt2vHCEk64Wb+nywc3WVdx3+zaWyW1CI8mSa9i/yX+Oe2a956QRLPhVCeFgO27Y8Zlg7RaDWig==}
     engines: {node: '>=20'}
     peerDependencies:
       '@opentelemetry/api': ^1.9.0
@@ -1344,6 +1347,14 @@ packages:
     engines: {node: '>=0.4.0'}
     hasBin: true
 
+  ai-test-kit@3.0.0-next.2:
+    resolution: {integrity: sha512-A2QZ5w5Ai6fe2tVOzM3QKtzONH2EEXNJ4NzQkDrkEgi9o1s+ovUilrXtbHnQNzPBwijiXnIj+Xfat6QmjSofTA==}
+    engines: {node: '>=22'}
+    peerDependencies:
+      '@ai-sdk/provider': ^4.0.0
+      '@ai-sdk/provider-utils': ^5.0.0
+      ai: ^7.0.0
+
   ai@7.0.0:
     resolution: {integrity: sha512-hncs+jamJh8r36K6G8xky7oF4Ai/RLU5TF85FMzI2vElyMJGGnLoHihpdmuDiuY2BsktDWHevKaJM1l0VcRLGw==}
     engines: {node: '>=22'}
@@ -1914,8 +1925,8 @@ packages:
     engines: {node: '>=10'}
     hasBin: true
 
-  set-cookie-parser@3.1.0:
-    resolution: {integrity: sha512-kjnC1DXBHcxaOaOXBHBeRtltsDG2nUiUni+jP92M9gYdW12rsmx92UsfpH7o5tDRs7I1ZZPSQJQGv3UaRfCiuw==}
+  set-cookie-parser@3.1.1:
+    resolution: {integrity: sha512-vM9SUhjsUYs6UeJUmygc5Ofm5eQGe85riob5ju6XCgFGJI5PLV4nrDAQpQjd+LkFBpAkADn5BQQpZ9EUNkyLuA==}
 
   shebang-command@2.0.0:
     resolution: {integrity: sha512-kHxr2zZpYtdmrN1qDjrrX/Z1rR1kG8Dx+gkpK1G4eXmvXswmcE1hTWBWYUzlraYw1/yZp6YuDY77YtvbN0dmDA==}
@@ -2645,27 +2656,27 @@ snapshots:
       string-argv: 0.3.2
       type-detect: 4.1.0
 
-  '@langfuse/core@5.5.3(@opentelemetry/api@1.9.0)':
+  '@langfuse/core@5.7.0(@opentelemetry/api@1.9.0)':
     dependencies:
       '@opentelemetry/api': 1.9.0
 
-  '@langfuse/otel@5.5.3(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.7.1(@opentelemetry/api@1.9.0))(@opentelemetry/exporter-trace-otlp-http@0.218.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.7.1(@opentelemetry/api@1.9.0))':
+  '@langfuse/otel@5.7.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.7.1(@opentelemetry/api@1.9.0))(@opentelemetry/exporter-trace-otlp-http@0.218.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.7.1(@opentelemetry/api@1.9.0))':
     dependencies:
-      '@langfuse/core': 5.5.3(@opentelemetry/api@1.9.0)
+      '@langfuse/core': 5.7.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.7.1(@opentelemetry/api@1.9.0)
       '@opentelemetry/exporter-trace-otlp-http': 0.218.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/sdk-trace-base': 2.7.1(@opentelemetry/api@1.9.0)
 
-  '@langfuse/tracing@5.5.3(@opentelemetry/api@1.9.0)':
+  '@langfuse/tracing@5.7.0(@opentelemetry/api@1.9.0)':
     dependencies:
-      '@langfuse/core': 5.5.3(@opentelemetry/api@1.9.0)
+      '@langfuse/core': 5.7.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/api': 1.9.0
 
   '@langfuse/vercel-ai-sdk@5.5.0-beta.3(@opentelemetry/api@1.9.0)(ai@7.0.0(zod@4.3.6))(zod@4.3.6)':
     dependencies:
       '@ai-sdk/otel': 1.0.0-beta.125(zod@4.3.6)
-      '@langfuse/core': 5.5.3(@opentelemetry/api@1.9.0)
+      '@langfuse/core': 5.7.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/api': 1.9.0
       ai: 7.0.0(zod@4.3.6)
     transitivePeerDependencies:
@@ -3366,6 +3377,13 @@ snapshots:
 
   acorn@8.15.0: {}
 
+  ai-test-kit@3.0.0-next.2(@ai-sdk/provider-utils@5.0.0(zod@4.3.6))(@ai-sdk/provider@4.0.0)(ai@7.0.0(zod@4.3.6)):
+    dependencies:
+      '@ai-sdk/provider': 4.0.0
+      '@ai-sdk/provider-utils': 5.0.0(zod@4.3.6)
+      '@vitest/spy': 4.0.18
+      ai: 7.0.0(zod@4.3.6)
+
   ai@7.0.0(zod@4.3.6):
     dependencies:
       '@ai-sdk/gateway': 4.0.0(zod@4.3.6)
@@ -3594,7 +3612,7 @@ snapshots:
   headers-polyfill@5.0.1:
     dependencies:
       '@types/set-cookie-parser': 2.4.10
-      set-cookie-parser: 3.1.0
+      set-cookie-parser: 3.1.1
 
   highlight.js@10.7.3: {}
 
@@ -4000,7 +4018,7 @@ snapshots:
 
   semver@7.7.3: {}
 
-  set-cookie-parser@3.1.0: {}
+  set-cookie-parser@3.1.1: {}
 
   shebang-command@2.0.0:
     dependencies:

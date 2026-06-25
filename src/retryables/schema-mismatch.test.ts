@@ -2,10 +2,9 @@ import { generateText, Output } from 'ai';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import {
-  createRetryableModel,
-  generateEmptyResult,
-  generateTextResult,
+  Language,
   MockLanguageModel,
+  createRetryableModel,
 } from '../internal/test-utils.js';
 import { schemaMismatch } from './schema-mismatch.js';
 
@@ -21,12 +20,8 @@ const personSchema = z.object({
 describe(`schemaMismatch`, () => {
   it(`should not retry when JSON matches schema`, async () => {
     // Arrange
-    const baseModel = new MockLanguageModel({
-      doGenerate: generateTextResult(validJson),
-    });
-    const retryModel = new MockLanguageModel({
-      doGenerate: generateTextResult(validJson),
-    });
+    const baseModel = MockLanguageModel.from(validJson);
+    const retryModel = MockLanguageModel.from(validJson);
 
     // Act
     const result = await generateText({
@@ -47,12 +42,8 @@ describe(`schemaMismatch`, () => {
 
   it(`should retry when JSON does not match schema`, async () => {
     // Arrange
-    const baseModel = new MockLanguageModel({
-      doGenerate: generateTextResult(invalidJson),
-    });
-    const retryModel = new MockLanguageModel({
-      doGenerate: generateTextResult(validJson),
-    });
+    const baseModel = MockLanguageModel.from(invalidJson);
+    const retryModel = MockLanguageModel.from(validJson);
 
     // Act
     const result = await generateText({
@@ -73,12 +64,8 @@ describe(`schemaMismatch`, () => {
 
   it(`should retry when response is not valid JSON`, async () => {
     // Arrange
-    const baseModel = new MockLanguageModel({
-      doGenerate: generateTextResult(notJson),
-    });
-    const retryModel = new MockLanguageModel({
-      doGenerate: generateTextResult(validJson),
-    });
+    const baseModel = MockLanguageModel.from(notJson);
+    const retryModel = MockLanguageModel.from(validJson);
 
     // Act
     const result = await generateText({
@@ -99,12 +86,8 @@ describe(`schemaMismatch`, () => {
 
   it(`should not retry when no responseFormat schema is present`, async () => {
     // Arrange
-    const baseModel = new MockLanguageModel({
-      doGenerate: generateTextResult(invalidJson),
-    });
-    const retryModel = new MockLanguageModel({
-      doGenerate: generateTextResult(validJson),
-    });
+    const baseModel = MockLanguageModel.from(invalidJson);
+    const retryModel = MockLanguageModel.from(validJson);
 
     // Act
     const result = await generateText({
@@ -125,12 +108,8 @@ describe(`schemaMismatch`, () => {
   it(`should not retry on error attempt`, async () => {
     // Arrange
     const error = new Error(`model failed`);
-    const baseModel = new MockLanguageModel({
-      doGenerate: error,
-    });
-    const retryModel = new MockLanguageModel({
-      doGenerate: generateTextResult(validJson),
-    });
+    const baseModel = MockLanguageModel.from({ doGenerate: error });
+    const retryModel = MockLanguageModel.from(validJson);
 
     // Act
     const result = generateText({
@@ -155,12 +134,8 @@ describe(`schemaMismatch`, () => {
       elements: [{ name: `Alice`, age: 30 }],
     });
     const invalidArrayJson = JSON.stringify({ elements: [{ name: 123 }] });
-    const baseModel = new MockLanguageModel({
-      doGenerate: generateTextResult(invalidArrayJson),
-    });
-    const retryModel = new MockLanguageModel({
-      doGenerate: generateTextResult(validArrayJson),
-    });
+    const baseModel = MockLanguageModel.from(invalidArrayJson);
+    const retryModel = MockLanguageModel.from(validArrayJson);
 
     // Act
     const result = await generateText({
@@ -183,12 +158,8 @@ describe(`schemaMismatch`, () => {
     // Arrange
     const validChoiceJson = JSON.stringify({ result: `yes` });
     const invalidChoiceJson = JSON.stringify({ result: `maybe` });
-    const baseModel = new MockLanguageModel({
-      doGenerate: generateTextResult(invalidChoiceJson),
-    });
-    const retryModel = new MockLanguageModel({
-      doGenerate: generateTextResult(validChoiceJson),
-    });
+    const baseModel = MockLanguageModel.from(invalidChoiceJson);
+    const retryModel = MockLanguageModel.from(validChoiceJson);
 
     // Act
     const result = await generateText({
@@ -209,12 +180,10 @@ describe(`schemaMismatch`, () => {
 
   it(`should not retry when no text content`, async () => {
     // Arrange
-    const baseModel = new MockLanguageModel({
-      doGenerate: generateEmptyResult,
+    const baseModel = MockLanguageModel.from({
+      doGenerate: Language.result([]),
     });
-    const retryModel = new MockLanguageModel({
-      doGenerate: generateTextResult(validJson),
-    });
+    const retryModel = MockLanguageModel.from(validJson);
 
     // Act
     const result = generateText({

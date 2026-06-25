@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  Language,
+  MockLanguageModel,
   buildErrorContext,
   buildResultContext,
   contentFilterResult,
-  generateTextResult,
-  MockLanguageModel,
 } from '../test-utils.js';
 import { createResultAPI } from './result.js';
 
@@ -19,10 +19,10 @@ describe('result', () => {
 
     // Act
     const matched = await cond.evaluate(
-      buildResultContext(generateTextResult('hi')),
+      buildResultContext(Language.result('hi')),
     );
     const missed = await cond.evaluate(
-      buildResultContext(generateTextResult('bye')),
+      buildResultContext(Language.result('bye')),
     );
 
     // Assert
@@ -62,7 +62,7 @@ describe('result', () => {
         buildResultContext(contentFilterResult),
       );
       const missed = await cond.evaluate(
-        buildResultContext(generateTextResult('hi')),
+        buildResultContext(Language.result('hi')),
       );
 
       // Assert

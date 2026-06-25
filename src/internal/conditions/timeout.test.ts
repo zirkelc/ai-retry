@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  abortError,
-  buildErrorContext,
-  MockLanguageModel,
-  timeoutError,
-} from '../test-utils.js';
+import { Errors, MockLanguageModel, buildErrorContext } from '../test-utils.js';
 import { createErrorAPI } from './error.js';
 
 const { timeout } = createErrorAPI<MockLanguageModel>();
@@ -15,7 +10,7 @@ describe('timeout', () => {
     const cond = timeout<MockLanguageModel>();
 
     // Act
-    const matched = await cond.evaluate(buildErrorContext(timeoutError()));
+    const matched = await cond.evaluate(buildErrorContext(Errors.timeout()));
 
     // Assert
     expect(matched).toBe(true);
@@ -26,7 +21,7 @@ describe('timeout', () => {
     const cond = timeout<MockLanguageModel>();
 
     // Act
-    const matched = await cond.evaluate(buildErrorContext(abortError()));
+    const matched = await cond.evaluate(buildErrorContext(Errors.abort()));
 
     // Assert
     expect(matched).toBe(false);

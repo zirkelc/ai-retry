@@ -1,9 +1,8 @@
 import { generateText } from 'ai';
 import { describe, expect, it } from 'vitest';
 import {
-  createRetryableModel,
-  generateTextResult,
   MockLanguageModel,
+  createRetryableModel,
 } from '../../internal/test-utils.js';
 import type { LanguageModelResult } from '../../types.js';
 import { finishReason } from './index.js';
@@ -24,12 +23,10 @@ describe('finishReason', () => {
   describe('generateText', () => {
     it('should switch when finish reason matches', async () => {
       // Arrange
-      const baseModel = new MockLanguageModel({
+      const baseModel = MockLanguageModel.from({
         doGenerate: contentFilteredResult,
       });
-      const retryModel = new MockLanguageModel({
-        doGenerate: generateTextResult(okText),
-      });
+      const retryModel = MockLanguageModel.from(okText);
 
       // Act
       const out = await generateText({
@@ -51,12 +48,8 @@ describe('finishReason', () => {
 
     it('should not switch when finish reason does not match', async () => {
       // Arrange
-      const baseModel = new MockLanguageModel({
-        doGenerate: generateTextResult(okText),
-      });
-      const retryModel = new MockLanguageModel({
-        doGenerate: generateTextResult(okText),
-      });
+      const baseModel = MockLanguageModel.from(okText);
+      const retryModel = MockLanguageModel.from(okText);
 
       // Act
       const out = await generateText({
@@ -78,12 +71,10 @@ describe('finishReason', () => {
 
     it('should accept multiple reasons', async () => {
       // Arrange
-      const baseModel = new MockLanguageModel({
+      const baseModel = MockLanguageModel.from({
         doGenerate: contentFilteredResult,
       });
-      const retryModel = new MockLanguageModel({
-        doGenerate: generateTextResult(okText),
-      });
+      const retryModel = MockLanguageModel.from(okText);
 
       // Act
       const out = await generateText({

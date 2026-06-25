@@ -8,7 +8,7 @@ import { contentFilterTriggered } from './content-filter-triggered.js';
 
 describe('contentFilterTriggered', () => {
   it('should accept language model instance', () => {
-    const model = new MockLanguageModel();
+    const model = MockLanguageModel.from();
     const retryable = contentFilterTriggered(model);
 
     const retryableModel = createRetryableModel({
@@ -20,7 +20,7 @@ describe('contentFilterTriggered', () => {
   });
 
   it('should accept language model with options', () => {
-    const model = new MockLanguageModel();
+    const model = MockLanguageModel.from();
     const retryable = contentFilterTriggered(model, { maxAttempts: 3 });
 
     const retryableModel = createRetryableModel({

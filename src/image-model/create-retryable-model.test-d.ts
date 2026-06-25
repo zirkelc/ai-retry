@@ -11,8 +11,8 @@ import { createRetryableModel } from './create-retryable-model.js';
 describe('createRetryableModel', () => {
   it('should return ImageModel for a model instance', () => {
     const retryable = createRetryableModel({
-      model: new MockImageModel(),
-      retries: [new MockImageModel(), { model: new MockImageModel() }],
+      model: MockImageModel.from(),
+      retries: [MockImageModel.from(), { model: MockImageModel.from() }],
     });
 
     assertType<ImageModel>(retryable);

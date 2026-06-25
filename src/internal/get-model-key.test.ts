@@ -9,7 +9,7 @@ import {
 describe('getModelKey', () => {
   it(`should return provider/modelId for a language model`, () => {
     // Arrange
-    const model = new MockLanguageModel();
+    const model = MockLanguageModel.from();
 
     // Act
     const key = getModelKey(model);
@@ -20,7 +20,7 @@ describe('getModelKey', () => {
 
   it(`should return provider/modelId for an embedding model`, () => {
     // Arrange
-    const model = new MockEmbeddingModel();
+    const model = MockEmbeddingModel.from();
 
     // Act
     const key = getModelKey(model);
@@ -31,7 +31,7 @@ describe('getModelKey', () => {
 
   it(`should return provider/modelId for an image model`, () => {
     // Arrange
-    const model = new MockImageModel();
+    const model = MockImageModel.from();
 
     // Act
     const key = getModelKey(model);

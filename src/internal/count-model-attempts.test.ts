@@ -8,8 +8,8 @@ import type {
 } from '../types.js';
 
 describe('countModelAttempts', () => {
-  const mockModel1 = new MockLanguageModel();
-  const mockModel2 = new MockLanguageModel();
+  const mockModel1 = MockLanguageModel.from();
+  const mockModel2 = MockLanguageModel.from();
   const mockOptions: LanguageModelCallOptions = {
     prompt: [],
   };

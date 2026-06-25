@@ -6,8 +6,8 @@ import { createRetryableModel } from './create-retryable-model.js';
 describe('createRetryableModel', () => {
   it('should create a retryable model from an embedding model instance', () => {
     // Arrange
-    const model = new MockEmbeddingModel();
-    const fallbackModel = new MockEmbeddingModel();
+    const model = MockEmbeddingModel.from();
+    const fallbackModel = MockEmbeddingModel.from();
 
     // Act
     const retryable = createRetryableModel({
