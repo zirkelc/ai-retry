@@ -32,11 +32,14 @@ jobs:
       - run: pnpm test
       - name: Publish to npm
         run: |
-          # Check if this is a prerelease (beta)
           VERSION=$(node -p "require('./package.json').version")
-          if [[ "$VERSION" == *"-beta."* ]]; then
-            echo "Publishing beta version: $VERSION"
-            pnpm publish --provenance --no-git-checks --tag beta
+          if [[ "$VERSION" == *-* ]]; then
+            # Prerelease: publish under a dist-tag named after the channel,
+            # e.g. 2.0.0-next.3 -> next. Keeps `latest` on the stable line.
+            CHANNEL="${VERSION#*-}"
+            CHANNEL="${CHANNEL%%.*}"
+            echo "Publishing prerelease $VERSION under dist-tag: $CHANNEL"
+            pnpm publish --provenance --no-git-checks --tag "$CHANNEL"
           else
             echo "Publishing stable version: $VERSION"
             pnpm publish --provenance --no-git-checks

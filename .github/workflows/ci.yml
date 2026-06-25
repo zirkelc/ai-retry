@@ -135,35 +135,3 @@ jobs:
         env:
           RELEASE: ${{ toJSON(steps.release.outputs) }}
         run: echo "$RELEASE"
-
-  # Prerelease (beta) line for the next major, cut from the `ai-sdk-v7` branch.
-  # Isolated from the stable release above: it uses its OWN config and manifest
-  # (*.beta.json) so the `ai-sdk-v7` branch never touches main's release-please
-  # files. Auto-merges the release PR so every push to this branch cuts a new
-  # beta (tag + GitHub Release flagged prerelease), which release.yml then
-  # publishes under the `beta` dist-tag. Delete this job and the *.beta.json
-  # files when this branch merges into `main`.
-  release-beta:
-    name: Release Beta
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/ai-sdk-v7'
-    steps:
-      # https://github.com/googleapis/release-please-action
-      - name: Release Please
-        uses: googleapis/release-please-action@v4
-        id: release
-        with:
-          # https://github.com/googleapis/release-please-action?tab=readme-ov-file#github-credentials
-          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
-          target-branch: ai-sdk-v7
-          config-file: release-please-config.beta.json
-          manifest-file: .release-please-manifest.beta.json
-
-      # Gated: GitHub auto-merge waits for the branch's required status checks
-      # before merging. Once merged, release-please tags + creates the GitHub
-      # release, which triggers the publish workflow.
-      - name: Enable auto-merge on the beta release PR
-        if: ${{ steps.release.outputs.pr }}
-        env:
-          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
-        run: gh pr merge --squash --auto -R "${{ github.repository }}" "${{ fromJSON(steps.release.outputs.pr).number }}"
