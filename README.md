@@ -810,7 +810,7 @@ Result-based conditions (`finishReason`, `schemaInvalid`, `result(...)`) apply t
 The function-style helpers (`contentFilterTriggered`, `requestTimeout`, `requestNotRetryable`, `retryAfterDelay`, `schemaMismatch`, `serviceOverloaded`, `serviceUnavailable`, `noImageGenerated`) are still exported from `ai-retry/retryables` for backwards compatibility, but they are deprecated in favor of the condition API documented above.
 
 > [!NOTE]
-> Full documentation for the deprecated function-style retryables lives in the [earlier README](https://github.com/zirkelc/ai-retry/blob/v1/README.md). New code should use the condition API. See the [migration guide](./MIGRATION.md) to convert existing code.
+> Full documentation for the deprecated function-style retryables lives in the [earlier README](https://github.com/zirkelc/ai-retry/blob/v1.x/README.md). New code should use the condition API. See the [migration guide](./MIGRATION.md) to convert existing code.
 
 Each function-style retryable has a one-line equivalent in the new shape (imports from `ai-retry/language-model` unless noted):
 
