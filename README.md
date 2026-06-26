@@ -716,11 +716,11 @@ const retryableModel = createRetryableModel({
 > [!NOTE]
 > Experimental: span names and attributes may change in patch versions.
 
-`ai-retry` can emit [OpenTelemetry](https://opentelemetry.io/) spans for each request and every retry attempt. Spans are created on the active OpenTelemetry context, so they nest automatically under the AI SDK's own spans (e.g. `ai.generateText.doGenerate`) when that integration is active — in AI SDK v7 that means installing [`@ai-sdk/otel`](https://ai-sdk.dev/docs/ai-sdk-core/telemetry) and registering it with `registerTelemetry(new OpenTelemetry())`. A single trace then shows the individual attempts — which model each used, why it was retried, and the backoff between them — that the SDK's own span otherwise hides. Retry telemetry works on its own too: it talks to OpenTelemetry directly, so it does not require `@ai-sdk/otel`.
+`ai-retry` can emit [OpenTelemetry](https://opentelemetry.io/) spans for each request and every retry attempt. Spans are created on the active OpenTelemetry context, so they nest automatically under the AI SDK's own spans (e.g. `ai.generateText.doGenerate`) when that integration is active. A single trace then shows the individual attempts: which model each used, why it was retried, and the backoff between them.
 
 #### Setup
 
-Telemetry uses the optional peer dependency `@opentelemetry/api`. In AI SDK v7 it is no longer a transitive dependency of `ai`, so install `@ai-sdk/otel` (which brings it in) or `@opentelemetry/api` directly. Register an OpenTelemetry SDK once at startup, then opt in per model:
+Telemetry uses the optional peer dependency `@opentelemetry/api`. In AI SDK v7 it is no longer a transitive dependency of `ai`, so install [`@ai-sdk/otel`](https://ai-sdk.dev/docs/ai-sdk-core/telemetry) or `@opentelemetry/api` directly. Register an OpenTelemetry SDK once at startup, then opt in per model:
 
 ```typescript
 import { createRetryableModel } from 'ai-retry/language-model';
@@ -732,14 +732,11 @@ const retryableModel = createRetryableModel({
 });
 ```
 
-> [!NOTE]
-> `telemetry` replaces the now-deprecated `experimental_telemetry` option. The old name still works as an alias; when both are set, `telemetry` wins.
-
 The settings resemble the AI SDK's `telemetry` shape, but stay opt-in and keep a `tracer` field (which the AI SDK moved into `@ai-sdk/otel`):
 
 ```ts
 interface RetryTelemetrySettings {
-  isEnabled?: boolean; // off by default while experimental
+  isEnabled?: boolean; //
   tracer?: Tracer; // defaults to trace.getTracer('ai-retry')
   metadata?: Record<string, AttributeValue>;
 }
@@ -805,6 +802,12 @@ Result-based conditions (`finishReason`, `schemaInvalid`, `result(...)`) apply t
 
 > [!IMPORTANT]
 > **Streaming limitation:** retries and fallbacks only apply before the first content chunk is emitted. Once streaming begins delivering content, the response is committed to the current model. Mid-stream errors will propagate to the caller rather than triggering a fallback. If reliable retries are critical for your use case, consider using `generateText` instead of `streamText`.
+
+#### Timeouts and abort signals under `streamText`
+
+`streamText` enforces its own timeouts (`timeout.stepMs`, `timeout.chunkMs`, `timeout.totalMs`, and any caller-supplied `abortSignal`) by merging them into a single signal that its stream pipeline watches directly. When that signal aborts, `streamText` finalizes the stream as aborted and **discards any output an `ai-retry` fallback produces underneath it**, even before the first content chunk. The fallback is still attempted (you'll see `onError`/`onRetry` fire), but its result never reaches the consumer.
+
+This is specific to `streamText`. The same timeouts on `generateText` recover normally, because `generateText` has no separate stream pipeline to tear down. That means `ai-retry` **cannot** recover `streamText`-level timeouts.
 
 ### Deprecated: function-style retryables
 
