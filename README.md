@@ -1,6 +1,10 @@
 <div align='center'>
 
-# ai-retry
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.png" />
+  <source media="(prefers-color-scheme: light)" srcset="assets/logo-light.png" />
+  <img src="assets/logo-light.png" alt="ai-retry logo" width="320" />
+</picture>
 
 <p align="center">Retry and fallback mechanisms for AI SDK</p>
 <p align="center">

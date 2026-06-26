@@ -1,0 +1,60 @@
+<svg width="1280" height="640" viewBox="0 0 1280 640" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="acc" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#a78bfa"/>
+      <stop offset="1" stop-color="#7c5cf0"/>
+    </linearGradient>
+    <linearGradient id="accText" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#a78bfa"/>
+      <stop offset="1" stop-color="#7c5cf0"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.34" r="0.62">
+      <stop offset="0" stop-color="#201a36"/>
+      <stop offset="1" stop-color="#0b0e14"/>
+    </radialGradient>
+    <radialGradient id="halo" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#8b5cf6" stop-opacity="0.34"/>
+      <stop offset="1" stop-color="#8b5cf6" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="rule" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#7c5cf0" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#a78bfa" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#7c5cf0" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1280" height="640" fill="#0b0e14"/>
+  <rect width="1280" height="640" fill="url(#glow)"/>
+
+  <!-- ===== logo mark ===== -->
+  <g transform="translate(206,86) scale(1.22)">
+    <path d="M183 38 Q146 110 183 182" fill="none" stroke="url(#acc)" stroke-width="15" stroke-linecap="round"/>
+    <path d="M537 38 Q574 110 537 182" fill="none" stroke="url(#acc)" stroke-width="15" stroke-linecap="round"/>
+
+    <g transform="translate(250,110) scale(3.4) translate(-12,-12)" fill="none" stroke="#5b6573" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" stroke-width="2.9"/>
+      <path d="M21 3v5h-5" stroke-width="2.9"/>
+      <path d="M10 10 L14 14 M14 10 L10 14" stroke-width="2.3"/>
+    </g>
+    <g transform="translate(360,110) scale(3.4) translate(-12,-12)" fill="none" stroke="#5b6573" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" stroke-width="2.9"/>
+      <path d="M21 3v5h-5" stroke-width="2.9"/>
+      <path d="M10 10 L14 14 M14 10 L10 14" stroke-width="2.3"/>
+    </g>
+    <circle cx="470" cy="110" r="58" fill="url(#halo)"/>
+    <g transform="translate(470,110) scale(3.4) translate(-12,-12)" fill="none" stroke="url(#acc)" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" stroke-width="3.1"/>
+      <path d="M21 3v5h-5" stroke-width="3.1"/>
+      <path d="M9.2 12.3 L11.1 14.2 L14.9 10.1" stroke-width="2.5"/>
+    </g>
+  </g>
+
+  <!-- ===== wordmark ===== -->
+  <text x="640" y="432" text-anchor="middle" font-family="'JetBrains Mono', monospace" font-weight="700" font-size="78" letter-spacing="-2" fill="#e9edf3">ai-<tspan fill="url(#accText)">retry</tspan></text>
+
+  <!-- accent rule -->
+  <rect x="500" y="462" width="280" height="3" rx="1.5" fill="url(#rule)"/>
+
+  <!-- ===== tagline ===== -->
+  <text x="640" y="510" text-anchor="middle" font-family="'JetBrains Mono', monospace" font-weight="400" font-size="24" letter-spacing="0.5" fill="#9aa4b2">Retries and fallback for the AI SDK</text>
+</svg>
