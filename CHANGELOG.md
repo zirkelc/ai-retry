@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.0.1](https://github.com/zirkelc/ai-retry/compare/v2.0.0...v2.0.1) (2026-06-26)
+
+
+### Documentation
+
+* add repo logo and banner assets ([9e09464](https://github.com/zirkelc/ai-retry/commit/9e094646c84fdf5a7797d2ea9dda284fd152f72a))
+* document streamText timeout/abort fallback limitation ([f8be475](https://github.com/zirkelc/ai-retry/commit/f8be475971668ac94931c04fb0103675f3a80487))
+* tint middle retry glyph as soft accent mid-tone ([5cdcf76](https://github.com/zirkelc/ai-retry/commit/5cdcf76a2820495ecb2bfb9219c74d3951bde542))
+* update installation instructions for AI SDK v6 and v7 ([0999696](https://github.com/zirkelc/ai-retry/commit/0999696266384acb096ea30471c9d0b712cdaf37))
+* update version compatibility notes for AI SDK ([cb5fd16](https://github.com/zirkelc/ai-retry/commit/cb5fd16302d4ce79f7d4fb758c6deaaa809f5700))
+
+
+### Miscellaneous Chores
+
+* add FUNDING.yml sponsor button ([6c5fd51](https://github.com/zirkelc/ai-retry/commit/6c5fd51b77970a180298dff4765846648d62855d))
+
 ## [2.0.0](https://github.com/zirkelc/ai-retry/compare/v1.11.1...v2.0.0) (2026-06-25)
 
 
