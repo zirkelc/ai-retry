@@ -5,7 +5,7 @@ import {
   type ReadableSpan,
   SimpleSpanProcessor,
 } from '@opentelemetry/sdk-trace-base';
-import { type TextStreamPart } from 'ai';
+import { APICallError, type TextStreamPart } from 'ai';
 import { Errors, Streams } from 'ai-test-kit';
 import { Embedding, MockEmbeddingModel } from 'ai-test-kit/embedding';
 import { Image, MockImageModel } from 'ai-test-kit/image';
@@ -132,8 +132,87 @@ export const buildImageErrorContext = (
  * `retryError.errors[0]).toBe(nonRetryableError)`. A fresh `Errors.rateLimited()`
  * per call site would not be the same reference.
  */
+export const apiError = (
+  options: Partial<ConstructorParameters<typeof APICallError>[0]> = {},
+): APICallError =>
+  new APICallError({
+    message: 'boom',
+    url: '',
+    requestBodyValues: {},
+    statusCode: 500,
+    responseHeaders: {},
+    responseBody: '',
+    data: {},
+    ...options,
+  });
+
+export const serviceOverloadedError = new APICallError({
+  message: `Service overloaded`,
+  url: ``,
+  requestBodyValues: {},
+  statusCode: 529,
+  responseHeaders: {},
+  responseBody: `{"error": {"message": "Service overloaded"}}`,
+  isRetryable: true,
+  data: {
+    error: {
+      message: `Service overloaded`,
+    },
+  },
+});
+
+export const serviceUnavailableError = new APICallError({
+  message: `Service unavailable`,
+  url: ``,
+  requestBodyValues: {},
+  statusCode: 503,
+  responseHeaders: {},
+  responseBody: `{"error": {"message": "Service unavailable"}}`,
+  isRetryable: true,
+  data: {
+    error: {
+      message: `Service unavailable`,
+    },
+  },
+});
+
+/** `Error` with `name === 'TimeoutError'`, as `AbortSignal.timeout()` produces. */
+export const timeoutError = (): Error => {
+  const err = new Error('timed out');
+  err.name = 'TimeoutError';
+  return err;
+};
+
+/** `Error` with `name === 'AbortError'`, as manual `controller.abort()` produces. */
+export const abortError = (): Error => {
+  const err = new Error('aborted');
+  err.name = 'AbortError';
+  return err;
+};
+
 export const retryableError = Errors.rateLimited();
 export const nonRetryableError = Errors.unauthorized();
+
+/** Azure-style content-filter `APICallError` (data code `content_filter`). */
+export const contentFilterError = apiError({
+  message: 'The response was filtered due to the content management policy.',
+  statusCode: 400,
+  isRetryable: false,
+  data: {
+    error: {
+      message:
+        'The response was filtered due to the content management policy.',
+      type: null,
+      param: 'prompt',
+      code: 'content_filter',
+    },
+  },
+});
+
+export const testUsage = {
+  inputTokens: { total: 3, noCache: 0, cacheRead: 0, cacheWrite: 0 },
+  outputTokens: { total: 10, text: 0, reasoning: 0 },
+};
 
 export const mockResultText = 'Hello, world!';
 
@@ -155,6 +234,29 @@ export const mockStreamChunks: Array<LanguageModelStreamPart> = [
   }),
   ...Language.streamText(['Hello', ', ', 'world!'], { id: '1' }),
   Language.streamFinish(),
+];
+
+/**
+ * Stream parts that finish with `content-filter` before any text deltas are
+ * emitted. The retry layer evaluates result-based retryables against a
+ * synthetic result built from the finish part when no content has streamed yet.
+ */
+export const contentFilterStreamChunks: Array<LanguageModelStreamPart> = [
+  { type: 'stream-start', warnings: [] },
+  {
+    type: 'response-metadata',
+    id: 'id-0',
+    modelId: 'mock-model-id',
+    timestamp: new Date(0),
+  },
+  {
+    type: 'finish',
+    finishReason: { unified: 'content-filter', raw: undefined },
+    usage: testUsage,
+    providerMetadata: {
+      testProvider: { testKey: 'testValue' },
+    },
+  },
 ];
 
 /** A successful embedding result. */

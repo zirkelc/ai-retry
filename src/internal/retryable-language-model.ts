@@ -1,12 +1,12 @@
 import { delay } from '@ai-sdk/provider-utils';
 import { BaseRetryableModel } from './base-retryable-model.js';
-import { calculateExponentialBackoff } from './calculate-exponential-backoff.js';
-import { countModelAttempts } from './count-model-attempts.js';
+import { evaluateError } from './evaluate-error.js';
 import { findRetryModel } from './find-retry-model.js';
 import { resolveLanguageModel } from './resolve-model.js';
 import { mergeLanguageModelCallOptions } from './merge-retry-call-options.js';
 import { createRetryTelemetry, type RetryTelemetry } from './telemetry.js';
-import { prepareRetryError } from './prepare-retry-error.js';
+import { resolveBackoffDelay } from './resolve-backoff-delay.js';
+import { retryDiesOnAbortedSignal } from './retry-dies-on-aborted-signal.js';
 import type {
   LanguageModel,
   LanguageModelCallOptions,
@@ -17,7 +17,6 @@ import type {
   Retry,
   RetryAttempt,
   RetryContext,
-  RetryErrorAttempt,
   RetryResultAttempt,
 } from '../types.js';
 import {
@@ -146,22 +145,7 @@ export class RetryableLanguageModel
           attempts.push(attempt);
 
           if (retryModel) {
-            /**
-             * Calculate exponential backoff delay based on the number of
-             * attempts for this specific model: baseDelay * backoffFactor^attempts.
-             */
-            let calculatedDelay: number | undefined;
-            if (retryModel.delay) {
-              const modelAttemptsCount = countModelAttempts(
-                retryModel.model,
-                attempts,
-              );
-              calculatedDelay = calculateExponentialBackoff(
-                retryModel.delay,
-                retryModel.backoffFactor,
-                modelAttemptsCount,
-              );
-            }
+            const calculatedDelay = resolveBackoffDelay(retryModel, attempts);
 
             input.recorder?.endAttempt({
               attempt: attemptNumber,
@@ -230,8 +214,7 @@ export class RetryableLanguageModel
          * misleading retry against a dead signal.
          */
         if (
-          input.callOptions.abortSignal?.aborted &&
-          retryModel.timeout === undefined
+          retryDiesOnAbortedSignal(input.callOptions.abortSignal, retryModel)
         ) {
           input.recorder?.endAttempt({
             attempt: attemptNumber,
@@ -241,22 +224,7 @@ export class RetryableLanguageModel
           throw error;
         }
 
-        /**
-         * Calculate exponential backoff delay based on the number of attempts
-         * for this specific model: baseDelay * backoffFactor^attempts.
-         */
-        let calculatedDelay: number | undefined;
-        if (retryModel.delay) {
-          const modelAttemptsCount = countModelAttempts(
-            retryModel.model,
-            attempts,
-          );
-          calculatedDelay = calculateExponentialBackoff(
-            retryModel.delay,
-            retryModel.backoffFactor,
-            modelAttemptsCount,
-          );
-        }
+        const calculatedDelay = resolveBackoffDelay(retryModel, attempts);
 
         input.recorder?.endAttempt({
           attempt: attemptNumber,
@@ -320,40 +288,20 @@ export class RetryableLanguageModel
    * the stream path. If multiple attempts were made, the original error
    * is wrapped in a `RetryError`.
    */
-  private async handleError(
+  private handleError(
     error: unknown,
     attempts: ReadonlyArray<RetryAttempt<LanguageModel>>,
     callOptions: LanguageModelCallOptions,
   ) {
-    const errorAttempt: RetryErrorAttempt<LanguageModel> = {
-      type: 'error',
-      error: error,
+    return evaluateError({
+      error,
       model: this.currentModel,
       options: callOptions,
-    };
-
-    const updatedAttempts = [...attempts, errorAttempt];
-
-    const context: RetryContext<LanguageModel> = {
-      current: errorAttempt,
-      attempts: updatedAttempts,
-    };
-
-    this.options.onError?.(context);
-
-    const retryModel = await findRetryModel(
-      this.options.retries,
-      context,
-      resolveLanguageModel,
-    );
-
-    const finalError = retryModel
-      ? undefined
-      : updatedAttempts.length > 1
-        ? prepareRetryError(error, updatedAttempts)
-        : error;
-
-    return { retryModel, attempt: errorAttempt, finalError };
+      attempts,
+      retries: this.options.retries,
+      onError: this.options.onError,
+      resolve: resolveLanguageModel,
+    });
   }
 
   /**
@@ -638,11 +586,12 @@ export class RetryableLanguageModel
                      * retry and let the finish part flow downstream. Unlike
                      * the error path there is no underlying error to rethrow.
                      */
-                    const abortedNoTimeout =
-                      callOptions.abortSignal?.aborted &&
-                      retryModel.timeout === undefined;
-
-                    if (!abortedNoTimeout) {
+                    if (
+                      !retryDiesOnAbortedSignal(
+                        callOptions.abortSignal,
+                        retryModel,
+                      )
+                    ) {
                       retryFromFinish = retryModel;
                       break;
                     }
@@ -677,22 +626,10 @@ export class RetryableLanguageModel
               }
 
               if (retryFromFinish) {
-                /**
-                 * Calculate exponential backoff delay based on the number of
-                 * attempts for this specific model.
-                 */
-                let calculatedDelay: number | undefined;
-                if (retryFromFinish.delay) {
-                  const modelAttemptsCount = countModelAttempts(
-                    retryFromFinish.model,
-                    attempts,
-                  );
-                  calculatedDelay = calculateExponentialBackoff(
-                    retryFromFinish.delay,
-                    retryFromFinish.backoffFactor,
-                    modelAttemptsCount,
-                  );
-                }
+                const calculatedDelay = resolveBackoffDelay(
+                  retryFromFinish,
+                  attempts,
+                );
 
                 if (pendingAttempt !== undefined) {
                   recorder?.endAttempt({
@@ -804,8 +741,7 @@ export class RetryableLanguageModel
                * fire a misleading retry against a dead signal.
                */
               if (
-                callOptions.abortSignal?.aborted &&
-                retryModel.timeout === undefined
+                retryDiesOnAbortedSignal(callOptions.abortSignal, retryModel)
               ) {
                 if (pendingAttempt !== undefined) {
                   recorder?.endAttempt({
@@ -821,22 +757,7 @@ export class RetryableLanguageModel
                 return;
               }
 
-              /**
-               * Calculate exponential backoff delay based on the number of
-               * attempts for this specific model: baseDelay * backoffFactor^attempts.
-               */
-              let calculatedDelay: number | undefined;
-              if (retryModel.delay) {
-                const modelAttemptsCount = countModelAttempts(
-                  retryModel.model,
-                  attempts,
-                );
-                calculatedDelay = calculateExponentialBackoff(
-                  retryModel.delay,
-                  retryModel.backoffFactor,
-                  modelAttemptsCount,
-                );
-              }
+              const calculatedDelay = resolveBackoffDelay(retryModel, attempts);
 
               if (pendingAttempt !== undefined) {
                 recorder?.endAttempt({
