@@ -1,17 +1,19 @@
+import { Streams } from 'ai-test-kit';
 import { RetryError, streamText } from 'ai';
 import { describe, expect, it, vi } from 'vitest';
-import { createRetryable } from '../../create-retryable-model.js';
+import { createRetryable } from '../../index.js';
 import {
   contentFilterError,
   contentFilterStreamChunks,
   errorStreamChunks,
   MockLanguageModel,
-  mockStream,
   mockStreamChunks,
-  mockStreamOptions,
 } from '../../internal/test-utils.js';
 import { contentFilterTriggered } from '../../retryables/content-filter-triggered.js';
-import type { LanguageModelStreamPart } from '../../types.js';
+import type {
+  LanguageModelCallOptions,
+  LanguageModelStreamPart,
+} from '../../types.js';
 import {
   createRetryableStream,
   type RetryableStreamOptions,
@@ -31,27 +33,27 @@ const streamOf = (parts: Array<unknown>) => ({
 
 /** A model that streams the full successful `mockStreamChunks` ("Hello, world!"). */
 const okStreamModel = () =>
-  new MockLanguageModel({ doStream: mockStream(mockStreamChunks) });
+  MockLanguageModel.from({ doStream: mockStreamChunks });
 
 /** A model that emits `stream-start` then an `error` part before any content. */
 const errorAtStartStreamModel = (error: unknown) =>
-  new MockLanguageModel({ doStream: mockStream(errorStreamChunks(error)) });
+  MockLanguageModel.from({ doStream: errorStreamChunks(error) });
 
 /** A model that streams one delta, then errors mid-stream after content. */
 const errorAfterContentStreamModel = (error: unknown) =>
-  new MockLanguageModel({
-    doStream: mockStream([
+  MockLanguageModel.from({
+    doStream: [
       { type: 'stream-start', warnings: [] },
       { type: 'text-start', id: '1' },
       { type: 'text-delta', id: '1', delta: 'partial' },
       { type: 'error', error },
-    ]),
+    ],
   });
 
 /** A model whose stream stalls (emits only `stream-start`) until aborted. */
 const stallStreamModel = () =>
-  new MockLanguageModel({
-    doStream: async ({ abortSignal }) => ({
+  MockLanguageModel.from({
+    doStream: async ({ abortSignal }: LanguageModelCallOptions) => ({
       stream: new ReadableStream<LanguageModelStreamPart>({
         start(controller) {
           controller.enqueue({ type: 'stream-start', warnings: [] });
@@ -69,8 +71,8 @@ const stallStreamModel = () =>
 
 /** A model that streams one content delta, then stalls until aborted. */
 const partialThenStallStreamModel = () =>
-  new MockLanguageModel({
-    doStream: async ({ abortSignal }) => ({
+  MockLanguageModel.from({
+    doStream: async ({ abortSignal }: LanguageModelCallOptions) => ({
       stream: new ReadableStream<LanguageModelStreamPart>({
         start(controller) {
           controller.enqueue({ type: 'stream-start', warnings: [] });
@@ -88,7 +90,7 @@ const partialThenStallStreamModel = () =>
 
 /** A model that finishes with `content-filter` before any content (result-based). */
 const contentFilterFinishModel = () =>
-  new MockLanguageModel({ doStream: mockStream(contentFilterStreamChunks) });
+  MockLanguageModel.from({ doStream: contentFilterStreamChunks });
 
 /**
  * Inline `streamText` glue: re-run the whole `streamText` call per attempt with
@@ -131,7 +133,7 @@ describe('createRetryableStream', () => {
         { type: 'text-delta', text: 'OK' },
       ]);
       const retryableStream = createRetryableStream({
-        model: new MockLanguageModel(),
+        model: MockLanguageModel.from(),
         retries: [],
       });
 
@@ -150,7 +152,7 @@ describe('createRetryableStream', () => {
         { type: 'text-delta', text: 'OK' },
       ]);
       const retryableStream = createRetryableStream({
-        model: new MockLanguageModel(),
+        model: MockLanguageModel.from(),
         retries: [],
       });
 
@@ -165,7 +167,7 @@ describe('createRetryableStream', () => {
       // Arrange — preamble only, then end-of-stream (e.g. an empty completion).
       const result = streamOf([{ type: 'start' }, { type: 'start-step' }]);
       const retryableStream = createRetryableStream({
-        model: new MockLanguageModel(),
+        model: MockLanguageModel.from(),
         retries: [],
       });
 
@@ -178,8 +180,8 @@ describe('createRetryableStream', () => {
 
     it('should fail over on a pre-content error part', async () => {
       // Arrange
-      const primary = new MockLanguageModel();
-      const fallback = new MockLanguageModel();
+      const primary = MockLanguageModel.from();
+      const fallback = MockLanguageModel.from();
       const fallbackResult = streamOf([{ type: 'text-delta', text: 'OK' }]);
       const models: Array<unknown> = [];
       const retryableStream = createRetryableStream({
@@ -204,8 +206,8 @@ describe('createRetryableStream', () => {
 
     it('should fail over on a pre-content abort part', async () => {
       // Arrange
-      const primary = new MockLanguageModel();
-      const fallback = new MockLanguageModel();
+      const primary = MockLanguageModel.from();
+      const fallback = MockLanguageModel.from();
       const fallbackResult = streamOf([{ type: 'text-delta', text: 'OK' }]);
       const retryableStream = createRetryableStream({
         model: primary,
@@ -229,9 +231,9 @@ describe('createRetryableStream', () => {
         { type: 'text-delta', text: 'OK' },
         { type: 'error', error: new Error('mid-stream') },
       ]);
-      const fallback = new MockLanguageModel();
+      const fallback = MockLanguageModel.from();
       const retryableStream = createRetryableStream({
-        model: new MockLanguageModel(),
+        model: MockLanguageModel.from(),
         retries: [fallback],
       });
 
@@ -248,8 +250,8 @@ describe('createRetryableStream', () => {
   describe('retries', () => {
     it('should throw a RetryError after all attempts are exhausted', async () => {
       // Arrange
-      const primary = new MockLanguageModel();
-      const fallback = new MockLanguageModel();
+      const primary = MockLanguageModel.from();
+      const fallback = MockLanguageModel.from();
       const retryableStream = createRetryableStream({
         model: primary,
         retries: [fallback],
@@ -269,8 +271,8 @@ describe('createRetryableStream', () => {
   describe('disabled', () => {
     it('should bypass retries when disabled', async () => {
       // Arrange
-      const primary = new MockLanguageModel();
-      const fallback = new MockLanguageModel();
+      const primary = MockLanguageModel.from();
+      const fallback = MockLanguageModel.from();
       const error = new Error('boom');
       const models: Array<unknown> = [];
       const retryableStream = createRetryableStream({
@@ -301,7 +303,7 @@ describe('streamText integration', () => {
     // Act
     const result = await retryableStreamText(
       { model: primary, retries: [] },
-      { prompt, ...mockStreamOptions },
+      { prompt },
     );
 
     // Assert
@@ -312,7 +314,7 @@ describe('streamText integration', () => {
   describe('error-based retries', () => {
     it('should fall back when stream creation fails', async () => {
       // Arrange
-      const primary = new MockLanguageModel({
+      const primary = MockLanguageModel.from({
         doStream: new Error('creation failed'),
       });
       const fallback = okStreamModel();
@@ -320,7 +322,7 @@ describe('streamText integration', () => {
       // Act
       const result = await retryableStreamText(
         { model: primary, retries: [fallback] },
-        { prompt, ...mockStreamOptions },
+        { prompt },
       );
 
       // Assert
@@ -337,7 +339,7 @@ describe('streamText integration', () => {
       // Act
       const result = await retryableStreamText(
         { model: primary, retries: [fallback] },
-        { prompt, ...mockStreamOptions },
+        { prompt },
       );
 
       // Assert
@@ -355,7 +357,7 @@ describe('streamText integration', () => {
       // Act
       const result = await retryableStreamText(
         { model: primary, retries: [second, third] },
-        { prompt, ...mockStreamOptions },
+        { prompt },
       );
 
       // Assert
@@ -367,13 +369,13 @@ describe('streamText integration', () => {
 
     it('should fall back on a content-filter error part', async () => {
       // Arrange — content-filter surfaces as an error (not a finish) here.
-      const primary = new MockLanguageModel({ doStream: contentFilterError });
+      const primary = MockLanguageModel.from({ doStream: contentFilterError });
       const fallback = okStreamModel();
 
       // Act
       const result = await retryableStreamText(
         { model: primary, retries: [contentFilterTriggered(fallback)] },
-        { prompt, ...mockStreamOptions },
+        { prompt },
       );
 
       // Assert
@@ -390,7 +392,7 @@ describe('streamText integration', () => {
       // Act
       const result = await retryableStreamText(
         { model: primary, retries: [fallback] },
-        { prompt, ...mockStreamOptions },
+        { prompt },
       );
 
       let text = '';
@@ -415,7 +417,7 @@ describe('streamText integration', () => {
       // Act
       const result = retryableStreamText(
         { model: primary, retries: [] },
-        { prompt, ...mockStreamOptions },
+        { prompt },
       );
 
       // Assert
@@ -425,13 +427,13 @@ describe('streamText integration', () => {
 
     it('should throw a RetryError after all attempts are exhausted', async () => {
       // Arrange
-      const primary = new MockLanguageModel({ doStream: new Error('first') });
-      const fallback = new MockLanguageModel({ doStream: new Error('second') });
+      const primary = MockLanguageModel.from({ doStream: new Error('first') });
+      const fallback = MockLanguageModel.from({ doStream: new Error('second') });
 
       // Act
       const result = retryableStreamText(
         { model: primary, retries: [fallback] },
-        { prompt, ...mockStreamOptions },
+        { prompt },
       );
 
       // Assert
@@ -449,7 +451,7 @@ describe('streamText integration', () => {
       // Act
       await retryableStreamText(
         { model: primary, retries: [fallback], onError, onRetry },
-        { prompt, ...mockStreamOptions },
+        { prompt },
       );
 
       // Assert
@@ -468,7 +470,7 @@ describe('streamText integration', () => {
       // Act
       const result = await retryableStreamText(
         { model: primary, retries: [contentFilterTriggered(fallback)] },
-        { prompt, ...mockStreamOptions },
+        { prompt },
       );
 
       // Assert — no fail-over, no side effects.
@@ -487,7 +489,7 @@ describe('streamText integration', () => {
       // Act
       const result = await retryableStreamText(
         { model: primary, retries: [fallback] },
-        { prompt, timeout: { chunkMs: 50 }, ...mockStreamOptions },
+        { prompt, timeout: { chunkMs: 50 } },
       );
 
       // Assert
@@ -503,7 +505,7 @@ describe('streamText integration', () => {
       // Act
       const result = await retryableStreamText(
         { model: primary, retries: [fallback] },
-        { prompt, timeout: { stepMs: 50 }, ...mockStreamOptions },
+        { prompt, timeout: { stepMs: 50 } },
       );
 
       // Assert
@@ -519,7 +521,7 @@ describe('streamText integration', () => {
       // Act
       const result = await retryableStreamText(
         { model: primary, retries: [fallback] },
-        { prompt, timeout: { totalMs: 50 }, ...mockStreamOptions },
+        { prompt, timeout: { totalMs: 50 } },
       );
 
       // Assert
@@ -538,7 +540,6 @@ describe('streamText integration', () => {
         {
           prompt,
           abortSignal: AbortSignal.timeout(50),
-          ...mockStreamOptions,
         },
       );
 
@@ -550,8 +551,8 @@ describe('streamText integration', () => {
     it('should give each attempt a fresh deadline signal', async () => {
       // Arrange
       const signals: Array<AbortSignal | undefined> = [];
-      const primary = new MockLanguageModel({
-        doStream: async ({ abortSignal }) => {
+      const primary = MockLanguageModel.from({
+        doStream: async ({ abortSignal }: LanguageModelCallOptions) => {
           signals.push(abortSignal);
           return {
             stream: new ReadableStream<LanguageModelStreamPart>({
@@ -567,17 +568,17 @@ describe('streamText integration', () => {
           };
         },
       });
-      const fallback = new MockLanguageModel({
-        doStream: async ({ abortSignal }) => {
+      const fallback = MockLanguageModel.from({
+        doStream: async ({ abortSignal }: LanguageModelCallOptions) => {
           signals.push(abortSignal);
-          return mockStream(mockStreamChunks);
+          return { stream: Streams.from(mockStreamChunks) };
         },
       });
 
       // Act
       const result = await retryableStreamText(
         { model: primary, retries: [fallback] },
-        { prompt, timeout: { chunkMs: 50 }, ...mockStreamOptions },
+        { prompt, timeout: { chunkMs: 50 } },
       );
       await result.text;
 
@@ -596,7 +597,7 @@ describe('streamText integration', () => {
       // Act
       const result = await retryableStreamText(
         { model: primary, retries: [fallback] },
-        { prompt, timeout: { chunkMs: 50 }, ...mockStreamOptions },
+        { prompt, timeout: { chunkMs: 50 } },
       );
 
       // Drain tolerantly: the post-content deadline surfaces an abort.
@@ -626,7 +627,7 @@ describe('streamText integration', () => {
       // Act
       const result = retryableStreamText(
         { model: primary, retries: [fallback] },
-        { prompt, abortSignal: controller.signal, ...mockStreamOptions },
+        { prompt, abortSignal: controller.signal },
       );
 
       // Assert
@@ -638,13 +639,13 @@ describe('streamText integration', () => {
   describe('disabled', () => {
     it('should bypass retries when disabled', async () => {
       // Arrange
-      const primary = new MockLanguageModel({ doStream: new Error('boom') });
+      const primary = MockLanguageModel.from({ doStream: new Error('boom') });
       const fallback = okStreamModel();
 
       // Act
       const result = retryableStreamText(
         { model: primary, retries: [fallback], disabled: true },
-        { prompt, ...mockStreamOptions },
+        { prompt },
       );
 
       // Assert
@@ -657,13 +658,13 @@ describe('streamText integration', () => {
   describe('deferred consumption', () => {
     it('should let the caller drive the body via toUIMessageStreamResponse', async () => {
       // Arrange — fail over before content, then let the caller consume.
-      const primary = new MockLanguageModel({ doStream: new Error('boom') });
+      const primary = MockLanguageModel.from({ doStream: new Error('boom') });
       const fallback = okStreamModel();
 
       // Act
       const result = await retryableStreamText(
         { model: primary, retries: [fallback] },
-        { prompt, ...mockStreamOptions },
+        { prompt },
       );
       const response = result.toUIMessageStreamResponse();
       const body = await response.text();
@@ -684,7 +685,7 @@ describe('streamText integration', () => {
       // Act
       const result = await retryableStreamText(
         { model: okStreamModel(), retries: [] },
-        { prompt, onChunk, onFinish, ...mockStreamOptions },
+        { prompt, onChunk, onFinish },
       );
       await result.text;
 
@@ -703,7 +704,7 @@ describe('streamText integration', () => {
           model: errorAfterContentStreamModel(new Error('mid-stream')),
           retries: [okStreamModel()],
         },
-        { prompt, onError, ...mockStreamOptions },
+        { prompt, onError },
       );
       await result.text;
 
@@ -728,7 +729,7 @@ describe('streamText integration with a retryable model', () => {
     // Act
     const result = await retryableStreamText(
       { model: inner, retries: [callFallback] },
-      { prompt, ...mockStreamOptions },
+      { prompt },
     );
 
     // Assert — recovered inside the model layer.
@@ -751,7 +752,7 @@ describe('streamText integration with a retryable model', () => {
     // Act
     const result = await retryableStreamText(
       { model: inner, retries: [callFallback] },
-      { prompt, timeout: { totalMs: 50 }, ...mockStreamOptions },
+      { prompt, timeout: { totalMs: 50 } },
     );
 
     // Assert — recovered by the call layer; the model layer never saw it.
@@ -772,7 +773,6 @@ describe('streamText integration with a retryable model', () => {
         maxRetries: 0,
         timeout: { totalMs: 50 },
         onError: () => {},
-        ...mockStreamOptions,
       });
 
       // Act — bound the drain: the aborted stream may never cleanly settle,
@@ -801,7 +801,7 @@ describe('streamText integration with a retryable model', () => {
       // Act
       const result = await retryableStreamText(
         { model: primary, retries: [contentFilterTriggered(fallback)] },
-        { prompt, ...mockStreamOptions },
+        { prompt },
       );
 
       // Assert

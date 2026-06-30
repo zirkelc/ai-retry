@@ -1,7 +1,11 @@
+import { Errors } from 'ai-test-kit';
 import { APICallError, generateImage, NoImageGeneratedError } from 'ai';
 import { describe, expect, it, vi } from 'vitest';
-import { createRetryable } from '../create-retryable-model.js';
-import { MockImageModel, mockImageResult } from '../internal/test-utils.js';
+import {
+  MockImageModel,
+  createRetryableModel,
+  mockImageResult,
+} from '../internal/test-utils.js';
 import type { ImageModel, RetryableModelOptions } from '../types.js';
 import { noImageGenerated } from './no-image-generated.js';
 
@@ -12,34 +16,18 @@ const noImageError = new NoImageGeneratedError({
   message: `No image generated`,
 });
 
-const otherError = new APICallError({
-  message: `Some other error`,
-  url: ``,
-  requestBodyValues: {},
-  statusCode: 400,
-  responseHeaders: {},
-  responseBody: `{}`,
-  isRetryable: false,
-  data: {
-    error: {
-      message: `Some other error`,
-      type: null,
-      param: `prompt`,
-      code: `other_error`,
-    },
-  },
-});
+const otherError = Errors.badRequest();
 
 describe('noImageGenerated', () => {
   describe('generateImage', () => {
     it('should succeed without errors', async () => {
       // Arrange
-      const baseModel = new MockImageModel({ doGenerate: mockImageResult });
-      const retryModel = new MockImageModel({ doGenerate: mockImageResult });
+      const baseModel = MockImageModel.from(mockImageResult);
+      const retryModel = MockImageModel.from(mockImageResult);
 
       // Act
       const result = await generateImage({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [noImageGenerated(retryModel)],
         }),
@@ -54,12 +42,12 @@ describe('noImageGenerated', () => {
 
     it('should fallback on NoImageGeneratedError', async () => {
       // Arrange
-      const baseModel = new MockImageModel({ doGenerate: noImageError });
-      const retryModel = new MockImageModel({ doGenerate: mockImageResult });
+      const baseModel = MockImageModel.from(noImageError);
+      const retryModel = MockImageModel.from(mockImageResult);
 
       // Act
       const result = await generateImage({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [noImageGenerated(retryModel)],
         }),
@@ -74,12 +62,12 @@ describe('noImageGenerated', () => {
 
     it('should not fallback for non-matching errors', async () => {
       // Arrange
-      const baseModel = new MockImageModel({ doGenerate: otherError });
-      const retryModel = new MockImageModel({ doGenerate: mockImageResult });
+      const baseModel = MockImageModel.from(otherError);
+      const retryModel = MockImageModel.from(mockImageResult);
 
       // Act
       const result = generateImage({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [noImageGenerated(retryModel)],
         }),
@@ -95,13 +83,13 @@ describe('noImageGenerated', () => {
 
     it('should call onError callback when error occurs', async () => {
       // Arrange
-      const baseModel = new MockImageModel({ doGenerate: noImageError });
-      const retryModel = new MockImageModel({ doGenerate: mockImageResult });
+      const baseModel = MockImageModel.from(noImageError);
+      const retryModel = MockImageModel.from(mockImageResult);
       const onError = vi.fn<OnError>();
 
       // Act
       await generateImage({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [noImageGenerated(retryModel)],
           onError,
@@ -116,13 +104,13 @@ describe('noImageGenerated', () => {
 
     it('should call onRetry callback before retry', async () => {
       // Arrange
-      const baseModel = new MockImageModel({ doGenerate: noImageError });
-      const retryModel = new MockImageModel({ doGenerate: mockImageResult });
+      const baseModel = MockImageModel.from(noImageError);
+      const retryModel = MockImageModel.from(mockImageResult);
       const onRetry = vi.fn<OnRetry>();
 
       // Act
       await generateImage({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [noImageGenerated(retryModel)],
           onRetry,

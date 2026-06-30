@@ -6,8 +6,9 @@
  * A flaky primary model reports itself as overloaded (HTTP 529). The retry
  * layer falls back to a second model, and both attempts are exported to
  * Langfuse as OpenTelemetry spans. The example runs once with `generateText`
- * and once with `streamText`; with telemetry enabled on the AI SDK calls too,
- * the Langfuse traces look like:
+ * and once with `streamText`. The AI SDK's own spans come from its v7
+ * `@ai-sdk/otel` integration, registered in `./instrumentation.ts`, so the
+ * Langfuse traces look like:
  *
  *   ai.generateText                          ai.streamText
  *   └─ ai.generateText.doGenerate            └─ ai.streamText.doStream
@@ -25,9 +26,11 @@ import {
   simulateReadableStream,
   streamText,
 } from 'ai';
-import { MockLanguageModelV3 } from 'ai/test';
-import { createRetryable } from '../../src/index.js';
-import { serviceOverloaded } from '../../src/retryables/service-overloaded.js';
+import { MockLanguageModelV4 } from 'ai/test';
+import {
+  createRetryableModel,
+  httpStatus,
+} from '../../src/language-model/index.js';
 
 const usage = {
   inputTokens: { total: 8, noCache: 8, cacheRead: 0, cacheWrite: 0 },
@@ -44,9 +47,9 @@ const overloaded = () =>
   });
 
 /** A primary model that always reports itself as overloaded (HTTP 529). */
-const flakyModel = new MockLanguageModelV3({
-  provider: 'mock',
-  modelId: 'flaky-primary',
+const flakyModel = new MockLanguageModelV4({
+  provider: 'openai',
+  modelId: 'gpt-5',
   doGenerate: async () => {
     throw overloaded();
   },
@@ -61,13 +64,13 @@ const flakyModel = new MockLanguageModelV3({
 });
 
 /** A reliable fallback model that returns a static answer. */
-const reliableModel = new MockLanguageModelV3({
-  provider: 'mock',
-  modelId: 'reliable-fallback',
+const reliableModel = new MockLanguageModelV4({
+  provider: 'anthropic',
+  modelId: 'claude-opus-4.6',
   doGenerate: async () => ({
     finishReason: { unified: 'stop', raw: 'stop' },
     usage,
-    content: [{ type: 'text', text: 'Hello from the fallback model!' }],
+    content: [{ type: 'text', text: 'Hello!' }],
     warnings: [],
   }),
   doStream: async () => ({
@@ -78,7 +81,7 @@ const reliableModel = new MockLanguageModelV3({
         {
           type: 'text-delta',
           id: '1',
-          delta: 'Hello from the fallback model!',
+          delta: 'Hello!',
         },
         { type: 'text-end', id: '1' },
         {
@@ -91,10 +94,13 @@ const reliableModel = new MockLanguageModelV3({
   }),
 });
 
-const model = createRetryable({
+const model = createRetryableModel({
   model: flakyModel,
-  retries: [serviceOverloaded(reliableModel)],
-  experimental_telemetry: { isEnabled: true, functionId: 'telemetry-example' },
+  retries: [
+    httpStatus(529, 'overloaded').retry(),
+    httpStatus(529, 'overloaded').switch({ model: reliableModel }),
+  ],
+  telemetry: { isEnabled: true },
 });
 
 /** Disable the AI SDK's own retries so each trace shows one model call. */
@@ -104,19 +110,19 @@ const { text } = await generateText({
   model,
   prompt: 'Say hello.',
   maxRetries: 0,
-  experimental_telemetry: telemetry,
+  telemetry: telemetry,
 });
 console.log('generateText:', text);
 
-const result = streamText({
-  model,
-  prompt: 'Say hello, streaming.',
-  maxRetries: 0,
-  experimental_telemetry: telemetry,
-});
-let streamed = '';
-for await (const chunk of result.textStream) streamed += chunk;
-console.log('streamText:', streamed);
+// const result = streamText({
+//   model,
+//   prompt: 'Say hello, streaming.',
+//   maxRetries: 0,
+//   telemetry: telemetry,
+// });
+// let streamed = '';
+// for await (const chunk of result.textStream) streamed += chunk;
+// console.log('streamText:', streamed);
 
 /** Flush spans before the process exits. */
 await langfuseSpanProcessor.forceFlush();

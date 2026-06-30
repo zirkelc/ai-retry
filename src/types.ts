@@ -1,13 +1,13 @@
 import type {
-  EmbeddingModelV3,
-  ImageModelV3,
-  ImageModelV3CallOptions,
-  LanguageModelV3,
-  LanguageModelV3CallOptions,
-  LanguageModelV3GenerateResult,
-  LanguageModelV3Prompt,
-  LanguageModelV3StreamPart,
-  SharedV3ProviderOptions,
+  EmbeddingModelV4,
+  ImageModelV4,
+  ImageModelV4CallOptions,
+  LanguageModelV4,
+  LanguageModelV4CallOptions,
+  LanguageModelV4GenerateResult,
+  LanguageModelV4Prompt,
+  LanguageModelV4StreamPart,
+  SharedV4ProviderOptions,
 } from '@ai-sdk/provider';
 import type { AttributeValue, Tracer } from '@opentelemetry/api';
 import type { gateway } from 'ai';
@@ -18,43 +18,64 @@ type Literals<T> = T extends string
     : T // It's a literal, keep it
   : never;
 
-export type LanguageModel = LanguageModelV3;
-export type EmbeddingModel = EmbeddingModelV3;
-export type ImageModel = ImageModelV3;
-export type LanguageModelCallOptions = LanguageModelV3CallOptions;
-export type LanguageModelStreamPart = LanguageModelV3StreamPart;
-export type ImageModelCallOptions = ImageModelV3CallOptions;
-export type ProviderOptions = SharedV3ProviderOptions;
+export type LanguageModel = LanguageModelV4;
+export type EmbeddingModel = EmbeddingModelV4;
+export type ImageModel = ImageModelV4;
+export type LanguageModelCallOptions = LanguageModelV4CallOptions;
+export type LanguageModelStreamPart = LanguageModelV4StreamPart;
+export type ImageModelCallOptions = ImageModelV4CallOptions;
+export type ProviderOptions = SharedV4ProviderOptions;
 
-// export  type GatewayEmbeddingModelId = Parameters<typeof gateway['textEmbeddingModel']>[0];
 export type GatewayLanguageModelId = Parameters<
   (typeof gateway)['languageModel']
 >[0];
 
+export type GatewayEmbeddingModelId = Parameters<
+  (typeof gateway)['embeddingModel']
+>[0];
+
+export type GatewayImageModelId = Parameters<(typeof gateway)['imageModel']>[0];
+
+/**
+ * A model that can be passed as either an instance or a gateway string
+ * literal, resolved to an instance via the AI SDK Gateway.
+ */
 export type ResolvableLanguageModel =
   | LanguageModel
   | Literals<GatewayLanguageModelId>;
+export type ResolvableEmbeddingModel =
+  | EmbeddingModel
+  | Literals<GatewayEmbeddingModelId>;
+export type ResolvableImageModel = ImageModel | Literals<GatewayImageModelId>;
+
+/**
+ * Any model the retry system accepts, in resolvable (instance or gateway
+ * string) form.
+ */
+export type AnyResolvableModel =
+  | ResolvableLanguageModel
+  | ResolvableEmbeddingModel
+  | ResolvableImageModel;
 
 export type ResolvableModel<
   MODEL extends LanguageModel | EmbeddingModel | ImageModel,
 > = MODEL extends LanguageModel
   ? ResolvableLanguageModel
   : MODEL extends EmbeddingModel
-    ? EmbeddingModel
-    : ImageModel;
+    ? ResolvableEmbeddingModel
+    : ResolvableImageModel;
 
-export type ResolvedModel<
-  MODEL extends ResolvableLanguageModel | EmbeddingModel | ImageModel,
-> = MODEL extends ResolvableLanguageModel
-  ? LanguageModel
-  : MODEL extends EmbeddingModel
-    ? EmbeddingModel
-    : ImageModel;
+export type ResolvedModel<MODEL extends AnyResolvableModel> =
+  MODEL extends ResolvableLanguageModel
+    ? LanguageModel
+    : MODEL extends ResolvableEmbeddingModel
+      ? EmbeddingModel
+      : ImageModel;
 
 /**
  * Result from a generateText call.
  */
-export type LanguageModelResult = LanguageModelV3GenerateResult;
+export type LanguageModelResult = LanguageModelV4GenerateResult;
 
 /**
  * Call options that can be overridden during retry for language models.
@@ -175,9 +196,7 @@ export type RetryAttempt<
 /**
  * The context provided to Retryables with the current attempt and all previous attempts.
  */
-export type RetryContext<
-  MODEL extends ResolvableLanguageModel | EmbeddingModel | ImageModel,
-> = {
+export type RetryContext<MODEL extends AnyResolvableModel> = {
   /**
    * Current attempt that caused the retry
    */
@@ -203,9 +222,7 @@ export type SuccessAttempt<
 /**
  * The context provided to onSuccess with the successful attempt and all previous attempts.
  */
-export type SuccessContext<
-  MODEL extends ResolvableLanguageModel | EmbeddingModel | ImageModel,
-> = {
+export type SuccessContext<MODEL extends AnyResolvableModel> = {
   /**
    * The successful attempt
    */
@@ -217,15 +234,45 @@ export type SuccessContext<
 };
 
 /**
+ * The context provided to onFailure when an operation terminally fails
+ * (no retry matched, retries exhausted, or the retry itself failed).
+ */
+export type FailureContext<
+  MODEL extends ResolvableLanguageModel | EmbeddingModel | ImageModel,
+> = {
+  /**
+   * The final attempt that failed.
+   */
+  current: RetryErrorAttempt<ResolvedModel<MODEL>>;
+  /**
+   * All attempts made, including the final failed one.
+   */
+  attempts: Array<RetryAttempt<ResolvedModel<MODEL>>>;
+  /**
+   * The error surfaced to the caller. When more than one attempt was made,
+   * this is a `RetryError` wrapping every attempt error; otherwise the raw
+   * error.
+   */
+  error: unknown;
+};
+
+/**
  * Telemetry configuration for retry instrumentation.
  *
- * Mirrors the AI SDK's `experimental_telemetry` shape so the two can be
- * configured the same way. When enabled, each request emits an OpenTelemetry
- * span for the operation with a child span per attempt. Spans created here
- * nest under any active span (e.g. the AI SDK's `ai.generateText.doGenerate`)
- * via OpenTelemetry context propagation.
+ * Talks to OpenTelemetry directly and independently of the AI SDK: when
+ * enabled, each request emits a span for the operation with a child span per
+ * attempt. Spans created here nest under any active span (e.g. the AI SDK's
+ * `ai.generateText.doGenerate`, when that integration is registered) via
+ * OpenTelemetry context propagation.
  *
- * Requires the optional peer dependency `@opentelemetry/api` to be installed.
+ * The shape resembles the AI SDK's `telemetry` settings but is opt-in and
+ * deliberately keeps a `tracer` field (which the AI SDK moved to its
+ * `@ai-sdk/otel` integration), so retry spans work without adopting that
+ * integration.
+ *
+ * Requires the optional peer dependency `@opentelemetry/api` to be installed
+ * (in AI SDK v7 it is no longer a transitive dependency of `ai`; install
+ * `@ai-sdk/otel` or `@opentelemetry/api` directly).
  */
 export interface RetryTelemetrySettings {
   /**
@@ -238,10 +285,6 @@ export interface RetryTelemetrySettings {
    * OpenTelemetry SDK is registered.
    */
   tracer?: Tracer;
-  /**
-   * Identifier for this function. Used to group telemetry data by function.
-   */
-  functionId?: string;
   /**
    * Additional information to include in the telemetry data. Recorded on the
    * operation span as `ai_retry.metadata.<key>` attributes.
@@ -271,6 +314,12 @@ export interface RetryableModelOptions<
    * Telemetry configuration. When enabled, emits OpenTelemetry spans for
    * retry operations and attempts. Requires `@opentelemetry/api`.
    */
+  telemetry?: RetryTelemetrySettings;
+
+  /**
+   * @deprecated Use `telemetry` instead. Kept as an alias for compatibility;
+   * when both are set, `telemetry` takes precedence.
+   */
   experimental_telemetry?: RetryTelemetrySettings;
 
   // TODO: future iteration could let `onError` similarly decide whether a retry actually fires (today it is purely observational).
@@ -291,6 +340,14 @@ export interface RetryableModelOptions<
     context: RetryContext<MODEL>,
   ) => void | OnRetryOverrides<MODEL> | Promise<void | OnRetryOverrides<MODEL>>;
   onSuccess?: (context: SuccessContext<MODEL>) => void;
+  /**
+   * Called once when an operation terminally fails and the error could not
+   * be recovered by a retry: no retry matched, all retries were exhausted,
+   * or the retry itself failed. The counterpart to `onSuccess`.
+   *
+   * Not called when retries are disabled.
+   */
+  onFailure?: (context: FailureContext<MODEL>) => void;
 }
 
 /**
@@ -298,15 +355,13 @@ export interface RetryableModelOptions<
  *
  * The model can be:
  * - The exact MODEL type (instance)
- * - A gateway string literal (for LanguageModel only)
+ * - A gateway string literal (for any model family)
  * - A ResolvableModel<MODEL> (for compatibility with plain model arrays)
  *
  * This flexible approach allows retryable functions to return the exact model type
  * they received without type assertions, while still supporting string-based gateway models.
  */
-export type Retry<
-  MODEL extends ResolvableLanguageModel | EmbeddingModel | ImageModel,
-> = {
+export type Retry<MODEL extends AnyResolvableModel> = {
   model: MODEL;
   /**
    * Maximum number of attempts for this model.
@@ -328,24 +383,21 @@ export type Retry<
   /**
    * Call options to override for this retry.
    */
-  options?: RetryCallOptions<
-    MODEL extends ResolvableLanguageModel ? LanguageModel : MODEL
-  >;
+  options?: RetryCallOptions<ResolvedModel<MODEL>>;
   /**
    * @deprecated Use `options.providerOptions` instead.
    * Provider options to override for this retry.
    * If both `providerOptions` and `options.providerOptions` are set,
    * `options.providerOptions` takes precedence.
    */
-  providerOptions?: SharedV3ProviderOptions;
+  // TODO remove in this version
+  providerOptions?: SharedV4ProviderOptions;
 };
 
 /**
  * A function that determines whether to retry with a different model based on the current attempt and all previous attempts.
  */
-export type Retryable<
-  MODEL extends ResolvableLanguageModel | EmbeddingModel | ImageModel,
-> = (
+export type Retryable<MODEL extends AnyResolvableModel> = (
   context: RetryContext<MODEL>,
 ) => Retry<MODEL> | Promise<Retry<MODEL> | undefined> | undefined;
 
@@ -356,9 +408,9 @@ export type Retries<MODEL extends LanguageModel | EmbeddingModel | ImageModel> =
     | ResolvableModel<MODEL>
   >;
 
-export type RetryableOptions<
-  MODEL extends ResolvableLanguageModel | EmbeddingModel | ImageModel,
-> = Partial<Omit<Retry<MODEL>, 'model'>>;
+export type RetryableOptions<MODEL extends AnyResolvableModel> = Partial<
+  Omit<Retry<MODEL>, 'model'>
+>;
 
 /**
  * Controls when to reset the sticky model back to the base model.

@@ -1,7 +1,4 @@
-import {
-  convertArrayToReadableStream,
-  convertAsyncIterableToArray,
-} from '@ai-sdk/provider-utils/test';
+import { Iterables } from 'ai-test-kit';
 import {
   APICallError,
   embed,
@@ -10,9 +7,9 @@ import {
   streamText,
 } from 'ai';
 import { describe, expect, it } from 'vitest';
-import { createRetryable } from '../create-retryable-model.js';
 import {
   chunksToText,
+  createRetryableModel,
   MockEmbeddingModel,
   mockEmbeddings,
   MockImageModel,
@@ -30,12 +27,12 @@ describe('requestNotRetryable', () => {
   describe('generateText', () => {
     it('should succeed without errors', async () => {
       // Arrange
-      const baseModel = new MockLanguageModel({ doGenerate: mockResult });
-      const retryModel = new MockLanguageModel({ doGenerate: mockResult });
+      const baseModel = MockLanguageModel.from({ doGenerate: mockResult });
+      const retryModel = MockLanguageModel.from({ doGenerate: mockResult });
 
       // Act
       const result = await generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [requestNotRetryable(retryModel)],
         }),
@@ -49,14 +46,14 @@ describe('requestNotRetryable', () => {
 
     it('should fallback in case of non-retryable error', async () => {
       // Arrange
-      const baseModel = new MockLanguageModel({
+      const baseModel = MockLanguageModel.from({
         doGenerate: nonRetryableError,
       });
-      const retryModel = new MockLanguageModel({ doGenerate: mockResult });
+      const retryModel = MockLanguageModel.from({ doGenerate: mockResult });
 
       // Act
       const result = await generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [requestNotRetryable(retryModel)],
         }),
@@ -72,12 +69,12 @@ describe('requestNotRetryable', () => {
 
     it('should not fallback for retryable error', async () => {
       // Arrange
-      const baseModel = new MockLanguageModel({ doGenerate: retryableError });
-      const retryModel = new MockLanguageModel({ doGenerate: mockResult });
+      const baseModel = MockLanguageModel.from({ doGenerate: retryableError });
+      const retryModel = MockLanguageModel.from({ doGenerate: mockResult });
 
       // Act
       const result = generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [requestNotRetryable(retryModel)],
         }),
@@ -94,12 +91,12 @@ describe('requestNotRetryable', () => {
     it('should not fallback for non AI SDK errors', async () => {
       // Arrange
       const genericError = new Error('Some generic error');
-      const baseModel = new MockLanguageModel({ doGenerate: genericError });
-      const retryModel = new MockLanguageModel({ doGenerate: mockResult });
+      const baseModel = MockLanguageModel.from({ doGenerate: genericError });
+      const retryModel = MockLanguageModel.from({ doGenerate: mockResult });
 
       // Act
       const result = generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [requestNotRetryable(retryModel)],
         }),
@@ -117,21 +114,17 @@ describe('requestNotRetryable', () => {
   describe('streamText', () => {
     it('should succeed without errors', async () => {
       // Arrange
-      const baseModel = new MockLanguageModel({
-        doStream: {
-          stream: convertArrayToReadableStream(mockStreamChunks),
-        },
+      const baseModel = MockLanguageModel.from({
+        doStream: mockStreamChunks,
       });
-      const retryModel = new MockLanguageModel({
-        doStream: {
-          stream: convertArrayToReadableStream(mockStreamChunks),
-        },
+      const retryModel = MockLanguageModel.from({
+        doStream: mockStreamChunks,
       });
       let error: unknown;
 
       // Act
       const result = streamText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [requestNotRetryable(retryModel)],
         }),
@@ -141,7 +134,7 @@ describe('requestNotRetryable', () => {
         },
       });
 
-      const chunks = await convertAsyncIterableToArray(result.fullStream);
+      const chunks = await Iterables.toArray(result.fullStream);
 
       // Assert
       expect(baseModel.doStream).toHaveBeenCalledTimes(1);
@@ -152,17 +145,15 @@ describe('requestNotRetryable', () => {
 
     it('should fallback in case of non-retryable error', async () => {
       // Arrange
-      const baseModel = new MockLanguageModel({ doStream: nonRetryableError });
-      const retryModel = new MockLanguageModel({
-        doStream: {
-          stream: convertArrayToReadableStream(mockStreamChunks),
-        },
+      const baseModel = MockLanguageModel.from({ doStream: nonRetryableError });
+      const retryModel = MockLanguageModel.from({
+        doStream: mockStreamChunks,
       });
       let error: unknown;
 
       // Act
       const result = streamText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [requestNotRetryable(retryModel)],
         }),
@@ -173,7 +164,7 @@ describe('requestNotRetryable', () => {
         },
       });
 
-      const chunks = await convertAsyncIterableToArray(result.fullStream);
+      const chunks = await Iterables.toArray(result.fullStream);
 
       // Assert
       expect(baseModel.doStream).toHaveBeenCalledTimes(1);
@@ -184,17 +175,15 @@ describe('requestNotRetryable', () => {
 
     it('should not fallback for retryable error', async () => {
       // Arrange
-      const baseModel = new MockLanguageModel({ doStream: retryableError });
-      const retryModel = new MockLanguageModel({
-        doStream: {
-          stream: convertArrayToReadableStream(mockStreamChunks),
-        },
+      const baseModel = MockLanguageModel.from({ doStream: retryableError });
+      const retryModel = MockLanguageModel.from({
+        doStream: mockStreamChunks,
       });
       let error: unknown;
 
       // Act
       const result = streamText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [requestNotRetryable(retryModel)],
         }),
@@ -205,7 +194,7 @@ describe('requestNotRetryable', () => {
         },
       });
 
-      const chunks = await convertAsyncIterableToArray(result.fullStream);
+      const chunks = await Iterables.toArray(result.fullStream);
 
       // Assert
       expect(baseModel.doStream).toHaveBeenCalledTimes(1);
@@ -227,17 +216,15 @@ describe('requestNotRetryable', () => {
     it('should not fallback for non AI SDK errors', async () => {
       // Arrange
       const genericError = new Error('Some generic error');
-      const baseModel = new MockLanguageModel({ doStream: genericError });
-      const retryModel = new MockLanguageModel({
-        doStream: {
-          stream: convertArrayToReadableStream(mockStreamChunks),
-        },
+      const baseModel = MockLanguageModel.from({ doStream: genericError });
+      const retryModel = MockLanguageModel.from({
+        doStream: mockStreamChunks,
       });
       let error: unknown;
 
       // Act
       const result = streamText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [requestNotRetryable(retryModel)],
         }),
@@ -248,7 +235,7 @@ describe('requestNotRetryable', () => {
         },
       });
 
-      const chunks = await convertAsyncIterableToArray(result.fullStream);
+      const chunks = await Iterables.toArray(result.fullStream);
 
       // Assert
       expect(baseModel.doStream).toHaveBeenCalledTimes(1);
@@ -271,12 +258,12 @@ describe('requestNotRetryable', () => {
   describe('embed', () => {
     it('should succeed without errors', async () => {
       // Arrange
-      const baseModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
-      const retryModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
+      const baseModel = MockEmbeddingModel.from(mockEmbeddings);
+      const retryModel = MockEmbeddingModel.from(mockEmbeddings);
 
       // Act
       const result = await embed({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [requestNotRetryable(retryModel)],
         }),
@@ -290,14 +277,12 @@ describe('requestNotRetryable', () => {
 
     it('should fallback in case of non-retryable error', async () => {
       // Arrange
-      const baseModel = new MockEmbeddingModel({
-        doEmbed: nonRetryableError,
-      });
-      const retryModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
+      const baseModel = MockEmbeddingModel.from(nonRetryableError);
+      const retryModel = MockEmbeddingModel.from(mockEmbeddings);
 
       // Act
       const result = await embed({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [requestNotRetryable(retryModel)],
         }),
@@ -313,12 +298,12 @@ describe('requestNotRetryable', () => {
 
     it('should not fallback for retryable error', async () => {
       // Arrange
-      const baseModel = new MockEmbeddingModel({ doEmbed: retryableError });
-      const retryModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
+      const baseModel = MockEmbeddingModel.from(retryableError);
+      const retryModel = MockEmbeddingModel.from(mockEmbeddings);
 
       // Act
       const result = embed({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [requestNotRetryable(retryModel)],
         }),
@@ -335,12 +320,12 @@ describe('requestNotRetryable', () => {
     it('should not fallback for non AI SDK errors', async () => {
       // Arrange
       const genericError = new Error('Some generic error');
-      const baseModel = new MockEmbeddingModel({ doEmbed: genericError });
-      const retryModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
+      const baseModel = MockEmbeddingModel.from(genericError);
+      const retryModel = MockEmbeddingModel.from(mockEmbeddings);
 
       // Act
       const result = embed({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [requestNotRetryable(retryModel)],
         }),
@@ -358,12 +343,12 @@ describe('requestNotRetryable', () => {
   describe('generateImage', () => {
     it('should succeed without errors', async () => {
       // Arrange
-      const baseModel = new MockImageModel({ doGenerate: mockImageResult });
-      const retryModel = new MockImageModel({ doGenerate: mockImageResult });
+      const baseModel = MockImageModel.from(mockImageResult);
+      const retryModel = MockImageModel.from(mockImageResult);
 
       // Act
       const result = await generateImage({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [requestNotRetryable(retryModel)],
         }),
@@ -378,12 +363,12 @@ describe('requestNotRetryable', () => {
 
     it('should fallback on non-retryable error', async () => {
       // Arrange
-      const baseModel = new MockImageModel({ doGenerate: nonRetryableError });
-      const retryModel = new MockImageModel({ doGenerate: mockImageResult });
+      const baseModel = MockImageModel.from(nonRetryableError);
+      const retryModel = MockImageModel.from(mockImageResult);
 
       // Act
       const result = await generateImage({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [requestNotRetryable(retryModel)],
         }),
@@ -399,12 +384,12 @@ describe('requestNotRetryable', () => {
 
     it('should not fallback for retryable errors', async () => {
       // Arrange
-      const baseModel = new MockImageModel({ doGenerate: retryableError });
-      const retryModel = new MockImageModel({ doGenerate: mockImageResult });
+      const baseModel = MockImageModel.from(retryableError);
+      const retryModel = MockImageModel.from(mockImageResult);
 
       // Act
       const result = generateImage({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [requestNotRetryable(retryModel)],
         }),

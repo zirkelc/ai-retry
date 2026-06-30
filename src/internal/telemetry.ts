@@ -185,9 +185,6 @@ class OpenTelemetrySink implements TelemetrySink {
       'ai_retry.model.start': `${info.provider}/${info.modelId}`,
       'gen_ai.operation.name': info.genAiOperation,
     };
-    if (this.#settings.functionId !== undefined) {
-      attributes['ai_retry.function.id'] = this.#settings.functionId;
-    }
     if (this.#settings.metadata) {
       for (const [key, value] of Object.entries(this.#settings.metadata)) {
         attributes[`ai_retry.metadata.${key}`] = value;

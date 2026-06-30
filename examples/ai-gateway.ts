@@ -1,17 +1,18 @@
 import { openai } from '@ai-sdk/openai';
 import { embed, gateway, generateText } from 'ai';
-import { createRetryable, type EmbeddingModel } from '../src/index.js';
+import { createRetryableModel as createRetryableEmbedding } from '../src/embedding-model/index.js';
+import { createRetryableModel } from '../src/language-model/index.js';
 
-const retryableLanguageModel = createRetryable({
+const retryableLanguageModel = createRetryableModel({
   model: 'openai/gpt-4.1',
   retries: [
     'anthropic/claude-sonnet-4',
-    { model: 'xai/grok-4' },
+    { model: 'xai/grok-4.3' },
     gateway('openai/gpt-4.1'),
   ],
 });
 
-const retryableEmbeddingModel = createRetryable({
+const retryableEmbeddingModel = createRetryableEmbedding({
   model: gateway.textEmbeddingModel('openai/text-embedding-3-large'),
   retries: [],
 });

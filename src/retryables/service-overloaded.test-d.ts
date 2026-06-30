@@ -1,6 +1,6 @@
 import { describe, expectTypeOf, it } from 'vitest';
-import { createRetryable } from '../create-retryable-model.js';
 import {
+  createRetryableModel,
   MockEmbeddingModel,
   MockImageModel,
   MockLanguageModel,
@@ -10,10 +10,10 @@ import { serviceOverloaded } from './service-overloaded.js';
 
 describe('serviceOverloaded', () => {
   it('should accept language model instance', () => {
-    const model = new MockLanguageModel();
+    const model = MockLanguageModel.from();
     const retryable = serviceOverloaded(model);
 
-    const retryableModel = createRetryable({
+    const retryableModel = createRetryableModel({
       model,
       retries: [retryable],
     });
@@ -22,10 +22,10 @@ describe('serviceOverloaded', () => {
   });
 
   it('should accept embedding model instance', () => {
-    const model = new MockEmbeddingModel();
+    const model = MockEmbeddingModel.from();
     const retryable = serviceOverloaded(model);
 
-    const retryableModel = createRetryable({
+    const retryableModel = createRetryableModel({
       model,
       retries: [retryable],
     });
@@ -34,10 +34,10 @@ describe('serviceOverloaded', () => {
   });
 
   it('should accept language model with options', () => {
-    const model = new MockLanguageModel();
+    const model = MockLanguageModel.from();
     const retryable = serviceOverloaded(model, { maxAttempts: 3 });
 
-    const retryableModel = createRetryable({
+    const retryableModel = createRetryableModel({
       model,
       retries: [retryable],
     });
@@ -46,10 +46,10 @@ describe('serviceOverloaded', () => {
   });
 
   it('should accept embedding model with options', () => {
-    const model = new MockEmbeddingModel();
+    const model = MockEmbeddingModel.from();
     const retryable = serviceOverloaded(model, { maxAttempts: 3 });
 
-    const retryableModel = createRetryable({
+    const retryableModel = createRetryableModel({
       model,
       retries: [retryable],
     });
@@ -60,7 +60,7 @@ describe('serviceOverloaded', () => {
   it('should accept model string', () => {
     const retryable = serviceOverloaded('openai/gpt-4.1');
 
-    const retryableModel = createRetryable({
+    const retryableModel = createRetryableModel({
       model: 'openai/gpt-4.1',
       retries: [retryable],
     });
@@ -69,10 +69,10 @@ describe('serviceOverloaded', () => {
   });
 
   it('should accept image model instance', () => {
-    const model = new MockImageModel();
+    const model = MockImageModel.from();
     const retryable = serviceOverloaded(model);
 
-    const retryableModel = createRetryable({
+    const retryableModel = createRetryableModel({
       model,
       retries: [retryable],
     });
@@ -81,10 +81,10 @@ describe('serviceOverloaded', () => {
   });
 
   it('should accept image model with options', () => {
-    const model = new MockImageModel();
+    const model = MockImageModel.from();
     const retryable = serviceOverloaded(model, { maxAttempts: 3 });
 
-    const retryableModel = createRetryable({
+    const retryableModel = createRetryableModel({
       model,
       retries: [retryable],
     });

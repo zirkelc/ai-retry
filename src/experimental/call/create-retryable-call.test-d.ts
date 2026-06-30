@@ -14,7 +14,7 @@ describe('createRetryableCall types', () => {
   it('should default to LanguageModel with no type argument', () => {
     // Act
     const run = createRetryableCall({
-      model: new MockLanguageModel(),
+      model: MockLanguageModel.from(),
       retries: [],
     });
 
@@ -29,7 +29,7 @@ describe('createRetryableCall types', () => {
   it('should generalize to EmbeddingModel', () => {
     // Act
     const run = createRetryableCall<EmbeddingModel>({
-      model: new MockEmbeddingModel(),
+      model: MockEmbeddingModel.from(),
       retries: [],
     });
 
@@ -43,7 +43,7 @@ describe('createRetryableCall types', () => {
   it('should generalize to ImageModel', () => {
     // Act
     const run = createRetryableCall<ImageModel>({
-      model: new MockImageModel(),
+      model: MockImageModel.from(),
       retries: [],
     });
 

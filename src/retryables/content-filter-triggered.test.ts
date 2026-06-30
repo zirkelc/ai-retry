@@ -1,7 +1,4 @@
-import {
-  convertArrayToReadableStream,
-  convertAsyncIterableToArray,
-} from '@ai-sdk/provider-utils/test';
+import { Errors, Iterables } from 'ai-test-kit';
 import {
   APICallError,
   generateText,
@@ -9,11 +6,11 @@ import {
   streamText,
 } from 'ai';
 import { describe, expect, it } from 'vitest';
-import { createRetryable } from '../create-retryable-model.js';
 import {
+  MockLanguageModel,
   chunksToText,
   contentFilterResult,
-  MockLanguageModel,
+  createRetryableModel,
   mockResult,
   mockResultText,
   mockStreamChunks,
@@ -44,7 +41,7 @@ const contentFilterChunks: LanguageModelStreamPart[] = [
   },
 ];
 
-const apiCallError = new APICallError({
+const apiCallError = Errors.from({
   message:
     "The response was filtered due to the prompt triggering Azure OpenAI's content management policy. Please modify your prompt and retry. To learn more about our content filtering policies please read our documentation: https://go.microsoft.com/fwlink/?linkid=2198766",
   url: '',
@@ -69,12 +66,12 @@ describe('contentFilterTriggered', () => {
   describe('generateText', () => {
     it('should succeed without errors', async () => {
       // Arrange
-      const baseModel = new MockLanguageModel({ doGenerate: mockResult });
-      const retryModel = new MockLanguageModel({ doGenerate: mockResult });
+      const baseModel = MockLanguageModel.from({ doGenerate: mockResult });
+      const retryModel = MockLanguageModel.from({ doGenerate: mockResult });
 
       // Act
       const result = await generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [contentFilterTriggered(retryModel)],
         }),
@@ -88,14 +85,14 @@ describe('contentFilterTriggered', () => {
 
     it('should retry in case of content filter result', async () => {
       // Arrange
-      const baseModel = new MockLanguageModel({
+      const baseModel = MockLanguageModel.from({
         doGenerate: contentFilterResult,
       });
-      const retryModel = new MockLanguageModel({ doGenerate: mockResult });
+      const retryModel = MockLanguageModel.from({ doGenerate: mockResult });
 
       // Act
       const result = await generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [contentFilterTriggered(retryModel)],
         }),
@@ -111,14 +108,12 @@ describe('contentFilterTriggered', () => {
 
     it('should retry in case of content filter error', async () => {
       // Arrange
-      const baseModel = new MockLanguageModel({
-        doGenerate: apiCallError,
-      });
-      const retryModel = new MockLanguageModel({ doGenerate: mockResult });
+      const baseModel = MockLanguageModel.from({ doGenerate: apiCallError });
+      const retryModel = MockLanguageModel.from({ doGenerate: mockResult });
 
       // Act
       const result = await generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [contentFilterTriggered(retryModel)],
         }),
@@ -134,31 +129,15 @@ describe('contentFilterTriggered', () => {
 
     it('should not retry if no matches', async () => {
       // Arrange
-      const baseModel = new MockLanguageModel({
-        doGenerate: new APICallError({
-          message: 'Some other error',
-          url: '',
-          requestBodyValues: {},
-          statusCode: 400,
-          responseHeaders: {},
-          responseBody: '{}',
-          isRetryable: false,
-          data: {
-            error: {
-              message: 'Some other error',
-              type: null,
-              param: 'prompt',
-              code: 'other_error',
-            },
-          },
-        }),
+      const baseModel = MockLanguageModel.from({
+        doGenerate: Errors.badRequest(),
       });
 
-      const retryModel = new MockLanguageModel({ doGenerate: mockResult });
+      const retryModel = MockLanguageModel.from({ doGenerate: mockResult });
 
       // Act
       const result = generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [contentFilterTriggered(retryModel)],
         }),
@@ -176,21 +155,17 @@ describe('contentFilterTriggered', () => {
   describe('streamText', () => {
     it('should succeed without errors', async () => {
       // Arrange
-      const baseModel = new MockLanguageModel({
-        doStream: {
-          stream: convertArrayToReadableStream(mockStreamChunks),
-        },
+      const baseModel = MockLanguageModel.from({
+        doStream: mockStreamChunks,
       });
-      const retryModel = new MockLanguageModel({
-        doStream: {
-          stream: convertArrayToReadableStream(mockStreamChunks),
-        },
+      const retryModel = MockLanguageModel.from({
+        doStream: mockStreamChunks,
       });
       let error: unknown;
 
       // Act
       const result = streamText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [contentFilterTriggered(retryModel)],
         }),
@@ -200,7 +175,7 @@ describe('contentFilterTriggered', () => {
         },
       });
 
-      const chunks = await convertAsyncIterableToArray(result.fullStream);
+      const chunks = await Iterables.toArray(result.fullStream);
 
       // Assert
       expect(baseModel.doStream).toHaveBeenCalledTimes(1);
@@ -211,17 +186,15 @@ describe('contentFilterTriggered', () => {
 
     it('should retry in case of content filter error', async () => {
       // Arrange
-      const baseModel = new MockLanguageModel({ doStream: apiCallError });
-      const retryModel = new MockLanguageModel({
-        doStream: {
-          stream: convertArrayToReadableStream(mockStreamChunks),
-        },
+      const baseModel = MockLanguageModel.from({ doStream: apiCallError });
+      const retryModel = MockLanguageModel.from({
+        doStream: mockStreamChunks,
       });
       let error: unknown;
 
       // Act
       const result = streamText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [contentFilterTriggered(retryModel)],
         }),
@@ -232,7 +205,7 @@ describe('contentFilterTriggered', () => {
         },
       });
 
-      const chunks = await convertAsyncIterableToArray(result.fullStream);
+      const chunks = await Iterables.toArray(result.fullStream);
 
       // Assert
       expect(baseModel.doStream).toHaveBeenCalledTimes(1);
@@ -243,21 +216,17 @@ describe('contentFilterTriggered', () => {
 
     it('should retry when finish part reports content-filter before any content', async () => {
       // Arrange
-      const baseModel = new MockLanguageModel({
-        doStream: {
-          stream: convertArrayToReadableStream(contentFilterChunks),
-        },
+      const baseModel = MockLanguageModel.from({
+        doStream: contentFilterChunks,
       });
-      const retryModel = new MockLanguageModel({
-        doStream: {
-          stream: convertArrayToReadableStream(mockStreamChunks),
-        },
+      const retryModel = MockLanguageModel.from({
+        doStream: mockStreamChunks,
       });
       let error: unknown;
 
       // Act
       const result = streamText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [contentFilterTriggered(retryModel)],
         }),
@@ -268,7 +237,7 @@ describe('contentFilterTriggered', () => {
         },
       });
 
-      const chunks = await convertAsyncIterableToArray(result.fullStream);
+      const chunks = await Iterables.toArray(result.fullStream);
 
       // Assert
       expect(baseModel.doStream).toHaveBeenCalledTimes(1);
@@ -279,36 +248,18 @@ describe('contentFilterTriggered', () => {
 
     it('should not retry if no matches', async () => {
       // Arrange
-      const baseModel = new MockLanguageModel({
-        doStream: new APICallError({
-          message: 'Some other error',
-          url: '',
-          requestBodyValues: {},
-          statusCode: 400,
-          responseHeaders: {},
-          responseBody: '{}',
-          isRetryable: false,
-          data: {
-            error: {
-              message: 'Some other error',
-              type: null,
-              param: 'prompt',
-              code: 'other_error',
-            },
-          },
-        }),
+      const baseModel = MockLanguageModel.from({
+        doStream: Errors.badRequest(),
       });
 
-      const retryModel = new MockLanguageModel({
-        doStream: {
-          stream: convertArrayToReadableStream(mockStreamChunks),
-        },
+      const retryModel = MockLanguageModel.from({
+        doStream: mockStreamChunks,
       });
       let error: unknown;
 
       // Act
       const result = streamText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [contentFilterTriggered(retryModel)],
         }),
@@ -319,7 +270,7 @@ describe('contentFilterTriggered', () => {
         },
       });
 
-      const chunks = await convertAsyncIterableToArray(result.fullStream);
+      const chunks = await Iterables.toArray(result.fullStream);
 
       // Assert
       expect(baseModel.doStream).toHaveBeenCalledTimes(1);
@@ -331,7 +282,7 @@ describe('contentFilterTriggered', () => {
             "type": "start",
           },
           {
-            "error": [AI_APICallError: Some other error],
+            "error": [AI_APICallError: Bad request],
             "type": "error",
           },
         ]

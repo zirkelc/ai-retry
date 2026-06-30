@@ -9,8 +9,8 @@ import type {
 } from '../types.js';
 
 describe('resolveBackoffDelay', () => {
-  const model = new MockLanguageModel();
-  const other = new MockLanguageModel();
+  const model = MockLanguageModel.from();
+  const other = MockLanguageModel.from();
   const options: LanguageModelCallOptions = { prompt: [] };
 
   /** Build N prior error attempts against the given model. */

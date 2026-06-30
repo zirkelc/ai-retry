@@ -1,9 +1,6 @@
 import { anthropic } from '@ai-sdk/anthropic';
 import { openai } from '@ai-sdk/openai';
-import {
-  convertArrayToReadableStream,
-  convertAsyncIterableToArray,
-} from '@ai-sdk/provider-utils/test';
+import { Errors, Iterables } from 'ai-test-kit';
 import { createTestServer } from '@ai-sdk/test-server';
 import {
   APICallError,
@@ -13,30 +10,21 @@ import {
   streamText,
 } from 'ai';
 import { describe, expect, it, vi } from 'vitest';
-import { createRetryable } from '../create-retryable-model.js';
 import {
-  chunksToText,
   MockEmbeddingModel,
-  mockEmbeddings,
   MockImageModel,
-  mockImageResult,
   MockLanguageModel,
+  chunksToText,
+  createRetryableModel,
+  mockEmbeddings,
+  mockImageResult,
   mockResult,
   mockResultText,
   mockStreamChunks,
 } from '../internal/test-utils.js';
 import { serviceOverloaded } from './service-overloaded.js';
 
-const overloadedError = new APICallError({
-  message: 'Overloaded',
-  url: '',
-  requestBodyValues: {},
-  statusCode: 529,
-  responseHeaders: {},
-  responseBody: '',
-  isRetryable: false,
-  data: {},
-});
+const overloadedError = Errors.serviceOverloaded();
 
 const errorChunk = (error: Record<string, any>): string =>
   `data: {"type":"error","error":${JSON.stringify(error)}}\n\n`;
@@ -61,12 +49,12 @@ describe('serviceOverloaded', () => {
   describe('generateText', () => {
     it('should succeed without errors', async () => {
       // Arrange
-      const baseModel = new MockLanguageModel({ doGenerate: mockResult });
-      const retryModel = new MockLanguageModel({ doGenerate: mockResult });
+      const baseModel = MockLanguageModel.from({ doGenerate: mockResult });
+      const retryModel = MockLanguageModel.from({ doGenerate: mockResult });
 
       // Act
       const result = await generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [serviceOverloaded(retryModel)],
         }),
@@ -80,12 +68,12 @@ describe('serviceOverloaded', () => {
 
     it('should retry for status 529', async () => {
       // Arrange
-      const baseModel = new MockLanguageModel({ doGenerate: overloadedError });
-      const retryModel = new MockLanguageModel({ doGenerate: mockResult });
+      const baseModel = MockLanguageModel.from({ doGenerate: overloadedError });
+      const retryModel = MockLanguageModel.from({ doGenerate: mockResult });
 
       // Act
       const result = await generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [serviceOverloaded(retryModel)],
         }),
@@ -100,12 +88,12 @@ describe('serviceOverloaded', () => {
 
     it('should not retry for status 200', async () => {
       // Arrange
-      const baseModel = new MockLanguageModel({ doGenerate: mockResult });
-      const retryModel = new MockLanguageModel({ doGenerate: mockResult });
+      const baseModel = MockLanguageModel.from({ doGenerate: mockResult });
+      const retryModel = MockLanguageModel.from({ doGenerate: mockResult });
 
       // Act
       const result = await generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [serviceOverloaded(retryModel)],
         }),
@@ -120,31 +108,15 @@ describe('serviceOverloaded', () => {
 
     it('should not retry if no matches', async () => {
       // Arrange
-      const baseModel = new MockLanguageModel({
-        doGenerate: new APICallError({
-          message: 'Some other error',
-          url: '',
-          requestBodyValues: {},
-          statusCode: 400,
-          responseHeaders: {},
-          responseBody: '{}',
-          isRetryable: false,
-          data: {
-            error: {
-              message: 'Some other error',
-              type: null,
-              param: 'prompt',
-              code: 'other_error',
-            },
-          },
-        }),
+      const baseModel = MockLanguageModel.from({
+        doGenerate: Errors.badRequest(),
       });
 
-      const retryModel = new MockLanguageModel({ doGenerate: mockResult });
+      const retryModel = MockLanguageModel.from({ doGenerate: mockResult });
 
       // Act
       const result = generateText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [serviceOverloaded(retryModel)],
         }),
@@ -162,21 +134,17 @@ describe('serviceOverloaded', () => {
   describe('streamText', () => {
     it('should succeed without errors', async () => {
       // Arrange
-      const baseModel = new MockLanguageModel({
-        doStream: {
-          stream: convertArrayToReadableStream(mockStreamChunks),
-        },
+      const baseModel = MockLanguageModel.from({
+        doStream: mockStreamChunks,
       });
-      const retryModel = new MockLanguageModel({
-        doStream: {
-          stream: convertArrayToReadableStream(mockStreamChunks),
-        },
+      const retryModel = MockLanguageModel.from({
+        doStream: mockStreamChunks,
       });
       let error: unknown;
 
       // Act
       const result = streamText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [serviceOverloaded(retryModel)],
         }),
@@ -186,7 +154,7 @@ describe('serviceOverloaded', () => {
         },
       });
 
-      const chunks = await convertAsyncIterableToArray(result.fullStream);
+      const chunks = await Iterables.toArray(result.fullStream);
 
       // Assert
       expect(baseModel.doStream).toHaveBeenCalledTimes(1);
@@ -197,17 +165,15 @@ describe('serviceOverloaded', () => {
 
     it('should retry for status 529', async () => {
       // Arrange
-      const baseModel = new MockLanguageModel({ doStream: overloadedError });
-      const retryModel = new MockLanguageModel({
-        doStream: {
-          stream: convertArrayToReadableStream(mockStreamChunks),
-        },
+      const baseModel = MockLanguageModel.from({ doStream: overloadedError });
+      const retryModel = MockLanguageModel.from({
+        doStream: mockStreamChunks,
       });
       let error: unknown;
 
       // Act
       const result = streamText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [serviceOverloaded(retryModel)],
         }),
@@ -217,7 +183,7 @@ describe('serviceOverloaded', () => {
         },
       });
 
-      const chunks = await convertAsyncIterableToArray(result.fullStream);
+      const chunks = await Iterables.toArray(result.fullStream);
 
       // Assert
       expect(baseModel.doStream).toHaveBeenCalledTimes(1);
@@ -228,36 +194,18 @@ describe('serviceOverloaded', () => {
 
     it('should not retry if no matches', async () => {
       // Arrange
-      const baseModel = new MockLanguageModel({
-        doStream: new APICallError({
-          message: 'Some other error',
-          url: '',
-          requestBodyValues: {},
-          statusCode: 400,
-          responseHeaders: {},
-          responseBody: '{}',
-          isRetryable: false,
-          data: {
-            error: {
-              message: 'Some other error',
-              type: null,
-              param: 'prompt',
-              code: 'other_error',
-            },
-          },
-        }),
+      const baseModel = MockLanguageModel.from({
+        doStream: Errors.badRequest(),
       });
 
-      const retryModel = new MockLanguageModel({
-        doStream: {
-          stream: convertArrayToReadableStream(mockStreamChunks),
-        },
+      const retryModel = MockLanguageModel.from({
+        doStream: mockStreamChunks,
       });
       let error: unknown;
 
       // Act
       const result = streamText({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [serviceOverloaded(retryModel)],
         }),
@@ -268,7 +216,7 @@ describe('serviceOverloaded', () => {
         },
       });
 
-      const chunks = await convertAsyncIterableToArray(result.fullStream);
+      const chunks = await Iterables.toArray(result.fullStream);
 
       // Assert
       expect(baseModel.doStream).toHaveBeenCalledTimes(1);
@@ -280,7 +228,7 @@ describe('serviceOverloaded', () => {
             "type": "start",
           },
           {
-            "error": [AI_APICallError: Some other error],
+            "error": [AI_APICallError: Bad request],
             "type": "error",
           },
         ]
@@ -318,7 +266,7 @@ describe('serviceOverloaded', () => {
 
         // Act
         const result = streamText({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [serviceOverloaded(retryModel)],
           }),
@@ -329,7 +277,7 @@ describe('serviceOverloaded', () => {
           },
         });
 
-        const chunks = await convertAsyncIterableToArray(result.textStream);
+        const chunks = await Iterables.toArray(result.textStream);
 
         // Assert
         expect(baseModelSpy).toHaveBeenCalledTimes(1);
@@ -360,7 +308,7 @@ describe('serviceOverloaded', () => {
 
         // Act
         const result = streamText({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [serviceOverloaded(retryModel)],
           }),
@@ -371,7 +319,7 @@ describe('serviceOverloaded', () => {
           },
         });
 
-        const chunks = await convertAsyncIterableToArray(result.textStream);
+        const chunks = await Iterables.toArray(result.textStream);
 
         // Assert
         expect(baseModelSpy).toHaveBeenCalledTimes(1);
@@ -405,14 +353,14 @@ describe('serviceOverloaded', () => {
 
         // Act
         const result = streamText({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [serviceOverloaded(retryModel)],
           }),
           prompt: 'Hello!',
         });
 
-        const chunks = await convertAsyncIterableToArray(result.textStream);
+        const chunks = await Iterables.toArray(result.textStream);
 
         // Assert
         expect(baseModelSpy).toHaveBeenCalledTimes(1);
@@ -429,12 +377,12 @@ describe('serviceOverloaded', () => {
   describe('embed', () => {
     it('should succeed without errors', async () => {
       // Arrange
-      const baseModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
-      const retryModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
+      const baseModel = MockEmbeddingModel.from(mockEmbeddings);
+      const retryModel = MockEmbeddingModel.from(mockEmbeddings);
 
       // Act
       const result = await embed({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [serviceOverloaded(retryModel)],
         }),
@@ -448,12 +396,12 @@ describe('serviceOverloaded', () => {
 
     it('should retry for status 529', async () => {
       // Arrange
-      const baseModel = new MockEmbeddingModel({ doEmbed: overloadedError });
-      const retryModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
+      const baseModel = MockEmbeddingModel.from(overloadedError);
+      const retryModel = MockEmbeddingModel.from(mockEmbeddings);
 
       // Act
       const result = await embed({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [serviceOverloaded(retryModel)],
         }),
@@ -468,12 +416,12 @@ describe('serviceOverloaded', () => {
 
     it('should not retry for status 200', async () => {
       // Arrange
-      const baseModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
-      const retryModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
+      const baseModel = MockEmbeddingModel.from(mockEmbeddings);
+      const retryModel = MockEmbeddingModel.from(mockEmbeddings);
 
       // Act
       const result = await embed({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [serviceOverloaded(retryModel)],
         }),
@@ -488,31 +436,13 @@ describe('serviceOverloaded', () => {
 
     it('should not retry if no matches', async () => {
       // Arrange
-      const baseModel = new MockEmbeddingModel({
-        doEmbed: new APICallError({
-          message: 'Some other error',
-          url: '',
-          requestBodyValues: {},
-          statusCode: 400,
-          responseHeaders: {},
-          responseBody: '{}',
-          isRetryable: false,
-          data: {
-            error: {
-              message: 'Some other error',
-              type: null,
-              param: 'prompt',
-              code: 'other_error',
-            },
-          },
-        }),
-      });
+      const baseModel = MockEmbeddingModel.from(Errors.badRequest());
 
-      const retryModel = new MockEmbeddingModel({ doEmbed: mockEmbeddings });
+      const retryModel = MockEmbeddingModel.from(mockEmbeddings);
 
       // Act
       const result = embed({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [serviceOverloaded(retryModel)],
         }),
@@ -530,12 +460,12 @@ describe('serviceOverloaded', () => {
   describe('generateImage', () => {
     it('should succeed without errors', async () => {
       // Arrange
-      const baseModel = new MockImageModel({ doGenerate: mockImageResult });
-      const retryModel = new MockImageModel({ doGenerate: mockImageResult });
+      const baseModel = MockImageModel.from(mockImageResult);
+      const retryModel = MockImageModel.from(mockImageResult);
 
       // Act
       const result = await generateImage({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [serviceOverloaded(retryModel)],
         }),
@@ -550,12 +480,12 @@ describe('serviceOverloaded', () => {
 
     it('should fallback on status 529', async () => {
       // Arrange
-      const baseModel = new MockImageModel({ doGenerate: overloadedError });
-      const retryModel = new MockImageModel({ doGenerate: mockImageResult });
+      const baseModel = MockImageModel.from(overloadedError);
+      const retryModel = MockImageModel.from(mockImageResult);
 
       // Act
       const result = await generateImage({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [serviceOverloaded(retryModel)],
         }),
@@ -570,30 +500,12 @@ describe('serviceOverloaded', () => {
 
     it('should not fallback for non-matching errors', async () => {
       // Arrange
-      const baseModel = new MockImageModel({
-        doGenerate: new APICallError({
-          message: 'Some other error',
-          url: '',
-          requestBodyValues: {},
-          statusCode: 400,
-          responseHeaders: {},
-          responseBody: '{}',
-          isRetryable: false,
-          data: {
-            error: {
-              message: 'Some other error',
-              type: null,
-              param: 'prompt',
-              code: 'other_error',
-            },
-          },
-        }),
-      });
-      const retryModel = new MockImageModel({ doGenerate: mockImageResult });
+      const baseModel = MockImageModel.from(Errors.badRequest());
+      const retryModel = MockImageModel.from(mockImageResult);
 
       // Act
       const result = generateImage({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [serviceOverloaded(retryModel)],
         }),

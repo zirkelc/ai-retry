@@ -1,8 +1,6 @@
 import { APICallError } from 'ai';
 import type {
-  EmbeddingModel,
-  ImageModel,
-  ResolvableLanguageModel,
+  AnyResolvableModel,
   Retryable,
   RetryableOptions,
 } from '../types.js';
@@ -14,10 +12,17 @@ import { isErrorAttempt, isObject, isString } from '../internal/guards.js';
  * - Response with status code 529
  * - Response with `type: "overloaded_error"`
  * - Response with a `message` containing "overloaded"
+ *
+ * @deprecated Use the composable condition API from
+ * `ai-retry/<family>-model/conditions`:
+ * `httpStatus(529).switch({ model: m })`.
+ * See the [v1 README](https://github.com/zirkelc/ai-retry/blob/v1/README.md)
+ * for the old function-style docs.
  */
-export function serviceOverloaded<
-  MODEL extends ResolvableLanguageModel | EmbeddingModel | ImageModel,
->(model: MODEL, options?: RetryableOptions<MODEL>): Retryable<MODEL> {
+export function serviceOverloaded<MODEL extends AnyResolvableModel>(
+  model: MODEL,
+  options?: RetryableOptions<MODEL>,
+): Retryable<MODEL> {
   return (context) => {
     const { current } = context;
 

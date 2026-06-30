@@ -1,0 +1,44 @@
+<svg width="720" height="312" viewBox="0 0 720 312" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="acc" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#a78bfa"/>
+      <stop offset="1" stop-color="#7c5cf0"/>
+    </linearGradient>
+    <linearGradient id="accText" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#a78bfa"/>
+      <stop offset="1" stop-color="#7c5cf0"/>
+    </linearGradient>
+    <radialGradient id="halo" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#8b5cf6" stop-opacity="0.20"/>
+      <stop offset="1" stop-color="#8b5cf6" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- ===== ( ) parentheses (the retry wrapper) ===== -->
+  <path d="M183 38 Q146 110 183 182" fill="none" stroke="url(#acc)" stroke-width="15" stroke-linecap="round"/>
+  <path d="M537 38 Q574 110 537 182" fill="none" stroke="url(#acc)" stroke-width="15" stroke-linecap="round"/>
+
+  <!-- ===== retry sequence: fail -> fail -> success ===== -->
+  <!-- attempt 1: failed (muted slate) -->
+  <g transform="translate(250,110) scale(3.4) translate(-12,-12)" fill="none" stroke="#94a0b1" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" stroke-width="2.9"/>
+    <path d="M21 3v5h-5" stroke-width="2.9"/>
+    <path d="M10 10 L14 14 M14 10 L10 14" stroke-width="2.3"/>
+  </g>
+  <!-- attempt 2: failed (soft accent mid-tone) -->
+  <g transform="translate(360,110) scale(3.4) translate(-12,-12)" fill="none" stroke="#b8a6f0" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" stroke-width="2.9"/>
+    <path d="M21 3v5h-5" stroke-width="2.9"/>
+    <path d="M10 10 L14 14 M14 10 L10 14" stroke-width="2.3"/>
+  </g>
+  <!-- attempt 3: success (brand purple, spotlit) -->
+  <circle cx="470" cy="110" r="56" fill="url(#halo)"/>
+  <g transform="translate(470,110) scale(3.4) translate(-12,-12)" fill="none" stroke="url(#acc)" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" stroke-width="3.1"/>
+    <path d="M21 3v5h-5" stroke-width="3.1"/>
+    <path d="M9.2 12.3 L11.1 14.2 L14.9 10.1" stroke-width="2.5"/>
+  </g>
+
+  <!-- ===== WORDMARK ===== -->
+  <text x="360" y="280" text-anchor="middle" font-family="'JetBrains Mono', monospace" font-weight="700" font-size="74" letter-spacing="-2" fill="#1c2230">ai-<tspan fill="url(#accText)">retry</tspan></text>
+</svg>

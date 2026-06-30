@@ -1,20 +1,23 @@
 import { anthropic } from '@ai-sdk/anthropic';
 import { openai } from '@ai-sdk/openai';
 import { APICallError, generateText } from 'ai';
-import { createRetryable } from 'ai-retry';
-import { error } from '../src/experimental/language-model/index.js';
-import { requestTimeout } from '../src/retryables/request-timeout.js';
+import {
+  createRetryableModel,
+  error,
+  timeout,
+} from '../src/language-model/index.js';
 
 /**
- * The experimental `error(predicate)` condition takes an arbitrary
- * predicate over the failed attempt's error. Reach for it whenever the
- * higher-level helpers (`httpStatus`, `error.statusCode`,
- * `error.message`, `error.isRetryable`) do not cover the field you need.
+ * The `error(predicate)` condition takes an arbitrary predicate over the
+ * failed attempt's error. Reach for it whenever the higher-level helpers
+ * (`httpStatus`, `error.statusCode`, `error.message`, `error.isRetryable`)
+ * do not cover the field you need.
  */
-const retryableModel = createRetryable({
+const retryableModel = createRetryableModel({
   model: openai('gpt-4o'),
   retries: [
-    requestTimeout(openai('gpt-4o-mini'), {
+    timeout().switch({
+      model: openai('gpt-4o-mini'),
       timeout: 30_000, // 30 second timeout for the fallback
     }),
 

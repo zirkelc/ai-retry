@@ -23,7 +23,7 @@ const stallUntilAbort = (signal: AbortSignal | undefined): Promise<never> =>
 describe('createRetryableCall', () => {
   it('should return the result of the first attempt on success', async () => {
     // Arrange
-    const primary = new MockLanguageModel();
+    const primary = MockLanguageModel.from();
     const fn = vi.fn(async (_attempt: RetryCallAttempt) => 'OK');
     const run = createRetryableCall({ model: primary, retries: [] });
 
@@ -40,8 +40,8 @@ describe('createRetryableCall', () => {
   describe('retries', () => {
     it('should fall back to the next model after an error', async () => {
       // Arrange
-      const primary = new MockLanguageModel();
-      const fallback = new MockLanguageModel();
+      const primary = MockLanguageModel.from();
+      const fallback = MockLanguageModel.from();
       const fn = vi.fn(async ({ model }: RetryCallAttempt) => {
         if (model === primary) throw new Error('primary failed');
         return 'FALLBACK_OK';
@@ -61,9 +61,9 @@ describe('createRetryableCall', () => {
 
     it('should fall back across consecutive errors', async () => {
       // Arrange
-      const primary = new MockLanguageModel();
-      const second = new MockLanguageModel();
-      const third = new MockLanguageModel();
+      const primary = MockLanguageModel.from();
+      const second = MockLanguageModel.from();
+      const third = MockLanguageModel.from();
       const fn = vi.fn(async ({ model }: RetryCallAttempt) => {
         if (model === third) return 'THIRD_OK';
         throw new Error('failed');
@@ -84,8 +84,8 @@ describe('createRetryableCall', () => {
 
     it('should select a retry via a function retryable', async () => {
       // Arrange
-      const primary = new MockLanguageModel();
-      const fallback = new MockLanguageModel();
+      const primary = MockLanguageModel.from();
+      const fallback = MockLanguageModel.from();
       const fn = vi.fn(async ({ model }: RetryCallAttempt) => {
         if (model === primary) throw new Error('primary failed');
         return 'OK';
@@ -108,8 +108,8 @@ describe('createRetryableCall', () => {
   describe('disabled', () => {
     it('should bypass retries when disabled is true', async () => {
       // Arrange
-      const primary = new MockLanguageModel();
-      const fallback = new MockLanguageModel();
+      const primary = MockLanguageModel.from();
+      const fallback = MockLanguageModel.from();
       const error = new Error('primary failed');
       const fn = vi.fn(async (_attempt: RetryCallAttempt) => {
         throw error;
@@ -132,8 +132,8 @@ describe('createRetryableCall', () => {
 
     it('should retry when disabled is false', async () => {
       // Arrange
-      const primary = new MockLanguageModel();
-      const fallback = new MockLanguageModel();
+      const primary = MockLanguageModel.from();
+      const fallback = MockLanguageModel.from();
       const fn = vi.fn(async ({ model }: RetryCallAttempt) => {
         if (model === primary) throw new Error('primary failed');
         return 'OK';
@@ -154,8 +154,8 @@ describe('createRetryableCall', () => {
 
     it('should bypass retries when disabled returns true', async () => {
       // Arrange
-      const primary = new MockLanguageModel();
-      const fallback = new MockLanguageModel();
+      const primary = MockLanguageModel.from();
+      const fallback = MockLanguageModel.from();
       const fn = vi.fn(async (_attempt: RetryCallAttempt) => {
         throw new Error('primary failed');
       });
@@ -177,8 +177,8 @@ describe('createRetryableCall', () => {
 
     it('should retry when disabled returns false', async () => {
       // Arrange
-      const primary = new MockLanguageModel();
-      const fallback = new MockLanguageModel();
+      const primary = MockLanguageModel.from();
+      const fallback = MockLanguageModel.from();
       const fn = vi.fn(async ({ model }: RetryCallAttempt) => {
         if (model === primary) throw new Error('primary failed');
         return 'OK';
@@ -203,8 +203,8 @@ describe('createRetryableCall', () => {
   describe('onError', () => {
     it('should call onError when an error occurs', async () => {
       // Arrange
-      const primary = new MockLanguageModel();
-      const fallback = new MockLanguageModel();
+      const primary = MockLanguageModel.from();
+      const fallback = MockLanguageModel.from();
       const error = new Error('primary failed');
       const onError = vi.fn();
       const fn = vi.fn(async ({ model }: RetryCallAttempt) => {
@@ -229,9 +229,9 @@ describe('createRetryableCall', () => {
 
     it('should call onError for each error across attempts', async () => {
       // Arrange
-      const primary = new MockLanguageModel();
-      const second = new MockLanguageModel();
-      const third = new MockLanguageModel();
+      const primary = MockLanguageModel.from();
+      const second = MockLanguageModel.from();
+      const third = MockLanguageModel.from();
       const onError = vi.fn();
       const fn = vi.fn(async ({ model }: RetryCallAttempt) => {
         if (model === third) return 'OK';
@@ -255,8 +255,8 @@ describe('createRetryableCall', () => {
 
     it('should call onError before onRetry', async () => {
       // Arrange
-      const primary = new MockLanguageModel();
-      const fallback = new MockLanguageModel();
+      const primary = MockLanguageModel.from();
+      const fallback = MockLanguageModel.from();
       const onError = vi.fn();
       const onRetry = vi.fn();
       const fn = vi.fn(async ({ model }: RetryCallAttempt) => {
@@ -283,8 +283,8 @@ describe('createRetryableCall', () => {
 
     it('should expose the call options on the error context', async () => {
       // Arrange — the second (fallback) attempt carries the retry's options.
-      const primary = new MockLanguageModel();
-      const fallback = new MockLanguageModel();
+      const primary = MockLanguageModel.from();
+      const fallback = MockLanguageModel.from();
       const onError = vi.fn();
       const fn = vi.fn(async (_attempt: RetryCallAttempt) => {
         throw new Error('failed');
@@ -310,8 +310,8 @@ describe('createRetryableCall', () => {
   describe('onRetry', () => {
     it('should call onRetry for an error-based retry', async () => {
       // Arrange
-      const primary = new MockLanguageModel();
-      const fallback = new MockLanguageModel();
+      const primary = MockLanguageModel.from();
+      const fallback = MockLanguageModel.from();
       const onRetry = vi.fn();
       const fn = vi.fn(async ({ model }: RetryCallAttempt) => {
         if (model === primary) throw new Error('primary failed');
@@ -334,9 +334,9 @@ describe('createRetryableCall', () => {
 
     it('should call onRetry for each retry attempt', async () => {
       // Arrange
-      const primary = new MockLanguageModel();
-      const second = new MockLanguageModel();
-      const third = new MockLanguageModel();
+      const primary = MockLanguageModel.from();
+      const second = MockLanguageModel.from();
+      const third = MockLanguageModel.from();
       const onRetry = vi.fn();
       const fn = vi.fn(async ({ model }: RetryCallAttempt) => {
         if (model === third) return 'OK';
@@ -360,7 +360,7 @@ describe('createRetryableCall', () => {
 
     it('should NOT call onRetry on the first attempt', async () => {
       // Arrange
-      const primary = new MockLanguageModel();
+      const primary = MockLanguageModel.from();
       const onRetry = vi.fn();
       const fn = vi.fn(async (_attempt: RetryCallAttempt) => 'OK');
       const run = createRetryableCall({
@@ -379,8 +379,8 @@ describe('createRetryableCall', () => {
     describe('overrides', () => {
       it('should apply onRetry option overrides to the next attempt', async () => {
         // Arrange
-        const primary = new MockLanguageModel();
-        const fallback = new MockLanguageModel();
+        const primary = MockLanguageModel.from();
+        const fallback = MockLanguageModel.from();
         const fn = vi.fn(async ({ model }: RetryCallAttempt) => {
           if (model === primary) throw new Error('primary failed');
           return 'OK';
@@ -400,8 +400,8 @@ describe('createRetryableCall', () => {
 
       it('should let onRetry overrides beat Retry.options', async () => {
         // Arrange
-        const primary = new MockLanguageModel();
-        const fallback = new MockLanguageModel();
+        const primary = MockLanguageModel.from();
+        const fallback = MockLanguageModel.from();
         const fn = vi.fn(async ({ model }: RetryCallAttempt) => {
           if (model === primary) throw new Error('primary failed');
           return 'OK';
@@ -421,8 +421,8 @@ describe('createRetryableCall', () => {
 
       it('should fall back to Retry.options when onRetry returns undefined', async () => {
         // Arrange
-        const primary = new MockLanguageModel();
-        const fallback = new MockLanguageModel();
+        const primary = MockLanguageModel.from();
+        const fallback = MockLanguageModel.from();
         const fn = vi.fn(async ({ model }: RetryCallAttempt) => {
           if (model === primary) throw new Error('primary failed');
           return 'OK';
@@ -442,8 +442,8 @@ describe('createRetryableCall', () => {
 
       it('should support async onRetry overrides', async () => {
         // Arrange
-        const primary = new MockLanguageModel();
-        const fallback = new MockLanguageModel();
+        const primary = MockLanguageModel.from();
+        const fallback = MockLanguageModel.from();
         const fn = vi.fn(async ({ model }: RetryCallAttempt) => {
           if (model === primary) throw new Error('primary failed');
           return 'OK';
@@ -470,10 +470,10 @@ describe('createRetryableCall', () => {
     describe('maxAttempts', () => {
       it('should try each model once by default', async () => {
         // Arrange
-        const primary = new MockLanguageModel();
-        const fallback1 = new MockLanguageModel();
-        const fallback2 = new MockLanguageModel();
-        const finalModel = new MockLanguageModel();
+        const primary = MockLanguageModel.from();
+        const fallback1 = MockLanguageModel.from();
+        const fallback2 = MockLanguageModel.from();
+        const finalModel = MockLanguageModel.from();
         const fn = vi.fn(async ({ model }: RetryCallAttempt) => {
           if (model === finalModel) return 'OK';
           throw new Error('failed');
@@ -496,9 +496,9 @@ describe('createRetryableCall', () => {
 
       it('should try a model multiple times when maxAttempts is set', async () => {
         // Arrange
-        const primary = new MockLanguageModel();
-        const fallback = new MockLanguageModel();
-        const finalModel = new MockLanguageModel();
+        const primary = MockLanguageModel.from();
+        const fallback = MockLanguageModel.from();
+        const finalModel = MockLanguageModel.from();
         const fn = vi.fn(async ({ model }: RetryCallAttempt) => {
           if (model === finalModel) return 'OK';
           throw new Error('failed');
@@ -523,8 +523,8 @@ describe('createRetryableCall', () => {
     describe('options', () => {
       it('should expose Retry.options on the attempt', async () => {
         // Arrange
-        const primary = new MockLanguageModel();
-        const fallback = new MockLanguageModel();
+        const primary = MockLanguageModel.from();
+        const fallback = MockLanguageModel.from();
         const fn = vi.fn(async ({ model }: RetryCallAttempt) => {
           if (model === primary) throw new Error('primary failed');
           return 'OK';
@@ -546,8 +546,8 @@ describe('createRetryableCall', () => {
       it('should apply delay before retrying', async () => {
         // Arrange
         vi.useFakeTimers();
-        const primary = new MockLanguageModel();
-        const fallback = new MockLanguageModel();
+        const primary = MockLanguageModel.from();
+        const fallback = MockLanguageModel.from();
         const fn = vi.fn(async ({ model }: RetryCallAttempt) => {
           if (model === primary) throw new Error('primary failed');
           return 'OK';
@@ -573,8 +573,8 @@ describe('createRetryableCall', () => {
     describe('timeout', () => {
       it('should give a stalled attempt a fresh deadline so it recovers', async () => {
         // Arrange
-        const primary = new MockLanguageModel();
-        const fallback = new MockLanguageModel();
+        const primary = MockLanguageModel.from();
+        const fallback = MockLanguageModel.from();
         const signals: Array<AbortSignal | undefined> = [];
         const fn = vi.fn(async ({ model, abortSignal }: RetryCallAttempt) => {
           signals.push(abortSignal);
@@ -601,8 +601,8 @@ describe('createRetryableCall', () => {
 
       it('should NOT retry when the inbound signal is aborted and the retry has no timeout', async () => {
         // Arrange
-        const primary = new MockLanguageModel();
-        const fallback = new MockLanguageModel();
+        const primary = MockLanguageModel.from();
+        const fallback = MockLanguageModel.from();
         const controller = new AbortController();
         controller.abort(new Error('user cancelled'));
         const error = new Error('primary failed');
@@ -628,8 +628,8 @@ describe('createRetryableCall', () => {
   describe('RetryError', () => {
     it('should throw a RetryError after all attempts are exhausted', async () => {
       // Arrange
-      const primary = new MockLanguageModel();
-      const fallback = new MockLanguageModel();
+      const primary = MockLanguageModel.from();
+      const fallback = MockLanguageModel.from();
       const fn = vi.fn(async () => {
         throw new Error('always fails');
       });
@@ -646,7 +646,7 @@ describe('createRetryableCall', () => {
 
     it('should throw the original error on the first attempt when no retryable matches', async () => {
       // Arrange
-      const primary = new MockLanguageModel();
+      const primary = MockLanguageModel.from();
       const error = new Error('boom');
       const fn = vi.fn(async () => {
         throw error;
@@ -666,8 +666,8 @@ describe('createRetryableCall', () => {
   describe('reset', () => {
     it('should reset to the base model on every request by default', async () => {
       // Arrange
-      const primary = new MockLanguageModel();
-      const fallback = new MockLanguageModel();
+      const primary = MockLanguageModel.from();
+      const fallback = MockLanguageModel.from();
       let primaryFails = true;
       const fn = vi.fn(async ({ model }: RetryCallAttempt) => {
         if (model === primary) {
@@ -690,8 +690,8 @@ describe('createRetryableCall', () => {
 
     it('should stick to the recovered model per the reset policy', async () => {
       // Arrange
-      const primary = new MockLanguageModel();
-      const fallback = new MockLanguageModel();
+      const primary = MockLanguageModel.from();
+      const fallback = MockLanguageModel.from();
       const fn = vi.fn(async ({ model }: RetryCallAttempt) => {
         if (model === primary) throw new Error('primary failed');
         return 'OK';

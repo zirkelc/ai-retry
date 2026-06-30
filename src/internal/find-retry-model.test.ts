@@ -1,5 +1,5 @@
-import { APICallError } from 'ai';
-import { describe, expect, it } from 'vitest';
+import { Errors } from 'ai-test-kit';
+import { describe, expect, it, vi } from 'vitest';
 import { findRetryModel } from './find-retry-model.js';
 import { MockLanguageModel } from './test-utils.js';
 import type {
@@ -20,14 +20,9 @@ const options: LanguageModelCallOptions = {
 describe('findRetryModel', () => {
   describe('with function retryables', () => {
     it('should find retry model from retryable function', async () => {
-      const primaryModel = new MockLanguageModel();
-      const fallbackModel = new MockLanguageModel();
-      const error = new APICallError({
-        message: 'Test error',
-        statusCode: 500,
-        url: '',
-        requestBodyValues: {},
-      });
+      const primaryModel = MockLanguageModel.from();
+      const fallbackModel = MockLanguageModel.from();
+      const error = Errors.internalServerError();
 
       const retryable: Retryable<LanguageModel> = (context) => {
         if (context.current.type === 'error') {
@@ -50,7 +45,7 @@ describe('findRetryModel', () => {
     });
 
     it('should return undefined when retryable returns undefined', async () => {
-      const primaryModel = new MockLanguageModel();
+      const primaryModel = MockLanguageModel.from();
       const error = new Error('Test error');
 
       const retryable: Retryable<LanguageModel> = () => undefined;
@@ -66,8 +61,8 @@ describe('findRetryModel', () => {
     });
 
     it('should handle async retryable functions', async () => {
-      const primaryModel = new MockLanguageModel();
-      const fallbackModel = new MockLanguageModel();
+      const primaryModel = MockLanguageModel.from();
+      const fallbackModel = MockLanguageModel.from();
       const error = new Error('Test error');
 
       const retryable: Retryable<LanguageModel> = async () => {
@@ -91,8 +86,8 @@ describe('findRetryModel', () => {
 
   describe('with static Retry objects', () => {
     it('should find retry model from static Retry object', async () => {
-      const primaryModel = new MockLanguageModel();
-      const fallbackModel = new MockLanguageModel();
+      const primaryModel = MockLanguageModel.from();
+      const fallbackModel = MockLanguageModel.from();
       const error = new Error('Test error');
 
       const retry: Retry<LanguageModel> = {
@@ -116,8 +111,8 @@ describe('findRetryModel', () => {
     });
 
     it('should skip static Retry for result-based attempts', async () => {
-      const primaryModel = new MockLanguageModel();
-      const fallbackModel = new MockLanguageModel();
+      const primaryModel = MockLanguageModel.from();
+      const fallbackModel = MockLanguageModel.from();
 
       const retry: Retry<LanguageModel> = {
         model: fallbackModel,
@@ -155,8 +150,8 @@ describe('findRetryModel', () => {
 
   describe('with plain models', () => {
     it('should find retry model from plain model', async () => {
-      const primaryModel = new MockLanguageModel();
-      const fallbackModel = new MockLanguageModel();
+      const primaryModel = MockLanguageModel.from();
+      const fallbackModel = MockLanguageModel.from();
       const error = new Error('Test error');
 
       const context: RetryContext<LanguageModel> = {
@@ -172,8 +167,8 @@ describe('findRetryModel', () => {
     });
 
     it('should skip plain models for result-based attempts', async () => {
-      const primaryModel = new MockLanguageModel();
-      const fallbackModel = new MockLanguageModel();
+      const primaryModel = MockLanguageModel.from();
+      const fallbackModel = MockLanguageModel.from();
 
       const context: RetryContext<LanguageModel> = {
         current: {
@@ -206,8 +201,8 @@ describe('findRetryModel', () => {
 
   describe('maxAttempts logic', () => {
     it('should respect maxAttempts limit', async () => {
-      const primaryModel = new MockLanguageModel();
-      const fallbackModel = new MockLanguageModel();
+      const primaryModel = MockLanguageModel.from();
+      const fallbackModel = MockLanguageModel.from();
       const error = new Error('Test error');
 
       const retry: Retry<LanguageModel> = {
@@ -229,8 +224,8 @@ describe('findRetryModel', () => {
     });
 
     it('should allow retry when under maxAttempts', async () => {
-      const primaryModel = new MockLanguageModel();
-      const fallbackModel = new MockLanguageModel();
+      const primaryModel = MockLanguageModel.from();
+      const fallbackModel = MockLanguageModel.from();
       const error = new Error('Test error');
 
       const retry: Retry<LanguageModel> = {
@@ -260,8 +255,8 @@ describe('findRetryModel', () => {
     });
 
     it('should default maxAttempts to 1', async () => {
-      const primaryModel = new MockLanguageModel();
-      const fallbackModel = new MockLanguageModel();
+      const primaryModel = MockLanguageModel.from();
+      const fallbackModel = MockLanguageModel.from();
       const error = new Error('Test error');
 
       const retry: Retry<LanguageModel> = {
@@ -281,15 +276,10 @@ describe('findRetryModel', () => {
 
   describe('with multiple retries', () => {
     it('should return first matching retry', async () => {
-      const primaryModel = new MockLanguageModel();
-      const fallback1 = new MockLanguageModel();
-      const fallback2 = new MockLanguageModel();
-      const error = new APICallError({
-        message: 'Test error',
-        statusCode: 503,
-        url: '',
-        requestBodyValues: {},
-      });
+      const primaryModel = MockLanguageModel.from();
+      const fallback1 = MockLanguageModel.from();
+      const fallback2 = MockLanguageModel.from();
+      const error = Errors.serviceUnavailable();
 
       const retryable1: Retryable<LanguageModel> = () => undefined;
       const retryable2: Retryable<LanguageModel> = () => ({
@@ -322,9 +312,9 @@ describe('findRetryModel', () => {
     });
 
     it('should skip exhausted retries and find next available', async () => {
-      const primaryModel = new MockLanguageModel();
-      const fallback1 = new MockLanguageModel();
-      const fallback2 = new MockLanguageModel();
+      const primaryModel = MockLanguageModel.from();
+      const fallback1 = MockLanguageModel.from();
+      const fallback2 = MockLanguageModel.from();
       const error = new Error('Test error');
 
       const retry1: Retry<LanguageModel> = {
@@ -357,7 +347,7 @@ describe('findRetryModel', () => {
 
   describe('model resolution', () => {
     it('should resolve string model IDs to gateway provider', async () => {
-      const primaryModel = new MockLanguageModel();
+      const primaryModel = MockLanguageModel.from();
       const error = new Error('Test error');
 
       const context: RetryContext<LanguageModel> = {
@@ -379,8 +369,29 @@ describe('findRetryModel', () => {
       expect(result?.model.modelId).toBe('openai/gpt-4o');
     });
 
+    it('should resolve string model IDs with the provided family resolver', async () => {
+      // Arrange
+      const primaryModel = MockLanguageModel.from();
+      const error = new Error('Test error');
+      const resolved = MockLanguageModel.from();
+      const resolve = vi.fn(() => resolved);
+
+      const context: RetryContext<LanguageModel> = {
+        current: { type: 'error', error, model: primaryModel, options },
+        attempts: [{ type: 'error', error, model: primaryModel, options }],
+      };
+
+      // Act
+      const result = await findRetryModel(['openai/gpt-4o'], context, resolve);
+
+      // Assert
+      const resolveInput = resolve.mock.calls[0];
+      expect(resolveInput).toEqual(['openai/gpt-4o']);
+      expect(result?.model).toBe(resolved);
+    });
+
     it('should preserve retry options when resolving models', async () => {
-      const primaryModel = new MockLanguageModel();
+      const primaryModel = MockLanguageModel.from();
       const error = new Error('Test error');
 
       const retry: Retry<ResolvableLanguageModel> = {

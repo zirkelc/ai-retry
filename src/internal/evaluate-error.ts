@@ -1,4 +1,5 @@
 import { findRetryModel } from './find-retry-model.js';
+import type { GatewayResolver } from './resolve-model.js';
 import { prepareRetryError } from './prepare-retry-error.js';
 import type {
   CallOptions,
@@ -33,6 +34,12 @@ export async function evaluateError<
   attempts: ReadonlyArray<RetryAttempt<MODEL>>;
   retries: Retries<MODEL>;
   onError?: (context: RetryContext<MODEL>) => void;
+  /**
+   * Resolves gateway model-id strings for the caller's model family. A bare
+   * string is ambiguous across families, so each wrapper passes its own
+   * resolver; defaults to the language-model resolver when omitted.
+   */
+  resolve?: GatewayResolver;
 }): Promise<{
   retryModel: Retry<ResolvedModel<MODEL>> | undefined;
   attempt: RetryErrorAttempt<MODEL>;
@@ -61,7 +68,7 @@ export async function evaluateError<
 
   input.onError?.(context);
 
-  const retryModel = await findRetryModel(input.retries, context);
+  const retryModel = await findRetryModel(input.retries, context, input.resolve);
 
   const finalError = retryModel
     ? undefined

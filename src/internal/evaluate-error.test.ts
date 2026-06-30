@@ -9,8 +9,8 @@ import type {
 } from '../types.js';
 
 describe('evaluateError', () => {
-  const primary = new MockLanguageModel();
-  const fallback = new MockLanguageModel();
+  const primary = MockLanguageModel.from();
+  const fallback = MockLanguageModel.from();
   const options: LanguageModelCallOptions = { prompt: [] };
 
   it('should return the matched retry model and notify onError', async () => {

@@ -1,6 +1,7 @@
 import { delay } from '@ai-sdk/provider-utils';
 import { BaseRetryableModel } from './base-retryable-model.js';
 import { evaluateError } from './evaluate-error.js';
+import { resolveImageModel } from './resolve-model.js';
 import { mergeImageModelCallOptions } from './merge-retry-call-options.js';
 import { resolveBackoffDelay } from './resolve-backoff-delay.js';
 import { retryDiesOnAbortedSignal } from './retry-dies-on-aborted-signal.js';
@@ -18,7 +19,7 @@ export class RetryableImageModel
   extends BaseRetryableModel<ImageModel>
   implements ImageModel
 {
-  readonly specificationVersion = 'v3';
+  readonly specificationVersion = 'v4';
 
   get modelId() {
     return this.currentModel.modelId;
@@ -121,14 +122,19 @@ export class RetryableImageModel
         });
         return { result, attempts, callOptions: retryCallOptions };
       } catch (error) {
+        const { retryModel, attempt, finalError } = await this.handleError(
+          error,
+          attempts,
+          retryCallOptions,
+        );
+
+        attempts.push(attempt);
+
         /**
-         * `handleError` throws when no retry matched. Record the attempt as
-         * failed before that error propagates.
+         * No retry matched. Record the attempt as failed and throw the
+         * surfaced error.
          */
-        let decision: Awaited<ReturnType<typeof this.handleError>>;
-        try {
-          decision = await this.handleError(error, attempts, retryCallOptions);
-        } catch (finalError) {
+        if (!retryModel) {
           input.recorder?.endAttempt({
             attempt: attemptNumber,
             outcome: 'failure',
@@ -136,10 +142,6 @@ export class RetryableImageModel
           });
           throw finalError;
         }
-
-        const { retryModel, attempt } = decision;
-
-        attempts.push(attempt);
 
         /**
          * If the inbound abort signal is already aborted and the chosen
@@ -187,24 +189,29 @@ export class RetryableImageModel
     attempts: ReadonlyArray<RetryErrorAttempt<ImageModel>>,
     callOptions: ImageModelCallOptions,
   ) {
-    const { retryModel, attempt, finalError } = await evaluateError({
+    return evaluateError({
       error,
       model: this.currentModel,
       options: callOptions,
       attempts,
       retries: this.options.retries,
       onError: this.options.onError,
+      resolve: resolveImageModel,
     });
+  }
 
-    /**
-     * No model to try next: surface the error (a `RetryError` wrapping all
-     * attempts when more than one was made).
-     */
-    if (!retryModel) {
-      throw finalError;
-    }
-
-    return { retryModel, attempt };
+  /**
+   * Fire the `onFailure` callback for a terminally failed operation. The
+   * final attempt (last entry of `attempts`) is surfaced as `current`.
+   */
+  private emitFailure(
+    attempts: Array<RetryErrorAttempt<ImageModel>>,
+    error: unknown,
+  ) {
+    if (!this.options.onFailure) return;
+    const current = attempts.at(-1);
+    if (!current) return;
+    this.options.onFailure({ current, attempts, error });
   }
 
   async doGenerate(
@@ -223,27 +230,26 @@ export class RetryableImageModel
       return this.currentModel.doGenerate(callOptions);
     }
 
-    const recorder = await createRetryTelemetry(
-      this.options.experimental_telemetry,
-      {
-        operation: 'doGenerate',
-        genAiOperation: 'generate_content',
-        provider: startModel.provider,
-        modelId: startModel.modelId,
-      },
-    );
+    const recorder = await createRetryTelemetry(this.telemetrySettings, {
+      operation: 'doGenerate',
+      genAiOperation: 'generate_content',
+      provider: startModel.provider,
+      modelId: startModel.modelId,
+    });
 
+    /**
+     * Shared attempts array, threaded into `withRetry` so it stays populated
+     * (including the final failed attempt) when the retry loop throws.
+     */
+    const attempts: Array<RetryErrorAttempt<ImageModel>> = [];
     let operationError: unknown;
     try {
-      const {
-        result,
-        attempts,
-        callOptions: finalCallOptions,
-      } = await this.withRetry({
+      const { result, callOptions: finalCallOptions } = await this.withRetry({
         fn: async (retryCallOptions) => {
           return this.currentModel.doGenerate(retryCallOptions);
         },
         callOptions: callOptions,
+        attempts,
         recorder,
       });
 
@@ -262,6 +268,7 @@ export class RetryableImageModel
       return result;
     } catch (error) {
       operationError = error;
+      this.emitFailure(attempts, error);
       throw error;
     } finally {
       recorder?.endOperation({

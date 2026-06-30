@@ -1,7 +1,7 @@
 import { openai } from '@ai-sdk/openai';
 import { generateText } from 'ai';
-import type { LanguageModel, Retryable } from 'ai-retry';
-import { createRetryable, isResultAttempt } from 'ai-retry';
+import { isResultAttempt, type LanguageModel, type Retryable } from 'ai-retry';
+import { createRetryableModel } from 'ai-retry/language-model';
 
 const finishReasonOther: Retryable<LanguageModel> = async (context) => {
   // Current attempt: error or result
@@ -25,7 +25,7 @@ const finishReasonOther: Retryable<LanguageModel> = async (context) => {
 };
 
 // Create a retryable model with the guardrail
-const retryableModel = createRetryable({
+const retryableModel = createRetryableModel({
   model: openai('gpt-4'), // Base model
   retries: [finishReasonOther],
 });

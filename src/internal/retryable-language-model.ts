@@ -2,6 +2,7 @@ import { delay } from '@ai-sdk/provider-utils';
 import { BaseRetryableModel } from './base-retryable-model.js';
 import { evaluateError } from './evaluate-error.js';
 import { findRetryModel } from './find-retry-model.js';
+import { resolveLanguageModel } from './resolve-model.js';
 import { mergeLanguageModelCallOptions } from './merge-retry-call-options.js';
 import { createRetryTelemetry, type RetryTelemetry } from './telemetry.js';
 import { resolveBackoffDelay } from './resolve-backoff-delay.js';
@@ -18,13 +19,17 @@ import type {
   RetryContext,
   RetryResultAttempt,
 } from '../types.js';
-import { isGenerateResult, isStreamContentPart } from './guards.js';
+import {
+  isErrorAttempt,
+  isGenerateResult,
+  isStreamContentPart,
+} from './guards.js';
 
 export class RetryableLanguageModel
   extends BaseRetryableModel<LanguageModel>
   implements LanguageModel
 {
-  readonly specificationVersion = 'v3';
+  readonly specificationVersion = 'v4';
 
   get modelId() {
     return this.currentModel.modelId;
@@ -265,7 +270,11 @@ export class RetryableLanguageModel
       attempts: updatedAttempts,
     };
 
-    const retryModel = await findRetryModel(this.options.retries, context);
+    const retryModel = await findRetryModel(
+      this.options.retries,
+      context,
+      resolveLanguageModel,
+    );
 
     return { retryModel, attempt: resultAttempt };
   }
@@ -291,7 +300,22 @@ export class RetryableLanguageModel
       attempts,
       retries: this.options.retries,
       onError: this.options.onError,
+      resolve: resolveLanguageModel,
     });
+  }
+
+  /**
+   * Fire the `onFailure` callback for a terminally failed operation. The
+   * final attempt (last entry of `attempts`) is surfaced as `current`.
+   */
+  private emitFailure(
+    attempts: Array<RetryAttempt<LanguageModel>>,
+    error: unknown,
+  ) {
+    if (!this.options.onFailure) return;
+    const current = attempts.at(-1);
+    if (!current || !isErrorAttempt(current)) return;
+    this.options.onFailure({ current, attempts, error });
   }
 
   async doGenerate(
@@ -310,27 +334,26 @@ export class RetryableLanguageModel
       return this.currentModel.doGenerate(callOptions);
     }
 
-    const recorder = await createRetryTelemetry(
-      this.options.experimental_telemetry,
-      {
-        operation: 'doGenerate',
-        genAiOperation: 'chat',
-        provider: startModel.provider,
-        modelId: startModel.modelId,
-      },
-    );
+    const recorder = await createRetryTelemetry(this.telemetrySettings, {
+      operation: 'doGenerate',
+      genAiOperation: 'chat',
+      provider: startModel.provider,
+      modelId: startModel.modelId,
+    });
 
+    /**
+     * Shared attempts array, threaded into `withRetry` so it stays populated
+     * (including the final failed attempt) when the retry loop throws.
+     */
+    const attempts: Array<RetryAttempt<LanguageModel>> = [];
     let operationError: unknown;
     try {
-      const {
-        result,
-        attempts,
-        callOptions: finalCallOptions,
-      } = await this.withRetry({
+      const { result, callOptions: finalCallOptions } = await this.withRetry({
         fn: async (retryCallOptions) => {
           return this.currentModel.doGenerate(retryCallOptions);
         },
         callOptions: callOptions,
+        attempts,
         recorder,
       });
 
@@ -349,6 +372,7 @@ export class RetryableLanguageModel
       return result;
     } catch (error) {
       operationError = error;
+      this.emitFailure(attempts, error);
       throw error;
     } finally {
       recorder?.endOperation({
@@ -375,21 +399,22 @@ export class RetryableLanguageModel
       return this.currentModel.doStream(callOptions);
     }
 
-    const recorder = await createRetryTelemetry(
-      this.options.experimental_telemetry,
-      {
-        operation: 'doStream',
-        genAiOperation: 'chat',
-        provider: startModel.provider,
-        modelId: startModel.modelId,
-      },
-    );
+    const recorder = await createRetryTelemetry(this.telemetrySettings, {
+      operation: 'doStream',
+      genAiOperation: 'chat',
+      provider: startModel.provider,
+      modelId: startModel.modelId,
+    });
 
     /**
      * Perform the initial call to doStream with retry logic to handle errors before any data is streamed.
      */
     let result: LanguageModelStream;
-    let attempts: Array<RetryAttempt<LanguageModel>>;
+    /**
+     * Shared attempts array, threaded into `withRetry` so it stays populated
+     * (including the final failed attempt) when the retry loop throws.
+     */
+    let attempts: Array<RetryAttempt<LanguageModel>> = [];
     let finalCallOptions: LanguageModelCallOptions;
     /**
      * The open attempt span for the stream currently being consumed, closed
@@ -402,6 +427,7 @@ export class RetryableLanguageModel
           return this.currentModel.doStream(retryCallOptions);
         },
         callOptions: callOptions,
+        attempts,
         recorder,
       });
       result = initial.result;
@@ -413,6 +439,7 @@ export class RetryableLanguageModel
        * Every pre-stream attempt failed; record the operation failure before
        * the error propagates to the caller.
        */
+      this.emitFailure(attempts, error);
       recorder?.endOperation({
         provider: this.currentModel.provider,
         modelId: this.currentModel.modelId,
@@ -701,6 +728,7 @@ export class RetryableLanguageModel
                   });
                 }
                 operationError = finalError;
+                this.emitFailure(attempts, finalError);
                 controller.enqueue({ type: 'error', error: finalError });
                 controller.close();
                 return;
@@ -723,6 +751,7 @@ export class RetryableLanguageModel
                   });
                 }
                 operationError = error;
+                this.emitFailure(attempts, error);
                 controller.enqueue({ type: 'error', error });
                 controller.close();
                 return;

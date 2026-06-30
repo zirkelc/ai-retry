@@ -4,20 +4,19 @@ import {
   NoImageGeneratedError,
   RetryError,
 } from 'ai';
+import { Errors } from 'ai-test-kit';
 import { describe, expect, it, vi } from 'vitest';
-import { createRetryable } from '../create-retryable-model.js';
+import {
+  MockImageModel,
+  createRetryableModel,
+  mockImageResult,
+  nonRetryableError,
+  retryableError,
+} from './test-utils.js';
 import { noImageGenerated } from '../retryables/no-image-generated.js';
 import { requestTimeout } from '../retryables/request-timeout.js';
 import { serviceOverloaded } from '../retryables/service-overloaded.js';
 import { serviceUnavailable } from '../retryables/service-unavailable.js';
-import {
-  mockImageResult,
-  MockImageModel,
-  nonRetryableError,
-  retryableError,
-  serviceUnavailableError,
-  serviceOverloadedError,
-} from './test-utils.js';
 import type {
   ImageModel,
   OnRetryOverrides,
@@ -30,6 +29,7 @@ import { isErrorAttempt } from './guards.js';
 type OnError = Required<RetryableModelOptions<ImageModel>>['onError'];
 type OnRetry = Required<RetryableModelOptions<ImageModel>>['onRetry'];
 type OnSuccess = Required<RetryableModelOptions<ImageModel>>['onSuccess'];
+type OnFailure = Required<RetryableModelOptions<ImageModel>>['onFailure'];
 
 const noImageError = new NoImageGeneratedError({
   message: `No image generated`,
@@ -38,10 +38,8 @@ const noImageError = new NoImageGeneratedError({
 describe('generateImage', () => {
   it('should generate image successfully when no errors occur', async () => {
     // Arrange
-    const baseModel = new MockImageModel({
-      doGenerate: mockImageResult,
-    });
-    const retryableModel = createRetryable({
+    const baseModel = MockImageModel.from(mockImageResult);
+    const retryableModel = createRetryableModel({
       model: baseModel,
       retries: [],
     });
@@ -61,10 +59,8 @@ describe('generateImage', () => {
     describe('error-based retries', () => {
       it('should retry with errors', async () => {
         // Arrange
-        const baseModel = new MockImageModel({ doGenerate: retryableError });
-        const fallbackModel = new MockImageModel({
-          doGenerate: mockImageResult,
-        });
+        const baseModel = MockImageModel.from(retryableError);
+        const fallbackModel = MockImageModel.from(mockImageResult);
 
         const fallbackRetryable = (context: RetryContext<ImageModel>) => {
           if (
@@ -78,7 +74,7 @@ describe('generateImage', () => {
 
         // Act
         const result = await generateImage({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [fallbackRetryable],
           }),
@@ -93,17 +89,13 @@ describe('generateImage', () => {
 
       it('should not retry without errors', async () => {
         // Arrange
-        const baseModel = new MockImageModel({ doGenerate: mockImageResult });
-        const fallbackModel1 = new MockImageModel({
-          doGenerate: mockImageResult,
-        });
-        const fallbackModel2 = new MockImageModel({
-          doGenerate: mockImageResult,
-        });
+        const baseModel = MockImageModel.from(mockImageResult);
+        const fallbackModel1 = MockImageModel.from(mockImageResult);
+        const fallbackModel2 = MockImageModel.from(mockImageResult);
 
         // Act
         const result = await generateImage({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [fallbackModel1, fallbackModel2],
           }),
@@ -119,13 +111,9 @@ describe('generateImage', () => {
 
       it('should use plain image models for error-based attempts', async () => {
         // Arrange
-        const baseModel = new MockImageModel({ doGenerate: retryableError });
-        const fallbackModel1 = new MockImageModel({
-          doGenerate: mockImageResult,
-        });
-        const fallbackModel2 = new MockImageModel({
-          doGenerate: mockImageResult,
-        });
+        const baseModel = MockImageModel.from(retryableError);
+        const fallbackModel1 = MockImageModel.from(mockImageResult);
+        const fallbackModel2 = MockImageModel.from(mockImageResult);
 
         const fallbackRetryable = (context: RetryContext<ImageModel>) => {
           if (
@@ -139,7 +127,7 @@ describe('generateImage', () => {
 
         // Act
         const result = await generateImage({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [fallbackModel1, fallbackRetryable],
           }),
@@ -158,16 +146,14 @@ describe('generateImage', () => {
   describe('disabled', () => {
     it('should not retry when disabled is true', async () => {
       // Arrange
-      const baseModel = new MockImageModel({ doGenerate: retryableError });
-      const fallbackModel = new MockImageModel({
-        doGenerate: mockImageResult,
-      });
+      const baseModel = MockImageModel.from(retryableError);
+      const fallbackModel = MockImageModel.from(mockImageResult);
 
       const fallbackRetryable: Retryable<ImageModel> = () => {
         return { model: fallbackModel, maxAttempts: 1 };
       };
 
-      const retryableModel = createRetryable({
+      const retryableModel = createRetryableModel({
         model: baseModel,
         retries: [fallbackRetryable],
         disabled: true,
@@ -186,16 +172,14 @@ describe('generateImage', () => {
 
     it('should not retry when disabled function returns true', async () => {
       // Arrange
-      const baseModel = new MockImageModel({ doGenerate: retryableError });
-      const fallbackModel = new MockImageModel({
-        doGenerate: mockImageResult,
-      });
+      const baseModel = MockImageModel.from(retryableError);
+      const fallbackModel = MockImageModel.from(mockImageResult);
 
       const fallbackRetryable: Retryable<ImageModel> = () => {
         return { model: fallbackModel, maxAttempts: 1 };
       };
 
-      const retryableModel = createRetryable({
+      const retryableModel = createRetryableModel({
         model: baseModel,
         retries: [fallbackRetryable],
         disabled: () => true,
@@ -216,10 +200,8 @@ describe('generateImage', () => {
   describe('onError', () => {
     it('should call onError callback when error occurs', async () => {
       // Arrange
-      const baseModel = new MockImageModel({ doGenerate: retryableError });
-      const fallbackModel = new MockImageModel({
-        doGenerate: mockImageResult,
-      });
+      const baseModel = MockImageModel.from(retryableError);
+      const fallbackModel = MockImageModel.from(mockImageResult);
 
       const onErrorSpy = vi.fn<OnError>();
 
@@ -229,7 +211,7 @@ describe('generateImage', () => {
 
       // Act
       await generateImage({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [fallbackRetryable],
           onError: onErrorSpy,
@@ -246,10 +228,8 @@ describe('generateImage', () => {
   describe('onRetry', () => {
     it('should call onRetry callback before retry', async () => {
       // Arrange
-      const baseModel = new MockImageModel({ doGenerate: retryableError });
-      const fallbackModel = new MockImageModel({
-        doGenerate: mockImageResult,
-      });
+      const baseModel = MockImageModel.from(retryableError);
+      const fallbackModel = MockImageModel.from(mockImageResult);
 
       const onRetrySpy = vi.fn<OnRetry>();
 
@@ -259,7 +239,7 @@ describe('generateImage', () => {
 
       // Act
       await generateImage({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [fallbackRetryable],
           onRetry: onRetrySpy,
@@ -274,17 +254,15 @@ describe('generateImage', () => {
     describe('overrides', () => {
       it('should override size and seed for the upcoming retry attempt', async () => {
         // Arrange
-        const baseModel = new MockImageModel({ doGenerate: retryableError });
-        const fallbackModel = new MockImageModel({
-          doGenerate: mockImageResult,
-        });
+        const baseModel = MockImageModel.from(retryableError);
+        const fallbackModel = MockImageModel.from(mockImageResult);
         const override: OnRetryOverrides<ImageModel> = {
           options: { size: `1024x1024`, seed: 42 },
         };
 
         // Act
         await generateImage({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [fallbackModel],
             onRetry: () => override,
@@ -302,15 +280,13 @@ describe('generateImage', () => {
 
       it('should override providerOptions for the upcoming retry attempt', async () => {
         // Arrange
-        const baseModel = new MockImageModel({ doGenerate: retryableError });
-        const fallbackModel = new MockImageModel({
-          doGenerate: mockImageResult,
-        });
+        const baseModel = MockImageModel.from(retryableError);
+        const fallbackModel = MockImageModel.from(mockImageResult);
         const sanitizedProviderOptions = { openai: { quality: `low` } };
 
         // Act
         await generateImage({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [fallbackModel],
             onRetry: () => ({
@@ -331,17 +307,15 @@ describe('generateImage', () => {
 
       it('should let onRetry overrides beat Retry.options', async () => {
         // Arrange
-        const baseModel = new MockImageModel({ doGenerate: retryableError });
-        const fallbackModel = new MockImageModel({
-          doGenerate: mockImageResult,
-        });
+        const baseModel = MockImageModel.from(retryableError);
+        const fallbackModel = MockImageModel.from(mockImageResult);
         const override: OnRetryOverrides<ImageModel> = {
           options: { size: `2048x2048` },
         };
 
         // Act
         await generateImage({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [{ model: fallbackModel, options: { size: `1024x1024` } }],
             onRetry: () => override,
@@ -357,14 +331,12 @@ describe('generateImage', () => {
 
       it('should fall back to Retry.options when onRetry returns undefined', async () => {
         // Arrange
-        const baseModel = new MockImageModel({ doGenerate: retryableError });
-        const fallbackModel = new MockImageModel({
-          doGenerate: mockImageResult,
-        });
+        const baseModel = MockImageModel.from(retryableError);
+        const fallbackModel = MockImageModel.from(mockImageResult);
 
         // Act
         await generateImage({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [{ model: fallbackModel, options: { size: `1024x1024` } }],
             onRetry: () => undefined,
@@ -380,14 +352,12 @@ describe('generateImage', () => {
 
       it('should support async onRetry returning overrides', async () => {
         // Arrange
-        const baseModel = new MockImageModel({ doGenerate: retryableError });
-        const fallbackModel = new MockImageModel({
-          doGenerate: mockImageResult,
-        });
+        const baseModel = MockImageModel.from(retryableError);
+        const fallbackModel = MockImageModel.from(mockImageResult);
 
         // Act
         await generateImage({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [fallbackModel],
             onRetry: async () => {
@@ -409,12 +379,12 @@ describe('generateImage', () => {
   describe('onSuccess', () => {
     it('should call onSuccess with base model when no retry occurs', async () => {
       // Arrange
-      const baseModel = new MockImageModel({ doGenerate: mockImageResult });
+      const baseModel = MockImageModel.from(mockImageResult);
       const onSuccessSpy = vi.fn<OnSuccess>();
 
       // Act
       await generateImage({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [],
           onSuccess: onSuccessSpy,
@@ -434,16 +404,14 @@ describe('generateImage', () => {
 
     it('should call onSuccess with fallback model after retry', async () => {
       // Arrange
-      const baseModel = new MockImageModel({ doGenerate: retryableError });
-      const fallbackModel = new MockImageModel({
-        doGenerate: mockImageResult,
-      });
+      const baseModel = MockImageModel.from(retryableError);
+      const fallbackModel = MockImageModel.from(mockImageResult);
 
       const onSuccessSpy = vi.fn<OnSuccess>();
 
       // Act
       await generateImage({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [fallbackModel],
           onSuccess: onSuccessSpy,
@@ -463,15 +431,13 @@ describe('generateImage', () => {
 
     it('should NOT call onSuccess when all retries fail', async () => {
       // Arrange
-      const baseModel = new MockImageModel({ doGenerate: retryableError });
-      const fallbackModel = new MockImageModel({
-        doGenerate: nonRetryableError,
-      });
+      const baseModel = MockImageModel.from(retryableError);
+      const fallbackModel = MockImageModel.from(nonRetryableError);
       const onSuccessSpy = vi.fn<OnSuccess>();
 
       // Act & Assert
       const result = generateImage({
-        model: createRetryable({
+        model: createRetryableModel({
           model: baseModel,
           retries: [fallbackModel],
           onSuccess: onSuccessSpy,
@@ -484,13 +450,88 @@ describe('generateImage', () => {
     });
   });
 
+  describe('onFailure', () => {
+    it('should call onFailure with raw error when no retry is available', async () => {
+      // Arrange
+      const baseModel = MockImageModel.from(nonRetryableError);
+      const onFailureSpy = vi.fn<OnFailure>();
+
+      // Act
+      const result = generateImage({
+        model: createRetryableModel({
+          model: baseModel,
+          retries: [],
+          onFailure: onFailureSpy,
+        }),
+        prompt: `A beautiful sunset`,
+      });
+      await expect(result).rejects.toThrow();
+
+      // Assert
+      expect(onFailureSpy).toHaveBeenCalledTimes(1);
+
+      const failureCall = onFailureSpy.mock.calls[0]![0];
+      expect(failureCall.current.type).toBe('error');
+      expect(failureCall.current.model).toBe(baseModel);
+      expect(failureCall.attempts.length).toBe(1);
+      expect(failureCall.error).toBe(nonRetryableError);
+    });
+
+    it('should call onFailure with RetryError when retries are exhausted', async () => {
+      // Arrange
+      const baseModel = MockImageModel.from(retryableError);
+      const fallbackModel = MockImageModel.from(nonRetryableError);
+      const onFailureSpy = vi.fn<OnFailure>();
+
+      // Act
+      const result = generateImage({
+        model: createRetryableModel({
+          model: baseModel,
+          retries: [fallbackModel],
+          onFailure: onFailureSpy,
+        }),
+        prompt: `A beautiful sunset`,
+      });
+      await expect(result).rejects.toThrow();
+
+      // Assert
+      expect(onFailureSpy).toHaveBeenCalledTimes(1);
+
+      const failureCall = onFailureSpy.mock.calls[0]![0];
+      expect(failureCall.current.type).toBe('error');
+      expect(failureCall.current.model).toBe(fallbackModel);
+      expect(failureCall.attempts.length).toBe(2);
+      expect(failureCall.error).toBeInstanceOf(RetryError);
+    });
+
+    it('should NOT call onFailure on success', async () => {
+      // Arrange
+      const baseModel = MockImageModel.from(mockImageResult);
+      const onFailureSpy = vi.fn<OnFailure>();
+      const onSuccessSpy = vi.fn<OnSuccess>();
+
+      // Act
+      await generateImage({
+        model: createRetryableModel({
+          model: baseModel,
+          retries: [],
+          onFailure: onFailureSpy,
+          onSuccess: onSuccessSpy,
+        }),
+        prompt: `A beautiful sunset`,
+      });
+
+      // Assert
+      expect(onSuccessSpy).toHaveBeenCalledTimes(1);
+      expect(onFailureSpy).not.toHaveBeenCalled();
+    });
+  });
+
   describe('RetryError', () => {
     it('should throw RetryError when all retries fail', async () => {
       // Arrange
-      const baseModel = new MockImageModel({ doGenerate: retryableError });
-      const fallbackModel = new MockImageModel({
-        doGenerate: nonRetryableError,
-      });
+      const baseModel = MockImageModel.from(retryableError);
+      const fallbackModel = MockImageModel.from(nonRetryableError);
 
       const fallbackRetryable = (context: RetryContext<ImageModel>) => {
         if (
@@ -503,7 +544,7 @@ describe('generateImage', () => {
         return undefined;
       };
 
-      const retryableModel = createRetryable({
+      const retryableModel = createRetryableModel({
         model: baseModel,
         retries: [fallbackRetryable],
       });
@@ -521,10 +562,8 @@ describe('generateImage', () => {
     describe('maxAttempts', () => {
       it('should respect maxAttempts per model', async () => {
         // Arrange
-        const baseModel = new MockImageModel({ doGenerate: retryableError });
-        const fallbackModel = new MockImageModel({
-          doGenerate: retryableError,
-        });
+        const baseModel = MockImageModel.from(retryableError);
+        const fallbackModel = MockImageModel.from(retryableError);
 
         const fallbackRetryable = (context: RetryContext<ImageModel>) => {
           if (isErrorAttempt(context.current)) {
@@ -533,7 +572,7 @@ describe('generateImage', () => {
           return undefined;
         };
 
-        const retryableModel = createRetryable({
+        const retryableModel = createRetryableModel({
           model: baseModel,
           retries: [fallbackRetryable],
         });
@@ -553,10 +592,8 @@ describe('generateImage', () => {
       it('should apply delay before retry', async () => {
         // Arrange
         vi.useFakeTimers();
-        const baseModel = new MockImageModel({ doGenerate: retryableError });
-        const fallbackModel = new MockImageModel({
-          doGenerate: mockImageResult,
-        });
+        const baseModel = MockImageModel.from(retryableError);
+        const fallbackModel = MockImageModel.from(mockImageResult);
 
         const fallbackRetryable: Retryable<ImageModel> = () => {
           return { model: fallbackModel, maxAttempts: 1, delay: 1000 };
@@ -564,7 +601,7 @@ describe('generateImage', () => {
 
         // Act
         const resultPromise = generateImage({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [fallbackRetryable],
           }),
@@ -586,14 +623,12 @@ describe('generateImage', () => {
     describe('size', () => {
       it('should override size on retry', async () => {
         // Arrange
-        const baseModel = new MockImageModel({ doGenerate: retryableError });
-        const fallbackModel = new MockImageModel({
-          doGenerate: mockImageResult,
-        });
+        const baseModel = MockImageModel.from(retryableError);
+        const fallbackModel = MockImageModel.from(mockImageResult);
 
         // Act
         await generateImage({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [{ model: fallbackModel, options: { size: `1024x1024` } }],
           }),
@@ -611,14 +646,12 @@ describe('generateImage', () => {
     describe('seed', () => {
       it('should override seed on retry', async () => {
         // Arrange
-        const baseModel = new MockImageModel({ doGenerate: retryableError });
-        const fallbackModel = new MockImageModel({
-          doGenerate: mockImageResult,
-        });
+        const baseModel = MockImageModel.from(retryableError);
+        const fallbackModel = MockImageModel.from(mockImageResult);
 
         // Act
         await generateImage({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [{ model: fallbackModel, options: { seed: 42 } }],
           }),
@@ -638,14 +671,12 @@ describe('generateImage', () => {
     describe('noImageGenerated handler', () => {
       it('should retry with fallback model on NoImageGeneratedError', async () => {
         // Arrange
-        const baseModel = new MockImageModel({ doGenerate: noImageError });
-        const fallbackModel = new MockImageModel({
-          doGenerate: mockImageResult,
-        });
+        const baseModel = MockImageModel.from(noImageError);
+        const fallbackModel = MockImageModel.from(mockImageResult);
 
         // Act
         const result = await generateImage({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [noImageGenerated(fallbackModel)],
           }),
@@ -662,16 +693,12 @@ describe('generateImage', () => {
     describe('serviceOverloaded handler', () => {
       it('should retry with fallback model on 529 error', async () => {
         // Arrange
-        const baseModel = new MockImageModel({
-          doGenerate: serviceOverloadedError,
-        });
-        const fallbackModel = new MockImageModel({
-          doGenerate: mockImageResult,
-        });
+        const baseModel = MockImageModel.from(Errors.serviceOverloaded());
+        const fallbackModel = MockImageModel.from(mockImageResult);
 
         // Act
         const result = await generateImage({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [serviceOverloaded(fallbackModel)],
           }),
@@ -688,16 +715,12 @@ describe('generateImage', () => {
     describe('serviceUnavailable handler', () => {
       it('should retry with fallback model on 503 error', async () => {
         // Arrange
-        const baseModel = new MockImageModel({
-          doGenerate: serviceUnavailableError,
-        });
-        const fallbackModel = new MockImageModel({
-          doGenerate: mockImageResult,
-        });
+        const baseModel = MockImageModel.from(Errors.serviceUnavailable());
+        const fallbackModel = MockImageModel.from(mockImageResult);
 
         // Act
         const result = await generateImage({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [serviceUnavailable(fallbackModel)],
           }),
@@ -717,14 +740,12 @@ describe('generateImage', () => {
         const timeoutError = new Error(`Request timed out`);
         timeoutError.name = `TimeoutError`;
 
-        const baseModel = new MockImageModel({ doGenerate: timeoutError });
-        const fallbackModel = new MockImageModel({
-          doGenerate: mockImageResult,
-        });
+        const baseModel = MockImageModel.from(timeoutError);
+        const fallbackModel = MockImageModel.from(mockImageResult);
 
         // Act
         const result = await generateImage({
-          model: createRetryable({
+          model: createRetryableModel({
             model: baseModel,
             retries: [requestTimeout(fallbackModel)],
           }),
