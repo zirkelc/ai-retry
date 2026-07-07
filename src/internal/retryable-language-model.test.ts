@@ -3112,6 +3112,55 @@ describe('streamText', () => {
         `);
       });
 
+      describe('mid-stream errors after content', () => {
+        /**
+         * Content flows, then the stream itself errors via `controller.error`
+         * (the real-world body-stall / undici `bodyTimeout` signature). A small
+         * gap lets the content commit before the error, as a real socket does.
+         */
+        const contentThenError = (error: unknown) =>
+          new ReadableStream<LanguageModelStreamPart>({
+            async start(controller) {
+              controller.enqueue({ type: 'stream-start', warnings: [] });
+              controller.enqueue({ type: 'text-start', id: '1' });
+              controller.enqueue({
+                type: 'text-delta',
+                id: '1',
+                delta: 'Partial',
+              });
+              await new Promise((resolve) => setTimeout(resolve, 10));
+              controller.error(error);
+            },
+          });
+
+        it('should NOT retry when the stream errors after content (no duplication)', async () => {
+          // Arrange
+          const error = new Error('body timeout');
+          const baseModel = MockLanguageModel.from({
+            doStream: contentThenError(error),
+          });
+          const fallbackModel = MockLanguageModel.from({
+            doStream: successStreamChunks('Recovered'),
+          });
+          const retryableModel = createRetryableModel({
+            model: baseModel,
+            retries: [fallbackModel],
+          });
+
+          // Act
+          const { stream } = await retryableModel.doStream(
+            MockLanguageModel.callOptions(),
+          );
+          const parts = await Streams.toArray(stream);
+
+          // Assert — committed on 'Partial', so no fail-over and no duplication.
+          expect(baseModel.doStream).toHaveBeenCalledTimes(1);
+          expect(fallbackModel.doStream).toHaveBeenCalledTimes(0);
+          expect(partsToText(parts)).toBe('Partial');
+          expect(parts.at(-1)?.type).toBe('error');
+        });
+      });
+
       it('should NOT retry when content was already streamed before content-filter finish', async () => {
         // Arrange
         const baseModel = MockLanguageModel.from({

@@ -695,6 +695,28 @@ export class RetryableLanguageModel
               break;
             } catch (error) {
               /**
+               * Content has already been forwarded downstream, so a retry
+               * would re-stream and duplicate output. Surface the error as a
+               * stream part and stop — the same outcome as an `error` part
+               * arriving after content (which the read loop forwards rather
+               * than retrying). Retry stays possible only before the commit
+               * point; past it the caller owns the partial stream.
+               */
+              if (isStreaming) {
+                if (pendingAttempt !== undefined) {
+                  recorder?.endAttempt({
+                    attempt: pendingAttempt,
+                    outcome: 'failure',
+                    error,
+                  });
+                }
+                operationError = error;
+                controller.enqueue({ type: 'error', error });
+                controller.close();
+                return;
+              }
+
+              /**
                * Get the retry call options for the failed attempt
                */
               const retryCallOptions = mergeLanguageModelCallOptions({
