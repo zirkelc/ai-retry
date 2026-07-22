@@ -1,14 +1,19 @@
-import { Streams } from 'ai-test-kit';
 import { RetryError, streamText } from 'ai';
 import { describe, expect, it, vi } from 'vitest';
 import { createRetryable } from '../../index.js';
-import { error, timeout } from '../../language-model/conditions/index.js';
+import {
+  aborted,
+  error,
+  timeout,
+} from '../../language-model/conditions/index.js';
 import {
   contentFilterError,
   contentFilterStreamChunks,
   errorStreamChunks,
+  Language,
   MockLanguageModel,
   mockStreamChunks,
+  Streams,
   successStreamChunks,
 } from '../../internal/test-utils.js';
 import { contentFilterTriggered } from '../../retryables/content-filter-triggered.js';
@@ -23,22 +28,21 @@ import {
 import { RefusalError, refusalGate } from './refusal-gate.js';
 
 const prompt = 'Hello!';
+const REFUSAL = "I'm sorry, but I cannot assist";
 
-/** A `ReadableStream` that emits the given parts once. */
-const partsStream = (parts: Array<unknown>) =>
-  new ReadableStream<unknown>({
-    start(controller) {
-      for (const part of parts) controller.enqueue(part);
-      controller.close();
-    },
-  });
+/**
+ * Result shapes carry `streamText`-level parts (`TextStreamPart`s: `text-delta`
+ * with `.text`, plus `abort`/`error`), written as literals since ai-test-kit's
+ * `Language.*` helpers build the provider-level parts a mock model's `doStream`
+ * returns, one layer below. `Streams.from` wraps any array into a `ReadableStream`.
+ */
 
 /** A v7 `streamText`-shaped result: parts on `stream`. */
-const streamOf = (parts: Array<unknown>) => ({ stream: partsStream(parts) });
+const streamOf = (parts: Array<unknown>) => ({ stream: Streams.from(parts) });
 
 /** A `streamObject`-shaped result: parts on `fullStream` only. */
 const fullStreamOf = (parts: Array<unknown>) => ({
-  fullStream: partsStream(parts),
+  fullStream: Streams.from(parts),
 });
 
 /** A model that streams the full successful `mockStreamChunks` ("Hello, world!"). */
@@ -53,20 +57,24 @@ const errorAtStartStreamModel = (error: unknown) =>
 const errorAfterContentStreamModel = (error: unknown) =>
   MockLanguageModel.from({
     doStream: [
-      { type: 'stream-start', warnings: [] },
-      { type: 'text-start', id: '1' },
-      { type: 'text-delta', id: '1', delta: 'partial' },
-      { type: 'error', error },
+      Language.streamStart(),
+      ...Language.streamText(['partial'], { id: '1' }),
+      Language.streamError(error),
     ],
   });
 
-/** A model whose stream stalls (emits only `stream-start`) until aborted. */
-const stallStreamModel = () =>
+/**
+ * A model whose stream stalls after emitting `preamble` parts, erroring only
+ * once its `abortSignal` fires. Used to exercise `streamText`-level deadlines.
+ */
+const stallStreamModel = (
+  preamble: Array<LanguageModelStreamPart> = [Language.streamStart()],
+) =>
   MockLanguageModel.from({
     doStream: async ({ abortSignal }: LanguageModelCallOptions) => ({
       stream: new ReadableStream<LanguageModelStreamPart>({
         start(controller) {
-          controller.enqueue({ type: 'stream-start', warnings: [] });
+          for (const part of preamble) controller.enqueue(part);
           if (abortSignal?.aborted) controller.error(abortSignal.reason);
           else
             abortSignal?.addEventListener(
@@ -81,22 +89,10 @@ const stallStreamModel = () =>
 
 /** A model that streams one content delta, then stalls until aborted. */
 const partialThenStallStreamModel = () =>
-  MockLanguageModel.from({
-    doStream: async ({ abortSignal }: LanguageModelCallOptions) => ({
-      stream: new ReadableStream<LanguageModelStreamPart>({
-        start(controller) {
-          controller.enqueue({ type: 'stream-start', warnings: [] });
-          controller.enqueue({ type: 'text-start', id: '1' });
-          controller.enqueue({ type: 'text-delta', id: '1', delta: 'partial' });
-          abortSignal?.addEventListener(
-            'abort',
-            () => controller.error(abortSignal.reason),
-            { once: true },
-          );
-        },
-      }),
-    }),
-  });
+  stallStreamModel([
+    Language.streamStart(),
+    ...Language.streamText(['partial'], { id: '1' }),
+  ]);
 
 /** A model that finishes with `content-filter` before any content (result-based). */
 const contentFilterFinishModel = () =>
@@ -143,6 +139,10 @@ const retryableStreamText = (
   );
 };
 
+/**
+ * Unit suite: drive `createRetryableStream` with synthetic stream results so
+ * commit/fail-over is decided from the parts alone, no real `streamText`.
+ */
 describe('createRetryableStream', () => {
   describe('part stream resolution', () => {
     it('should read parts from `stream` (v7 streamText shape)', async () => {
@@ -158,7 +158,7 @@ describe('createRetryableStream', () => {
       // Act — an error on `stream` before content must fail over.
       const committed = await retryableStream((attempt) =>
         attempt.model === primary
-          ? { stream: partsStream([{ type: 'error', error: new Error('x') }]) }
+          ? streamOf([{ type: 'error', error: new Error('x') }])
           : fallbackResult,
       );
 
@@ -202,8 +202,8 @@ describe('createRetryableStream', () => {
       const committed = await retryableStream((attempt) =>
         attempt.model === primary
           ? {
-              stream: partsStream([{ type: 'error', error: new Error('x') }]),
-              fullStream: partsStream([{ type: 'text-delta', text: 'nope' }]),
+              stream: Streams.from([{ type: 'error', error: new Error('x') }]),
+              fullStream: Streams.from([{ type: 'text-delta', text: 'nope' }]),
             }
           : fallbackResult,
       );
@@ -266,7 +266,30 @@ describe('createRetryableStream', () => {
       expect(committed).toBe(result);
     });
 
-    it('should fail over on a pre-content error part', async () => {
+    it('should NOT fail over once content has started', async () => {
+      // Arrange — an error after the first content part must not fail over.
+      const result = streamOf([
+        { type: 'text-delta', text: 'OK' },
+        { type: 'error', error: new Error('mid-stream') },
+      ]);
+      const fallback = MockLanguageModel.from();
+      const retryableStream = createRetryableStream({
+        model: MockLanguageModel.from(),
+        retries: [fallback],
+      });
+
+      // Act
+      const committed = await retryableStream(() => result);
+
+      // Assert — committed on the first content part; the trailing error is the
+      // caller's to handle.
+      expect(committed).toBe(result);
+      expect(fallback.doStream).toHaveBeenCalledTimes(0);
+    });
+  });
+
+  describe('pre-content failure', () => {
+    it('should fail over on an error part', async () => {
       // Arrange
       const primary = MockLanguageModel.from();
       const fallback = MockLanguageModel.from();
@@ -287,13 +310,11 @@ describe('createRetryableStream', () => {
 
       // Assert
       expect(committed).toBe(fallbackResult);
-      expect(models.length).toBe(2);
-      expect(models[0]).toBe(primary);
-      expect(models[1]).toBe(fallback);
+      expect(models).toEqual([primary, fallback]);
     });
 
-    it('should fail over on a pre-content abort part', async () => {
-      // Arrange
+    it('should fail over on a bare abort part', async () => {
+      // Arrange — an unconditional fallback matches any error.
       const primary = MockLanguageModel.from();
       const fallback = MockLanguageModel.from();
       const fallbackResult = streamOf([{ type: 'text-delta', text: 'OK' }]);
@@ -313,7 +334,7 @@ describe('createRetryableStream', () => {
       expect(committed).toBe(fallbackResult);
     });
 
-    it('should reconstruct a typed error from an abort part reason so timeout() matches', async () => {
+    it('should reconstruct a TimeoutError from an abort reason so timeout() matches', async () => {
       // Arrange — a streamText stepMs/chunkMs/totalMs deadline emits an `abort`
       // part whose `reason` is the serialized `"<name>: <message>"`, since it
       // aborts an internal controller, not the attempt's own signal.
@@ -349,8 +370,60 @@ describe('createRetryableStream', () => {
       expect(seen[0]!.message).toBe('Step timeout of 200ms exceeded');
     });
 
-    it('should throw a generic error for an abort part with no reason', async () => {
-      // Arrange — no attempt signal reason and no part reason: nothing to match.
+    it('should reconstruct an AbortError from an abort reason so aborted() matches', async () => {
+      // Arrange
+      const primary = MockLanguageModel.from();
+      const fallback = MockLanguageModel.from();
+      const fallbackResult = streamOf([{ type: 'text-delta', text: 'OK' }]);
+      const retryableStream = createRetryableStream({
+        model: primary,
+        retries: [aborted().switch({ model: fallback })],
+      });
+
+      // Act
+      const committed = await retryableStream((attempt) =>
+        attempt.model === primary
+          ? streamOf([
+              {
+                type: 'abort',
+                reason: 'AbortError: This operation was aborted',
+              },
+            ])
+          : fallbackResult,
+      );
+
+      // Assert
+      expect(committed).toBe(fallbackResult);
+    });
+
+    it('should match an abort reason by message', async () => {
+      // Arrange — a message-based condition matches the reconstructed message.
+      const primary = MockLanguageModel.from();
+      const fallback = MockLanguageModel.from();
+      const fallbackResult = streamOf([{ type: 'text-delta', text: 'OK' }]);
+      const retryableStream = createRetryableStream({
+        model: primary,
+        retries: [error.message('Step timeout').switch({ model: fallback })],
+      });
+
+      // Act
+      const committed = await retryableStream((attempt) =>
+        attempt.model === primary
+          ? streamOf([
+              {
+                type: 'abort',
+                reason: 'TimeoutError: Step timeout of 200ms exceeded',
+              },
+            ])
+          : fallbackResult,
+      );
+
+      // Assert
+      expect(committed).toBe(fallbackResult);
+    });
+
+    it('should surface an unmatchable error for an abort part with no reason', async () => {
+      // Arrange — no attempt-signal reason and no part reason: nothing to match.
       const retryableStream = createRetryableStream({
         model: MockLanguageModel.from(),
         retries: [timeout().switch({ model: MockLanguageModel.from() })],
@@ -362,53 +435,9 @@ describe('createRetryableStream', () => {
       // Assert — timeout() cannot match a bare abort, so no fail-over.
       await expect(result).rejects.toThrow();
     });
-
-    it('should NOT fail over once content has started', async () => {
-      // Arrange — an error after the first content part must not fail over.
-      const result = streamOf([
-        { type: 'text-delta', text: 'OK' },
-        { type: 'error', error: new Error('mid-stream') },
-      ]);
-      const fallback = MockLanguageModel.from();
-      const retryableStream = createRetryableStream({
-        model: MockLanguageModel.from(),
-        retries: [fallback],
-      });
-
-      // Act
-      const committed = await retryableStream(() => result);
-
-      // Assert — committed on the first content part; the trailing error is the
-      // caller's to handle.
-      expect(committed).toBe(result);
-      expect(fallback.doStream).toHaveBeenCalledTimes(0);
-    });
-  });
-
-  describe('retries', () => {
-    it('should throw a RetryError after all attempts are exhausted', async () => {
-      // Arrange
-      const primary = MockLanguageModel.from();
-      const fallback = MockLanguageModel.from();
-      const retryableStream = createRetryableStream({
-        model: primary,
-        retries: [fallback],
-      });
-
-      // Act
-      const result = retryableStream(() =>
-        streamOf([{ type: 'error', error: new Error('boom') }]),
-      );
-
-      // Assert
-      await expect(result).rejects.toThrow();
-      await result.catch((e) => expect(RetryError.isInstance(e)).toBe(true));
-    });
   });
 
   describe('commit gate', () => {
-    const REFUSAL = "I'm sorry, but I cannot assist";
-
     it('should fail over when the buffered text matches a refusal phrase', async () => {
       // Arrange — a refusal split across deltas, with finishReason `stop` (no
       // error/finish signal): the gate must buffer and detect it from the text.
@@ -418,9 +447,7 @@ describe('createRetryableStream', () => {
       const retryableStream = createRetryableStream({
         model: primary,
         retries: [
-          error((e) => e instanceof RefusalError).switch({
-            model: fallback,
-          }),
+          error((e) => e instanceof RefusalError).switch({ model: fallback }),
         ],
         commitGate: refusalGate([REFUSAL]),
       });
@@ -494,6 +521,53 @@ describe('createRetryableStream', () => {
       // Assert
       expect(committed).toBe(result);
     });
+
+    it('should fail over on a custom onRefusal error the conditions match', async () => {
+      // Arrange — the gate throws a caller-supplied error, matched by message.
+      const primary = MockLanguageModel.from();
+      const fallback = MockLanguageModel.from();
+      const fallbackResult = streamOf([{ type: 'text-delta', text: 'OK' }]);
+      const retryableStream = createRetryableStream({
+        model: primary,
+        retries: [
+          error.message('blocked by policy').switch({ model: fallback }),
+        ],
+        commitGate: refusalGate([REFUSAL], {
+          onRefusal: () => new Error('blocked by policy'),
+        }),
+      });
+
+      // Act
+      const committed = await retryableStream((attempt) =>
+        attempt.model === primary
+          ? streamOf([{ type: 'text-delta', text: REFUSAL }])
+          : fallbackResult,
+      );
+
+      // Assert
+      expect(committed).toBe(fallbackResult);
+    });
+  });
+
+  describe('RetryError', () => {
+    it('should throw a RetryError after all attempts are exhausted', async () => {
+      // Arrange
+      const primary = MockLanguageModel.from();
+      const fallback = MockLanguageModel.from();
+      const retryableStream = createRetryableStream({
+        model: primary,
+        retries: [fallback],
+      });
+
+      // Act
+      const result = retryableStream(() =>
+        streamOf([{ type: 'error', error: new Error('boom') }]),
+      );
+
+      // Assert
+      await expect(result).rejects.toThrow();
+      await result.catch((e) => expect(RetryError.isInstance(e)).toBe(true));
+    });
   });
 
   describe('disabled', () => {
@@ -501,7 +575,7 @@ describe('createRetryableStream', () => {
       // Arrange
       const primary = MockLanguageModel.from();
       const fallback = MockLanguageModel.from();
-      const error = new Error('boom');
+      const boom = new Error('boom');
       const models: Array<unknown> = [];
       const retryableStream = createRetryableStream({
         model: primary,
@@ -512,17 +586,21 @@ describe('createRetryableStream', () => {
       // Act
       const result = retryableStream((attempt) => {
         models.push(attempt.model);
-        return streamOf([{ type: 'error', error }]);
+        return streamOf([{ type: 'error', error: boom }]);
       });
 
       // Assert
       await expect(result).rejects.toThrow();
-      await result.catch((e) => expect(e).toBe(error));
+      await result.catch((e) => expect(e).toBe(boom));
       expect(models.length).toBe(1);
     });
   });
 });
 
+/**
+ * Integration suite: drive `createRetryableStream` over a real `streamText`
+ * call per attempt, so commit/fail-over is decided from the actual SDK stream.
+ */
 describe('streamText integration', () => {
   it('should return a usable result when the first attempt succeeds', async () => {
     // Arrange
@@ -767,10 +845,7 @@ describe('streamText integration', () => {
       // Act
       const result = await retryableStreamText(
         { model: primary, retries: [{ model: fallback, timeout: 5_000 }] },
-        {
-          prompt,
-          abortSignal: AbortSignal.timeout(50),
-        },
+        { prompt, abortSignal: AbortSignal.timeout(50) },
       );
 
       // Assert
@@ -787,7 +862,7 @@ describe('streamText integration', () => {
           return {
             stream: new ReadableStream<LanguageModelStreamPart>({
               start(controller) {
-                controller.enqueue({ type: 'stream-start', warnings: [] });
+                controller.enqueue(Language.streamStart());
                 abortSignal?.addEventListener(
                   'abort',
                   () => controller.error(abortSignal.reason),
@@ -862,6 +937,55 @@ describe('streamText integration', () => {
 
       // Assert
       await expect(result).rejects.toThrow();
+      expect(fallback.doStream).toHaveBeenCalledTimes(0);
+    });
+  });
+
+  describe('commit gate', () => {
+    it('should fail over from a canned refusal streamed by the model', async () => {
+      // Arrange — the primary streams a natural-language refusal (finishReason
+      // `stop`); only the gate can catch it, then the call layer fails over.
+      const primary = refusalStreamModel();
+      const fallback = okStreamModel();
+
+      // Act
+      const result = await retryableStreamText(
+        {
+          model: primary,
+          retries: [
+            error((e) => e instanceof RefusalError).switch({ model: fallback }),
+          ],
+          commitGate: refusalGate([REFUSAL]),
+        },
+        { prompt },
+      );
+
+      // Assert
+      expect(await result.text).toBe('Hello, world!');
+      expect(primary.doStream).toHaveBeenCalledTimes(1);
+      expect(fallback.doStream).toHaveBeenCalledTimes(1);
+    });
+
+    it('should commit a real answer that shares a leading fragment', async () => {
+      // Arrange — a genuine answer that opens like a refusal must not fail over.
+      const answer = "I'm sorry to hear that. Here is what to do.";
+      const primary = refusalStreamModel(answer);
+      const fallback = okStreamModel();
+
+      // Act
+      const result = await retryableStreamText(
+        {
+          model: primary,
+          retries: [
+            error((e) => e instanceof RefusalError).switch({ model: fallback }),
+          ],
+          commitGate: refusalGate([REFUSAL]),
+        },
+        { prompt },
+      );
+
+      // Assert
+      expect(await result.text).toBe(answer);
       expect(fallback.doStream).toHaveBeenCalledTimes(0);
     });
   });
@@ -942,62 +1066,11 @@ describe('streamText integration', () => {
       expect(onError).toHaveBeenCalledTimes(1);
     });
   });
-});
 
-describe('streamText integration with a retryable model', () => {
-  it('should recover a content-filter finish at the model layer', async () => {
-    // Arrange — the inner createRetryable handles the content-filter finish
-    // BELOW streamText; the outer call layer never fails over.
-    const primary = contentFilterFinishModel();
-    const modelFallback = okStreamModel();
-    const callFallback = okStreamModel();
-    const inner = createRetryable({
-      model: primary,
-      retries: [contentFilterTriggered(modelFallback)],
-    });
-
-    // Act
-    const result = await retryableStreamText(
-      { model: inner, retries: [callFallback] },
-      { prompt },
-    );
-
-    // Assert — recovered inside the model layer.
-    expect(await result.text).toBe('Hello, world!');
-    expect(primary.doStream).toHaveBeenCalledTimes(1);
-    expect(modelFallback.doStream).toHaveBeenCalledTimes(1);
-    expect(callFallback.doStream).toHaveBeenCalledTimes(0);
-  });
-
-  it('should recover a streamText deadline at the call layer', async () => {
-    // Arrange — a streamText deadline tears the stream down below the inner
-    // model-layer retry, which cannot recover it (#50); the outer call layer
-    // re-runs the whole call instead. The inner retry has its own fallback to
-    // prove the deadline bypasses the model layer entirely.
-    const primary = stallStreamModel();
-    const modelFallback = okStreamModel();
-    const callFallback = okStreamModel();
-    const inner = createRetryable({ model: primary, retries: [modelFallback] });
-
-    // Act
-    const result = await retryableStreamText(
-      { model: inner, retries: [callFallback] },
-      { prompt, timeout: { totalMs: 50 } },
-    );
-
-    // Assert — recovered by the call layer; the model layer never saw it.
-    expect(await result.text).toBe('Hello, world!');
-    expect(modelFallback.doStream).toHaveBeenCalledTimes(0);
-    expect(callFallback.doStream).toHaveBeenCalledTimes(1);
-  });
-
-  describe('with a commit gate', () => {
-    const REFUSAL = "I'm sorry, but I cannot assist";
-
-    it('should not block the inner model-layer recovery of a clean answer', async () => {
-      // Arrange — the inner retryable recovers a content-filter finish BELOW
-      // streamText; the outer gate then sees only the clean fallback text, which
-      // diverges from the refusal phrase and commits. The two layers compose.
+  describe('composition with a retryable base model', () => {
+    it('should recover a content-filter finish at the model layer', async () => {
+      // Arrange — the inner createRetryable handles the content-filter finish
+      // BELOW streamText; the outer call layer never fails over.
       const primary = contentFilterFinishModel();
       const modelFallback = okStreamModel();
       const callFallback = okStreamModel();
@@ -1008,101 +1081,153 @@ describe('streamText integration with a retryable model', () => {
 
       // Act
       const result = await retryableStreamText(
-        {
-          model: inner,
-          retries: [callFallback],
-          commitGate: refusalGate([REFUSAL]),
-        },
+        { model: inner, retries: [callFallback] },
         { prompt },
       );
 
-      // Assert — recovered at the model layer; the gate did not block it.
+      // Assert — recovered inside the model layer.
       expect(await result.text).toBe('Hello, world!');
+      expect(primary.doStream).toHaveBeenCalledTimes(1);
       expect(modelFallback.doStream).toHaveBeenCalledTimes(1);
       expect(callFallback.doStream).toHaveBeenCalledTimes(0);
     });
 
-    it('should fail over at the call layer on a refusal the model layer ignores', async () => {
-      // Arrange — the primary streams a natural-language refusal (finishReason
-      // `stop`), which the inner content-filter retryable does NOT match, so it
-      // passes through. The outer gate catches it and fails over. Proves the
-      // retryable base model does not swallow or block the call-layer fail-over.
-      const primary = refusalStreamModel();
+    it('should recover a streamText deadline at the call layer', async () => {
+      // Arrange — a streamText deadline tears the stream down below the inner
+      // model-layer retry, which cannot recover it (#50); the outer call layer
+      // re-runs the whole call instead. The inner retry has its own fallback to
+      // prove the deadline bypasses the model layer entirely.
+      const primary = stallStreamModel();
       const modelFallback = okStreamModel();
       const callFallback = okStreamModel();
       const inner = createRetryable({
         model: primary,
-        retries: [contentFilterTriggered(modelFallback)],
+        retries: [modelFallback],
       });
 
       // Act
       const result = await retryableStreamText(
-        {
-          model: inner,
-          retries: [
-            error((e) => e instanceof RefusalError).switch({
-              model: callFallback,
-            }),
-          ],
-          commitGate: refusalGate([REFUSAL]),
-        },
-        { prompt },
+        { model: inner, retries: [callFallback] },
+        { prompt, timeout: { totalMs: 50 } },
       );
 
-      // Assert — the inner layer ignored the refusal; the outer layer recovered.
+      // Assert — recovered by the call layer; the model layer never saw it.
       expect(await result.text).toBe('Hello, world!');
-      expect(primary.doStream).toHaveBeenCalledTimes(1);
       expect(modelFallback.doStream).toHaveBeenCalledTimes(0);
       expect(callFallback.doStream).toHaveBeenCalledTimes(1);
     });
-  });
 
-  describe('contrast', () => {
-    it('a retryable model alone cannot recover a streamText deadline', async () => {
-      // Arrange — the retry lives BELOW streamText (wrapping doStream); a
-      // deadline tears the stream down before the fallback can be consumed.
-      const primary = stallStreamModel();
-      const fallback = okStreamModel();
-      const result = streamText({
-        model: createRetryable({ model: primary, retries: [fallback] }),
-        prompt,
-        maxRetries: 0,
-        timeout: { totalMs: 50 },
-        onError: () => {},
+    describe('with a commit gate', () => {
+      it('should not block the inner model-layer recovery of a clean answer', async () => {
+        // Arrange — the inner retryable recovers a content-filter finish BELOW
+        // streamText; the outer gate then sees only the clean fallback text,
+        // which diverges from the refusal phrase and commits. They compose.
+        const primary = contentFilterFinishModel();
+        const modelFallback = okStreamModel();
+        const callFallback = okStreamModel();
+        const inner = createRetryable({
+          model: primary,
+          retries: [contentFilterTriggered(modelFallback)],
+        });
+
+        // Act
+        const result = await retryableStreamText(
+          {
+            model: inner,
+            retries: [callFallback],
+            commitGate: refusalGate([REFUSAL]),
+          },
+          { prompt },
+        );
+
+        // Assert — recovered at the model layer; the gate did not block it.
+        expect(await result.text).toBe('Hello, world!');
+        expect(modelFallback.doStream).toHaveBeenCalledTimes(1);
+        expect(callFallback.doStream).toHaveBeenCalledTimes(0);
       });
 
-      // Act — bound the drain: the aborted stream may never cleanly settle,
-      // which is itself a symptom of the discarded fallback (see issue #50).
-      let text = '';
-      const drain = (async () => {
-        for await (const part of result.stream) {
-          if (part.type === 'text-delta') text += part.text ?? '';
-        }
-      })();
-      await Promise.race([
-        drain.catch(() => {}),
-        new Promise((resolve) => setTimeout(resolve, 500)),
-      ]);
+      it('should fail over at the call layer on a refusal the model layer ignores', async () => {
+        // Arrange — the primary streams a natural-language refusal (finishReason
+        // `stop`), which the inner content-filter retryable does NOT match, so
+        // it passes through. The outer gate catches it and fails over. Proves
+        // the retryable base does not swallow or block the call-layer fail-over.
+        const primary = refusalStreamModel();
+        const modelFallback = okStreamModel();
+        const callFallback = okStreamModel();
+        const inner = createRetryable({
+          model: primary,
+          retries: [contentFilterTriggered(modelFallback)],
+        });
 
-      // Assert — the fallback output never reaches the consumer.
-      expect(text).not.toBe('Hello, world!');
-    }, 10_000);
+        // Act
+        const result = await retryableStreamText(
+          {
+            model: inner,
+            retries: [
+              error((e) => e instanceof RefusalError).switch({
+                model: callFallback,
+              }),
+            ],
+            commitGate: refusalGate([REFUSAL]),
+          },
+          { prompt },
+        );
 
-    it('a retryable stream alone cannot recover a content-filter finish', async () => {
-      // Arrange — content-filter is result-based; the error-only call layer
-      // streams the filtered result through instead of failing over.
-      const primary = contentFilterFinishModel();
-      const fallback = okStreamModel();
+        // Assert — the inner layer ignored the refusal; the outer recovered.
+        expect(await result.text).toBe('Hello, world!');
+        expect(primary.doStream).toHaveBeenCalledTimes(1);
+        expect(modelFallback.doStream).toHaveBeenCalledTimes(0);
+        expect(callFallback.doStream).toHaveBeenCalledTimes(1);
+      });
+    });
 
-      // Act
-      const result = await retryableStreamText(
-        { model: primary, retries: [contentFilterTriggered(fallback)] },
-        { prompt },
-      );
+    describe('contrast', () => {
+      it('a retryable model alone cannot recover a streamText deadline', async () => {
+        // Arrange — the retry lives BELOW streamText (wrapping doStream); a
+        // deadline tears the stream down before the fallback can be consumed.
+        const primary = stallStreamModel();
+        const fallback = okStreamModel();
+        const result = streamText({
+          model: createRetryable({ model: primary, retries: [fallback] }),
+          prompt,
+          maxRetries: 0,
+          timeout: { totalMs: 50 },
+          onError: () => {},
+        });
 
-      // Assert
-      expect(await result.finishReason).toBe('content-filter');
-      expect(fallback.doStream).toHaveBeenCalledTimes(0);
+        // Act — bound the drain: the aborted stream may never cleanly settle,
+        // which is itself a symptom of the discarded fallback (see issue #50).
+        let text = '';
+        const drain = (async () => {
+          for await (const part of result.stream) {
+            if (part.type === 'text-delta') text += part.text ?? '';
+          }
+        })();
+        await Promise.race([
+          drain.catch(() => {}),
+          new Promise((resolve) => setTimeout(resolve, 500)),
+        ]);
+
+        // Assert — the fallback output never reaches the consumer.
+        expect(text).not.toBe('Hello, world!');
+      }, 10_000);
+
+      it('a retryable stream alone cannot recover a content-filter finish', async () => {
+        // Arrange — content-filter is result-based; the error-only call layer
+        // streams the filtered result through instead of failing over.
+        const primary = contentFilterFinishModel();
+        const fallback = okStreamModel();
+
+        // Act
+        const result = await retryableStreamText(
+          { model: primary, retries: [contentFilterTriggered(fallback)] },
+          { prompt },
+        );
+
+        // Assert
+        expect(await result.finishReason).toBe('content-filter');
+        expect(fallback.doStream).toHaveBeenCalledTimes(0);
+      });
     });
   });
 });
