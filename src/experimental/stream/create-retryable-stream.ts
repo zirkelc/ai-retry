@@ -4,24 +4,41 @@ import {
   type RetryCallAttempt,
   type RetryCallRunOptions,
 } from '../call/create-retryable-call.js';
-import { detectStreamCommit } from './detect-stream-commit.js';
+import { type CommitGate, detectStreamCommit } from './detect-stream-commit.js';
 
 /**
- * The minimal shape a stream result must expose: a `fullStream` that can be
- * read to detect when the attempt commits. The stream must be safe to read
- * independently of the caller's own consumption (tee semantics), as the AI
- * SDK's `result.fullStream` getter is — see {@link detectStreamCommit}.
+ * The minimal shape a stream result must expose: a re-readable stream of parts
+ * to detect when the attempt commits. `streamText` (AI SDK v7) exposes it as
+ * `stream`; `streamObject` (and pre-v7 results) as `fullStream`. Either is
+ * accepted, preferring `stream`. The stream must be safe to read independently
+ * of the caller's own consumption (tee semantics), as those getters are — see
+ * {@link detectStreamCommit}.
  */
-export type StreamResult = { fullStream: ReadableStream<unknown> };
+export type StreamResult =
+  | { stream: ReadableStream<unknown> }
+  | { fullStream: ReadableStream<unknown> };
+
+/** Resolve the re-readable part stream, preferring the v7 `stream` getter. */
+const resolveStream = (result: StreamResult): ReadableStream<unknown> =>
+  'stream' in result ? result.stream : result.fullStream;
 
 /**
  * Options for {@link createRetryableStream}.
  */
-export type RetryableStreamOptions = RetryableCallOptions;
+export type RetryableStreamOptions = RetryableCallOptions & {
+  /**
+   * Optional gate that moves the *text*-commit boundary later by buffering
+   * leading `text-delta` parts until it can tell a real answer from a canned
+   * refusal. Use {@link refusalGate} to fail over from a natural-language
+   * refusal (`finishReason: 'stop'`, no error) that the default first-delta
+   * commit would otherwise lock in. See {@link CommitGate}.
+   */
+  commitGate?: CommitGate;
+};
 
 /**
  * Runs a stream-producing function with retry/fail-over, deciding the outcome
- * by reading the result's `fullStream` (no SDK callbacks). Generic over the
+ * by reading the result's part stream (no SDK callbacks). Generic over the
  * result type, so it returns whatever `streamFn` returns once an attempt
  * commits.
  */
@@ -32,11 +49,12 @@ export type RetryableStream = <RESULT extends StreamResult>(
 
 /**
  * Make a stream call retryable at the call level, detecting commit/fail-over
- * purely from the result's `fullStream`.
+ * purely from the result's part stream (`stream`, or `fullStream` for
+ * `streamObject`).
  *
  * For each attempt it invokes `streamFn` (which should build its stream with
  * `attempt.model` and `attempt.abortSignal`), then reads a tee of the result's
- * `fullStream` up to the first content part. If the stream fails *before*
+ * part stream up to the first content part. If the stream fails *before*
  * content — an error part, or an `abort` part from a `streamText`-level
  * deadline (`timeout.chunkMs`/`stepMs`/`totalMs` or an inbound `abortSignal`) —
  * it re-runs the whole call with the next model, which is the only place such a
@@ -51,17 +69,18 @@ export type RetryableStream = <RESULT extends StreamResult>(
  * errors and deadlines around the call.
  *
  * Decoupled from `streamText`: it depends only on the result exposing a
- * re-readable `fullStream`. Pass a `streamFn` that returns a `streamText` (or
+ * re-readable part stream. Pass a `streamFn` that returns a `streamText` (or
  * `streamObject`) result to make that call retryable at the call level.
  *
  * Returns the winning attempt's result unchanged, so the caller drives the body
- * (`fullStream`, `toUIMessageStreamResponse()`, …) with back-pressure preserved
+ * (`stream`, `toUIMessageStreamResponse()`, …) with back-pressure preserved
  * past the commit point.
  */
 export function createRetryableStream(
   options: RetryableStreamOptions,
 ): RetryableStream {
-  const run = createRetryableCall(options);
+  const { commitGate, ...callOptions } = options;
+  const run = createRetryableCall(callOptions);
 
   return <RESULT extends StreamResult>(
     streamFn: (attempt: RetryCallAttempt) => RESULT | Promise<RESULT>,
@@ -69,7 +88,7 @@ export function createRetryableStream(
   ) =>
     run<RESULT>(async (attempt) => {
       const result = await streamFn(attempt);
-      await detectStreamCommit(result.fullStream, attempt);
+      await detectStreamCommit(resolveStream(result), attempt, commitGate);
       return result;
     }, runOptions);
 }

@@ -55,7 +55,7 @@ const run = async (label: string, opts: Record<string, unknown>) => {
   const consume = (async () => {
     const parts: string[] = [];
     try {
-      for await (const p of result.fullStream) parts.push(p.type);
+      for await (const p of result.stream) parts.push(p.type);
     } catch (e) {
       return `aborted@${Date.now() - t0}ms (${(e as Error).name})`;
     }

@@ -105,7 +105,7 @@ const makeFetch = (mode: CutMode): typeof fetch => {
 /**
  * Drop-in `streamText` glue on top of `createRetryableStream`: re-run the whole
  * `streamText` call per attempt with the attempt's model and fresh deadline
- * signal, deciding commit/fail-over from `fullStream`.
+ * signal, deciding commit/fail-over from `stream`.
  */
 const retryableStreamText = (
   options: RetryableStreamOptions,
