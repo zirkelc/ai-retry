@@ -383,6 +383,22 @@ export class RetryableLanguageModel
     }
   }
 
+  /**
+   * Produce the current model's stream for one attempt, piping it through a
+   * fresh `experimental_transform` when configured. The transform runs below
+   * `streamText`, so any `error` part it emits before content is handled by the
+   * same pre-content retry path as a provider error — which is what lets a
+   * transform turn a soft failure into a recoverable one.
+   */
+  private async streamAttempt(
+    callOptions: LanguageModelCallOptions,
+  ): Promise<LanguageModelStream> {
+    const result = await this.currentModel.doStream(callOptions);
+    const transform = this.options.experimental_transform;
+    if (!transform) return result;
+    return { ...result, stream: result.stream.pipeThrough(transform()) };
+  }
+
   async doStream(
     callOptions: LanguageModelCallOptions,
   ): Promise<LanguageModelStream> {
@@ -424,7 +440,7 @@ export class RetryableLanguageModel
     try {
       const initial = await this.withRetry({
         fn: async (retryCallOptions) => {
-          return this.currentModel.doStream(retryCallOptions);
+          return this.streamAttempt(retryCallOptions);
         },
         callOptions: callOptions,
         attempts,
@@ -651,7 +667,7 @@ export class RetryableLanguageModel
 
                 const retriedResult = await this.withRetry({
                   fn: async (retryCallOptions) => {
-                    return this.currentModel.doStream(retryCallOptions);
+                    return this.streamAttempt(retryCallOptions);
                   },
                   callOptions: callOptions,
                   attempts,
@@ -805,7 +821,7 @@ export class RetryableLanguageModel
                */
               const retriedResult = await this.withRetry({
                 fn: async (retryCallOptions) => {
-                  return this.currentModel.doStream(retryCallOptions);
+                  return this.streamAttempt(retryCallOptions);
                 },
                 callOptions: callOptions,
                 attempts,

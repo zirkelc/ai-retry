@@ -50,32 +50,12 @@ function abortErrorFromPart(
 }
 
 /**
- * A gate that decides, from the text accumulated so far, whether a
- * text-producing attempt has really committed. Consulted on every `text-delta`
- * with the running concatenation of their `.text`:
- * - returns `'commit'` — the text has diverged from anything worth withholding;
- *   the attempt commits and cannot fail over;
- * - returns `'wait'` — the text is still an inconclusive prefix; keep buffering
- *   and re-consult on the next delta (the caller has not started consuming yet,
- *   so nothing has reached the user);
- * - throws — treat the buffered text as a failure and fail over. The thrown
- *   error is what the retry conditions see, so throw one they can match (e.g. a
- *   message carrying the matched refusal phrase).
- *
- * Only `text-delta` parts pass through the gate; any other content part
- * (`tool-call`, `source`, …) commits immediately, since a text refusal cannot
- * arrive as one. See {@link refusalGate} for the built-in phrase matcher.
- */
-export type CommitGate = (bufferedText: string) => 'commit' | 'wait';
-
-/**
  * Drive a stream up to the point its outcome is known, without consuming the
  * whole thing. Reads the result's part stream (the AI SDK `streamText`/
  * `streamObject` protocol — `stream`, or `fullStream` for `streamObject`) until
  * one of:
  * - the first content part — resolves; the attempt has committed and cannot
- *   fail over. When a `gate` is supplied, `text-delta` parts are instead
- *   buffered and the gate decides commit/wait/fail-over (see {@link CommitGate});
+ *   fail over;
  * - an `error` part — throws its error, so the caller can fail over;
  * - an `abort` part (a `streamText`-level deadline) — throws a matchable error
  *   ({@link abortErrorFromPart}): the attempt's structured abort reason when its
@@ -86,12 +66,9 @@ export type CommitGate = (bufferedText: string) => 'commit' | 'wait';
  *   `content-filter` finish with no output, is a valid commit here; result-based
  *   conditions are handled at the model layer, below `streamText`).
  *
- * Without a `gate` the commit boundary is {@link isStreamContentPart}, the same
- * content-part set the AI SDK's `onChunk` fires on, so call-level and
- * model-level retries stop failing over at exactly the same point. Everything
- * else is preamble. A `gate` moves the text-commit boundary later — past the
- * leading deltas it withholds — but only for text; it never changes when
- * non-text content or an error/abort commits.
+ * The commit boundary is {@link isStreamContentPart}, the same content-part set
+ * the AI SDK's `onChunk` fires on, so call-level and model-level retries stop
+ * failing over at exactly the same point. Everything else is preamble.
  *
  * The reader is cancelled once the outcome is known. The passed stream must be
  * safe to read independently of the caller's own consumption — e.g. a fresh
@@ -102,10 +79,8 @@ export type CommitGate = (bufferedText: string) => 'commit' | 'wait';
 export async function detectStreamCommit(
   stream: ReadableStream<unknown>,
   attempt: RetryCallAttempt,
-  gate?: CommitGate,
 ): Promise<void> {
   const reader = stream.getReader();
-  let bufferedText = '';
   try {
     while (true) {
       const { done, value } = await reader.read();
@@ -118,12 +93,6 @@ export async function detectStreamCommit(
       }
       if (type === 'abort') {
         throw abortErrorFromPart(value as AbortPart, attempt);
-      }
-      if (gate && type === 'text-delta') {
-        bufferedText += (value as { text?: string }).text ?? '';
-        /** Gate throws to fail over; 'wait' buffers the next delta. */
-        if (gate(bufferedText) === 'commit') return;
-        continue;
       }
       if (isStreamContentPart(value as LanguageModelStreamPart)) {
         return;

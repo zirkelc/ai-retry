@@ -4,7 +4,7 @@ import {
   type RetryCallAttempt,
   type RetryCallRunOptions,
 } from '../call/create-retryable-call.js';
-import { type CommitGate, detectStreamCommit } from './detect-stream-commit.js';
+import { detectStreamCommit } from './detect-stream-commit.js';
 
 /**
  * The minimal shape a stream result must expose: a re-readable stream of parts
@@ -25,16 +25,7 @@ const resolveStream = (result: StreamResult): ReadableStream<unknown> =>
 /**
  * Options for {@link createRetryableStream}.
  */
-export type RetryableStreamOptions = RetryableCallOptions & {
-  /**
-   * Optional gate that moves the *text*-commit boundary later by buffering
-   * leading `text-delta` parts until it can tell a real answer from a canned
-   * refusal. Use {@link refusalGate} to fail over from a natural-language
-   * refusal (`finishReason: 'stop'`, no error) that the default first-delta
-   * commit would otherwise lock in. See {@link CommitGate}.
-   */
-  commitGate?: CommitGate;
-};
+export type RetryableStreamOptions = RetryableCallOptions;
 
 /**
  * Runs a stream-producing function with retry/fail-over, deciding the outcome
@@ -79,8 +70,7 @@ export type RetryableStream = <RESULT extends StreamResult>(
 export function createRetryableStream(
   options: RetryableStreamOptions,
 ): RetryableStream {
-  const { commitGate, ...callOptions } = options;
-  const run = createRetryableCall(callOptions);
+  const run = createRetryableCall(options);
 
   return <RESULT extends StreamResult>(
     streamFn: (attempt: RetryCallAttempt) => RESULT | Promise<RESULT>,
@@ -88,7 +78,7 @@ export function createRetryableStream(
   ) =>
     run<RESULT>(async (attempt) => {
       const result = await streamFn(attempt);
-      await detectStreamCommit(resolveStream(result), attempt, commitGate);
+      await detectStreamCommit(resolveStream(result), attempt);
       return result;
     }, runOptions);
 }
