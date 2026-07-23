@@ -14,8 +14,8 @@
  *      stream is torn down (the upstream request is aborted — no wasted tokens).
  *   2. the consumer's read rejects with the `RefusalError`, which
  *      `createRetryableModel` catches BEFORE content and runs through its retry
- *      conditions — so `error(e => e instanceof RefusalError).switch(...)` fails
- *      over, under plain `streamText`, with no call-layer wrapper.
+ *      conditions — so `error.isInstance(RefusalError).switch(...)` fails over,
+ *      under plain `streamText`, with no call-layer wrapper.
  *
  * (Enqueuing an `{ type: 'error' }` part instead would NOT stop the source — the
  * model keeps streaming — so `controller.error` is the right tool here.)
@@ -128,9 +128,7 @@ const wrappedModel = wrapLanguageModel({
 /** Make it retryable, switching to the fallback on a `RefusalError`. */
 const model = createRetryableModel({
   model: wrappedModel,
-  retries: [
-    error((e) => e instanceof RefusalError).switch({ model: fallbackModel }),
-  ],
+  retries: [error.isInstance(RefusalError).switch({ model: fallbackModel })],
 });
 
 const result = streamText({ model, prompt: 'What sanitizes pool water?' });
