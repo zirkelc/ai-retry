@@ -1,22 +1,29 @@
-import { RetryError, stepCountIs, streamText, tool } from 'ai';
+import {
+  createUIMessageStreamResponse,
+  RetryError,
+  stepCountIs,
+  streamText,
+  tool,
+  toUIMessageStream,
+} from 'ai';
 import { z } from 'zod';
 import { describe, expect, it, vi } from 'vitest';
-import { createRetryable } from '../../index.js';
 import {
   aborted,
   error,
+  finishReason,
   timeout,
 } from '../../language-model/conditions/index.js';
 import {
   contentFilterError,
   contentFilterStreamChunks,
+  createRetryableModel,
   errorStreamChunks,
   Language,
   MockLanguageModel,
   mockStreamChunks,
   Streams,
 } from '../../internal/test-utils.js';
-import { contentFilterTriggered } from '../../retryables/content-filter-triggered.js';
 import type {
   LanguageModelCallOptions,
   LanguageModelStreamPart,
@@ -29,10 +36,14 @@ import {
 const prompt = 'Hello!';
 
 /**
- * Result shapes carry `streamText`-level parts (`TextStreamPart`s: `text-delta`
- * with `.text`, plus `abort`/`error`), written as literals since ai-test-kit's
- * `Language.*` helpers build the provider-level parts a mock model's `doStream`
- * returns, one layer below. `Streams.from` wraps any array into a `ReadableStream`.
+ * These shapes mimic a `streamText` *result* (what `streamFn` returns), whose
+ * `stream` yields `streamText`-level `TextStreamPart`s. `Streams.from` wraps the
+ * parts into the `ReadableStream`. `error` parts use `Language.streamError`
+ * (that part is identical at both layers), but `text-delta` (`.text`) and
+ * `abort` are written as literals: ai-test-kit's `Language.*` build the
+ * *provider*-level parts a model's `doStream` returns (one layer below), and it
+ * has no `streamText`-level text-delta or `abort` builder. This is also why
+ * `streamOf` is not `Language.streamResult()` — that builds a `doStream` result.
  */
 
 /** A v7 `streamText`-shaped result: parts on `stream`. */
@@ -147,7 +158,7 @@ describe('createRetryableStream', () => {
       // Act — an error on `stream` before content must fail over.
       const committed = await retryableStream((attempt) =>
         attempt.model === primary
-          ? streamOf([{ type: 'error', error: new Error('x') }])
+          ? streamOf([Language.streamError(new Error('x'))])
           : fallbackResult,
       );
 
@@ -168,7 +179,7 @@ describe('createRetryableStream', () => {
       // Act
       const committed = await retryableStream((attempt) =>
         attempt.model === primary
-          ? fullStreamOf([{ type: 'error', error: new Error('x') }])
+          ? fullStreamOf([Language.streamError(new Error('x'))])
           : fallbackResult,
       );
 
@@ -191,7 +202,7 @@ describe('createRetryableStream', () => {
       const committed = await retryableStream((attempt) =>
         attempt.model === primary
           ? {
-              stream: Streams.from([{ type: 'error', error: new Error('x') }]),
+              stream: Streams.from([Language.streamError(new Error('x'))]),
               fullStream: Streams.from([{ type: 'text-delta', text: 'nope' }]),
             }
           : fallbackResult,
@@ -259,7 +270,7 @@ describe('createRetryableStream', () => {
       // Arrange — an error after the first content part must not fail over.
       const result = streamOf([
         { type: 'text-delta', text: 'OK' },
-        { type: 'error', error: new Error('mid-stream') },
+        Language.streamError(new Error('mid-stream')),
       ]);
       const fallback = MockLanguageModel.from();
       const retryableStream = createRetryableStream({
@@ -293,7 +304,7 @@ describe('createRetryableStream', () => {
       const committed = await retryableStream((attempt) => {
         models.push(attempt.model);
         return attempt.model === primary
-          ? streamOf([{ type: 'error', error: new Error('boom') }])
+          ? streamOf([Language.streamError(new Error('boom'))])
           : fallbackResult;
       });
 
@@ -438,7 +449,7 @@ describe('createRetryableStream', () => {
 
       // Act
       const result = retryableStream(() =>
-        streamOf([{ type: 'error', error: new Error('boom') }]),
+        streamOf([Language.streamError(new Error('boom'))]),
       );
 
       // Assert
@@ -463,7 +474,7 @@ describe('createRetryableStream', () => {
       // Act
       const result = retryableStream((attempt) => {
         models.push(attempt.model);
-        return streamOf([{ type: 'error', error: boom }]);
+        return streamOf([Language.streamError(boom)]);
       });
 
       // Assert
@@ -557,7 +568,14 @@ describe('streamText integration', () => {
 
       // Act
       const result = await retryableStreamText(
-        { model: primary, retries: [contentFilterTriggered(fallback)] },
+        {
+          model: primary,
+          retries: [
+            error.message('content management policy').switch({
+              model: fallback,
+            }),
+          ],
+        },
         { prompt },
       );
 
@@ -654,7 +672,10 @@ describe('streamText integration', () => {
 
       // Act
       const result = await retryableStreamText(
-        { model: primary, retries: [contentFilterTriggered(fallback)] },
+        {
+          model: primary,
+          retries: [finishReason('content-filter').switch({ model: fallback })],
+        },
         { prompt },
       );
 
@@ -757,12 +778,11 @@ describe('streamText integration', () => {
       const primary = MockLanguageModel.from({
         doStream: [
           Language.streamStart(),
-          {
-            type: 'tool-call',
+          Language.toolCall({
             toolCallId: 'c1',
             toolName: 'wait',
             input: '{}',
-          },
+          }),
           Language.streamFinish({ finishReason: 'tool-calls' }),
         ],
       });
@@ -902,7 +922,7 @@ describe('streamText integration', () => {
   });
 
   describe('deferred consumption', () => {
-    it('should let the caller drive the body via toUIMessageStreamResponse', async () => {
+    it('should let the caller drive the body via a UI message stream response', async () => {
       // Arrange — fail over before content, then let the caller consume.
       const primary = MockLanguageModel.from({ doStream: new Error('boom') });
       const fallback = okStreamModel();
@@ -912,7 +932,9 @@ describe('streamText integration', () => {
         { model: primary, retries: [fallback] },
         { prompt },
       );
-      const response = result.toUIMessageStreamResponse();
+      const response = createUIMessageStreamResponse({
+        stream: toUIMessageStream({ stream: result.stream }),
+      });
       const body = await response.text();
 
       // Assert — the fallback body streams out through the caller's mechanism.
@@ -961,14 +983,16 @@ describe('streamText integration', () => {
 
   describe('composition with a retryable base model', () => {
     it('should recover a content-filter finish at the model layer', async () => {
-      // Arrange — the inner createRetryable handles the content-filter finish
+      // Arrange — the inner createRetryableModel handles the content-filter finish
       // BELOW streamText; the outer call layer never fails over.
       const primary = contentFilterFinishModel();
       const modelFallback = okStreamModel();
       const callFallback = okStreamModel();
-      const inner = createRetryable({
+      const inner = createRetryableModel({
         model: primary,
-        retries: [contentFilterTriggered(modelFallback)],
+        retries: [
+          finishReason('content-filter').switch({ model: modelFallback }),
+        ],
       });
 
       // Act
@@ -992,7 +1016,7 @@ describe('streamText integration', () => {
       const primary = stallStreamModel();
       const modelFallback = okStreamModel();
       const callFallback = okStreamModel();
-      const inner = createRetryable({
+      const inner = createRetryableModel({
         model: primary,
         retries: [modelFallback],
       });
@@ -1016,7 +1040,7 @@ describe('streamText integration', () => {
         const primary = stallStreamModel();
         const fallback = okStreamModel();
         const result = streamText({
-          model: createRetryable({ model: primary, retries: [fallback] }),
+          model: createRetryableModel({ model: primary, retries: [fallback] }),
           prompt,
           maxRetries: 0,
           timeout: { totalMs: 50 },
@@ -1048,7 +1072,12 @@ describe('streamText integration', () => {
 
         // Act
         const result = await retryableStreamText(
-          { model: primary, retries: [contentFilterTriggered(fallback)] },
+          {
+            model: primary,
+            retries: [
+              finishReason('content-filter').switch({ model: fallback }),
+            ],
+          },
           { prompt },
         );
 

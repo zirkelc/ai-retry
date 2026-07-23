@@ -1,15 +1,18 @@
 import { streamText } from 'ai';
 import { describe, expect, it } from 'vitest';
-import { createRetryable } from '../../index.js';
 import { error } from '../../language-model/conditions/index.js';
-import { Language, MockLanguageModel } from '../../internal/test-utils.js';
+import {
+  createRetryableModel,
+  Language,
+  MockLanguageModel,
+} from '../../internal/test-utils.js';
 import type {
   LanguageModelStreamPart,
   LanguageModelStreamTransform,
 } from '../../types.js';
 import { RefusalError, refusalTransform } from './refusal-transform.js';
 
-const REFUSAL = "I'm sorry, but I cannot assist";
+const REFUSAL = "I'm sorry, but I cannot assist with that request.";
 
 /** Run a set of provider parts through a fresh transform and collect the output. */
 const runTransform = async (
@@ -107,12 +110,11 @@ describe('refusalTransform', () => {
       const input: Array<LanguageModelStreamPart> = [
         Language.streamStart(),
         { type: 'text-delta', id: '1', delta: "I'm sorry" },
-        {
-          type: 'tool-call',
+        Language.toolCall({
           toolCallId: 't1',
           toolName: 'search',
           input: '{}',
-        },
+        }),
       ];
 
       // Act
@@ -166,7 +168,7 @@ describe('refusalTransform', () => {
     });
   });
 
-  describe('createRetryable integration', () => {
+  describe(`createRetryableModel integration`, () => {
     /** Provider parts for a stream of the given deltas, finishing `stop`. */
     const streaming = (deltas: Array<string>) =>
       MockLanguageModel.from({
@@ -182,7 +184,7 @@ describe('refusalTransform', () => {
       // matches, so the model layer fails over with no call-layer wrapper.
       const primary = streaming(["I'm sorry, ", 'but I cannot assist.']);
       const fallback = streaming(['clean answer']);
-      const model = createRetryable({
+      const model = createRetryableModel({
         model: primary,
         retries: [
           error((e) => e instanceof RefusalError).switch({ model: fallback }),
@@ -206,7 +208,7 @@ describe('refusalTransform', () => {
       const answer = "I'm sorry to hear that. Here is help.";
       const primary = streaming([answer]);
       const fallback = streaming(['clean answer']);
-      const model = createRetryable({
+      const model = createRetryableModel({
         model: primary,
         retries: [
           error((e) => e instanceof RefusalError).switch({ model: fallback }),
@@ -229,7 +231,7 @@ describe('refusalTransform', () => {
       const primary = streaming(["I'm sorry, but I cannot assist."]);
       const fallback = streaming(['clean answer']);
       const errors: Array<Error> = [];
-      const model = createRetryable({
+      const model = createRetryableModel({
         model: primary,
         retries: [
           error.message('some other error').switch({ model: fallback }),
