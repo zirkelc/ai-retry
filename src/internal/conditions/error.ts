@@ -13,6 +13,16 @@ import { or } from './or.js';
 export type StatusPattern = number | string | RegExp;
 
 /**
+ * An error class accepted by `error.isInstance`. Any `Error` subclass
+ * constructor works. AI SDK error classes additionally expose a static
+ * `isInstance` marker check, which is preferred over `instanceof` when
+ * present so matching survives across realms and duplicate installs.
+ */
+export type ErrorClass = (new (...args: Array<any>) => Error) & {
+  isInstance?: (err: unknown) => boolean;
+};
+
+/**
  * Build the error-side condition helpers (`error`, `httpStatus`,
  * `timeout`, `aborted`) bound to a specific model family. Consumed by
  * `language-model.ts` and `image-model.ts` so each entry point exposes
@@ -40,6 +50,31 @@ export function createErrorAPI<BOUND extends AnyModel>() {
       return predicate(ctx.current.error as E, ctx);
     });
   }
+
+  /**
+   * Match when the error is an instance of the given error class.
+   * Accepts the AI SDK error classes (`APICallError`,
+   * `NoObjectGeneratedError`, ...) as well as any `Error` subclass. When
+   * the class exposes a static `isInstance` marker check (as the AI SDK
+   * classes do), it is preferred over `instanceof`, so matching survives
+   * across realms and duplicate package installs.
+   *
+   * **Important:** returns a `Condition`, not a `Retryable`. Call
+   * `.switch()` or `.retry()` to plug it into `retries: [...]`.
+   *
+   * @example
+   * error.isInstance(APICallError).retry({ delay: 1000 })
+   * error.isInstance(TypeError).switch({ model: fallback })
+   */
+  error.isInstance = function isInstance<MODEL extends BOUND = BOUND>(
+    cls: ErrorClass,
+  ): Condition<MODEL> {
+    return error<MODEL>((e) =>
+      typeof cls.isInstance === 'function'
+        ? cls.isInstance(e)
+        : e instanceof cls,
+    );
+  };
 
   /**
    * Match when the error explicitly carries `isRetryable === flag`.

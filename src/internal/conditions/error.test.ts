@@ -1,3 +1,4 @@
+import { APICallError } from 'ai';
 import { describe, expect, it } from 'vitest';
 import {
   Errors,
@@ -91,6 +92,40 @@ describe('error', () => {
 
       // Assert
       expect(matched).toBe(false);
+    });
+  });
+
+  describe('isInstance', () => {
+    it(`should match via the class's static isInstance marker check`, async () => {
+      // Arrange
+      const cond = error.isInstance<MockLanguageModel>(APICallError);
+
+      // Act
+      const matched = await cond.evaluate(
+        buildErrorContext(Errors.from({ statusCode: 500 })),
+      );
+      const missed = await cond.evaluate(buildErrorContext(new Error('plain')));
+
+      // Assert
+      expect(matched).toBe(true);
+      expect(missed).toBe(false);
+    });
+
+    it(`should fall back to instanceof for plain Error subclasses`, async () => {
+      // Arrange
+      const cond = error.isInstance<MockLanguageModel>(TypeError);
+
+      // Act
+      const matched = await cond.evaluate(
+        buildErrorContext(new TypeError('bad type')),
+      );
+      const missed = await cond.evaluate(
+        buildErrorContext(new RangeError('out of range')),
+      );
+
+      // Assert
+      expect(matched).toBe(true);
+      expect(missed).toBe(false);
     });
   });
 
