@@ -259,6 +259,7 @@ These are available from all three entry points (`language-model`, `embedding-mo
 | Helper                          | Kind       | Matches when                                                                   |
 | ------------------------------- | ---------- | ------------------------------------------------------------------------------ |
 | `error(predicate)`              | low-level  | The current attempt failed and `predicate(err, ctx)` returns true              |
+| `error.isInstance(cls)`         | low-level  | The error is an instance of `cls` (prefers `cls.isInstance`, else `instanceof`) |
 | `error.isRetryable(flag)`       | low-level  | `APICallError.isRetryable === flag` (default `true`)                           |
 | `error.statusCode(...patterns)` | low-level  | Numbers match the status code exactly; regex matches the stringified code      |
 | `error.message(...patterns)`    | low-level  | Substring (case-insensitive) or regex match against the error message          |
@@ -270,7 +271,7 @@ These are available from all three entry points (`language-model`, `embedding-mo
 
 ###### `error(predicate)`
 
-Takes any predicate over the failed attempt's error. Its namespace bundles the common matchers: `isRetryable` (defaults to `true`), `statusCode` (numbers or regex), `message` (case-insensitive substring or regex), and `isTimeout` / `isAbort` (match `AbortSignal.timeout()` firing vs a manual `controller.abort()`). The pattern matchers accept any number of patterns and match if any matches.
+Takes any predicate over the failed attempt's error. Its namespace bundles the common matchers: `isInstance` (matches an error class), `isRetryable` (defaults to `true`), `statusCode` (numbers or regex), `message` (case-insensitive substring or regex), and `isTimeout` / `isAbort` (match `AbortSignal.timeout()` firing vs a manual `controller.abort()`). The pattern matchers accept any number of patterns and match if any matches.
 
 ```typescript
 import { APICallError } from 'ai';
@@ -279,6 +280,9 @@ import { error } from 'ai-retry/language-model';
 error((e) => APICallError.isInstance(e) && e.statusCode === 418).switch({
   model: fallback,
 });
+
+error.isInstance(APICallError).switch({ model: fallback }); // AI SDK marker check
+error.isInstance(TypeError).switch({ model: fallback }); // plain instanceof
 
 error.isRetryable().switch({ model: fallback }); // defaults to true
 error.isRetryable(false).switch({ model: fallback });

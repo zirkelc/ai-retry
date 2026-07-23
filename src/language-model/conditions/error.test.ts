@@ -159,6 +159,56 @@ describe('error', () => {
     });
   });
 
+  describe('error.isInstance', () => {
+    it('should switch when the error is an instance of the class', async () => {
+      // Arrange
+      const baseModel = MockLanguageModel.from({
+        doGenerate: Errors.from({ statusCode: 500 }),
+      });
+      const retryModel = MockLanguageModel.from(mockResultText);
+
+      // Act
+      const result = await generateText({
+        model: createRetryableModel({
+          model: baseModel,
+          retries: [
+            error.isInstance(APICallError).switch({ model: retryModel }),
+          ],
+        }),
+        prompt: 'Hello!',
+        maxRetries: 0,
+      });
+
+      // Assert
+      expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
+      expect(retryModel.doGenerate).toHaveBeenCalledTimes(1);
+      expect(result.text).toBe(mockResultText);
+    });
+
+    it('should not switch when the error is not an instance of the class', async () => {
+      // Arrange
+      const baseModel = MockLanguageModel.from({
+        doGenerate: Errors.from({ statusCode: 500 }),
+      });
+      const retryModel = MockLanguageModel.from(mockResultText);
+
+      // Act
+      const result = generateText({
+        model: createRetryableModel({
+          model: baseModel,
+          retries: [error.isInstance(TypeError).switch({ model: retryModel })],
+        }),
+        prompt: 'Hello!',
+        maxRetries: 0,
+      });
+
+      // Assert
+      await expect(result).rejects.toThrow(APICallError);
+      expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
+      expect(retryModel.doGenerate).toHaveBeenCalledTimes(0);
+    });
+  });
+
   describe('error.statusCode', () => {
     it('should switch on matching numeric status', async () => {
       // Arrange
