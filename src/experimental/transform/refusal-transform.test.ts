@@ -47,7 +47,11 @@ describe('refusalTransform', () => {
       const input = [
         Language.streamStart(),
         ...Language.streamText(
-          ["I'm sorry, ", 'but I cannot assist', ' now.'],
+          [
+            "I'm sorry, ",
+            'but I cannot assist with that request.',
+            ' Anything else?',
+          ],
           {
             id: '1',
           },
@@ -132,9 +136,10 @@ describe('refusalTransform', () => {
       // Arrange
       const input = [
         Language.streamStart(),
-        ...Language.streamText(["I'M   SORRY,\n BUT I CANNOT ASSIST"], {
-          id: '1',
-        }),
+        ...Language.streamText(
+          ["I'M   SORRY,\n BUT I CANNOT ASSIST WITH THAT REQUEST."],
+          { id: '1' },
+        ),
         Language.streamFinish(),
       ];
 
@@ -149,7 +154,12 @@ describe('refusalTransform', () => {
       // Arrange
       const input = [
         Language.streamStart(),
-        ...Language.streamText(["I'm sorry, but I cannot assist"], { id: '1' }),
+        ...Language.streamText(
+          ["I'm sorry, but I cannot assist with that request."],
+          {
+            id: '1',
+          },
+        ),
         Language.streamFinish(),
       ];
       const transform = refusalTransform([REFUSAL], {
@@ -182,7 +192,10 @@ describe('refusalTransform', () => {
     it('should recover a refusal at the model layer under plain streamText', async () => {
       // Arrange — the transform converts the refusal to an error the condition
       // matches, so the model layer fails over with no call-layer wrapper.
-      const primary = streaming(["I'm sorry, ", 'but I cannot assist.']);
+      const primary = streaming([
+        "I'm sorry, ",
+        'but I cannot assist with that request.',
+      ]);
       const fallback = streaming(['clean answer']);
       const model = createRetryableModel({
         model: primary,
@@ -228,7 +241,9 @@ describe('refusalTransform', () => {
 
     it('should surface the refusal error when no condition matches', async () => {
       // Arrange — a condition that does NOT match RefusalError.
-      const primary = streaming(["I'm sorry, but I cannot assist."]);
+      const primary = streaming([
+        "I'm sorry, but I cannot assist with that request.",
+      ]);
       const fallback = streaming(['clean answer']);
       const errors: Array<Error> = [];
       const model = createRetryableModel({
