@@ -41,7 +41,8 @@ class RefusalError extends Error {
   override name = 'RefusalError';
 }
 
-/** Holds text back while it still spells out a known refusal, and throws once one matches. */
+/** Holds text back while it still spells out a known refusal,
+ *  and throws once one matches in full. */
 const detectRefusal = (): LanguageModelMiddleware => ({
   wrapStream: async ({ doStream }) => {
     const { stream, ...rest } = await doStream();
@@ -79,7 +80,8 @@ const detectRefusal = (): LanguageModelMiddleware => ({
             controller.enqueue(chunk);
           },
           flush(controller) {
-            if (buffer) controller.enqueue({ type: 'text-delta', id, delta: buffer });
+            if (buffer)
+              controller.enqueue({ type: 'text-delta', id, delta: buffer });
           },
         }),
       ),
@@ -88,12 +90,21 @@ const detectRefusal = (): LanguageModelMiddleware => ({
 });
 
 const stream = (text: string) => ({
-  doStream: [Language.streamStart(), ...Language.streamText(text, { separator: ' ' }), Language.streamFinish()],
+  doStream: [
+    Language.streamStart(),
+    ...Language.streamText(text, { separator: ' ' }),
+    Language.streamFinish(),
+  ],
 });
 
-/** Azure streams the refusal and still finishes with `stop`; OpenAI answers the same prompt. */
-const azure = MockLanguageModel.from(stream("I'm sorry, but I can't assist with that request."));
-const openai = MockLanguageModel.from(stream('Sure! Here is the answer you asked for.'));
+/** Azure streams the refusal and still finishes with `stop`,
+ *  while OpenAI answers the same prompt. */
+const azure = MockLanguageModel.from(
+  stream("I'm sorry, but I can't assist with that request."),
+);
+const openai = MockLanguageModel.from(
+  stream('Sure! Here is the answer you asked for.'),
+);
 
 const model = createRetryableModel({
   model: wrapLanguageModel({ model: azure, middleware: detectRefusal() }),
