@@ -824,20 +824,23 @@ describe('streamText integration', () => {
       expect(fallback.doStream).toHaveBeenCalledTimes(0);
     });
 
-    it('should recover an inbound abortSignal deadline with a per-attempt timeout', async () => {
-      // Arrange
+    it('should NOT recover an inbound abortSignal deadline (a hard caller cancel)', async () => {
+      // Arrange — an inbound abortSignal is the caller's own deadline, not a
+      // per-attempt timeout: once it fires the whole call is cancelled and does
+      // not fail over, even to a retry with its own timeout. For a per-attempt
+      // deadline, use streamText's `timeout` instead (see the test above).
       const primary = stallStreamModel();
       const fallback = okStreamModel();
 
       // Act
-      const result = await retryableStreamText(
+      const result = retryableStreamText(
         { model: primary, retries: [{ model: fallback, timeout: 5_000 }] },
         { prompt, abortSignal: AbortSignal.timeout(50) },
       );
 
       // Assert
-      expect(await result.text).toBe('Hello, world!');
-      expect(fallback.doStream).toHaveBeenCalledTimes(1);
+      await expect(result).rejects.toThrow();
+      expect(fallback.doStream).toHaveBeenCalledTimes(0);
     });
 
     it('should give each attempt a fresh deadline signal', async () => {

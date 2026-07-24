@@ -2,21 +2,21 @@
  * Switch models when a call times out, using `createRetryableCall` — the
  * generic retry-loop driver that also backs `createRetryableStream`.
  *
- * The driver owns two things the underlying call cannot do for itself: it picks
- * the model for each attempt, and it mints a FRESH per-attempt deadline
- * (`AbortSignal.timeout`). That freshness is the whole point — attempt 1's clock
- * is already spent by the time it fails, so a re-run has to start from a new
- * signal or it would abort instantly. The call function just wires
- * `attempt.model` + `attempt.abortSignal` into whatever it invokes; here that is
- * `generateText`.
+ * The driver re-runs the whole call for each attempt and hands the call function
+ * a FRESH per-attempt deadline as `attempt.timeout` (the run's timeout first,
+ * then each fallback's own `.switch({ timeout })`). Freshness is the point:
+ * attempt 1's clock is spent by the time it fails, so a re-run needs a new
+ * deadline or it would time out instantly. The call function applies that number
+ * however its call takes one — `generateText` has a native `timeout`, so it just
+ * forwards it. (`attempt.abortSignal` is separate: the caller's own cancellation,
+ * passed through untouched.)
  *
- * When attempt 1's model hangs past the deadline, its signal fires a
+ * When attempt 1's model hangs past its deadline, `generateText` throws a
  * `TimeoutError`; `timeout().switch({ model, timeout })` matches it and re-runs
- * with the fallback under a fresh deadline.
+ * with the fallback under its own fresh deadline.
  *
- * The timeout is simulated (no API key needed): the slow model resolves only
- * when its abort signal fires, so it always trips whatever deadline the driver
- * sets for the attempt.
+ * The slowness is simulated (no API key needed): the slow model only answers
+ * after 5s, so any shorter deadline trips first.
  *
  * Run:
  *   pnpm build && pnpm tsx examples/retryable-call-timeout-switch.ts
@@ -28,11 +28,11 @@ import { Language, MockLanguageModel } from 'ai-test-kit/language';
 import type { LanguageModelV4CallOptions } from '@ai-sdk/provider';
 
 /**
- * A model that answers only after 5s — a stand-in for a slow upstream. The
- * driver's much shorter deadline pre-empts it: when the attempt's `abortSignal`
- * fires (its reason is a `TimeoutError`), `doGenerate` rejects with it. The
- * pending 5s timer also keeps the event loop alive until the deadline fires,
- * which a real network call would do on its own.
+ * A model that answers only after 5s — a stand-in for a slow upstream. A shorter
+ * deadline pre-empts it: `generateText`'s `timeout` aborts the call's signal, so
+ * `doGenerate` rejects with the reason (a `TimeoutError`). The pending 5s timer
+ * also keeps the event loop alive until the deadline fires, which a real network
+ * call would do on its own.
  */
 const slowModel = () =>
   MockLanguageModel.from({
@@ -67,14 +67,16 @@ const run = createRetryableCall({
 });
 
 /**
- * The driver hands each attempt its model plus a fresh `abortSignal`. Forward
- * both into `generateText`; `maxRetries: 0` leaves all retrying to the driver.
- * The first attempt's deadline comes from the run option below.
+ * The driver hands each attempt its model, a fresh `timeout`, and the caller's
+ * `abortSignal` (here none). Forward the timeout to `generateText`'s own timeout
+ * option and the signal for cancellation; `maxRetries: 0` leaves retrying to the
+ * driver. The first attempt's deadline comes from the run option below.
  */
 const result = await run(
   (attempt) =>
     generateText({
       model: attempt.model,
+      timeout: attempt.timeout,
       abortSignal: attempt.abortSignal,
       prompt: 'Invent a new holiday and describe its traditions.',
       maxRetries: 0,
@@ -85,7 +87,4 @@ const result = await run(
 console.log(`slow.doGenerate: ${slow.doGenerate.mock.calls.length}`);
 console.log(`fast.doGenerate: ${fast.doGenerate.mock.calls.length}`);
 console.log(`text: ${JSON.stringify(result.text)}`);
-console.log(
-  '\nTakeaway: the driver re-runs the whole call with a fresh per-attempt\ndeadline, so a timeout on one model fails over cleanly to the next.',
-);
 process.exit(0);

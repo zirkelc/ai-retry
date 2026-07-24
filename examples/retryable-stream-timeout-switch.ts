@@ -8,9 +8,11 @@
  * lower retry produced (issue #50). `createRetryableStream` re-runs the WHOLE
  * call with the next model, so fail-over works.
  *
- * `firstChunkMs` fires when no content arrives within X of the step start — i.e.
- * BEFORE the attempt commits, the only window a stream can still fail over in.
- * When attempt 1 stalls, the deadline surfaces as a `TimeoutError`, and
+ * Any pre-content deadline works: `firstChunkMs`, `stepMs`, and `totalMs` all
+ * start counting before the first content part, so a stall trips them while the
+ * attempt can still fail over (only `chunkMs`/`toolMs` fire after content, too
+ * late). This example uses `firstChunkMs` (the "time to first byte" case): when
+ * attempt 1 stalls, the deadline surfaces as a `TimeoutError`, and
  * `timeout().switch({ model })` re-runs with the fallback, which answers.
  *
  * The stall is simulated (no API key needed): the slow model opens its stream
@@ -68,6 +70,7 @@ const result = await run((attempt) =>
     model: attempt.model,
     abortSignal: attempt.abortSignal,
     prompt: 'What sanitizes pool water?',
+    /** Any pre-content deadline works here: firstChunkMs, stepMs, or totalMs. */
     timeout: { firstChunkMs: 100 },
     maxRetries: 0,
     onError: () => {},
@@ -80,7 +83,4 @@ for await (const delta of result.textStream) text += delta;
 console.log(`stall.doStream: ${stall.doStream.mock.calls.length}`);
 console.log(`fast.doStream:  ${fast.doStream.mock.calls.length}`);
 console.log(`text: ${JSON.stringify(text)}`);
-console.log(
-  '\nTakeaway: a streamText-level deadline can only fail over before content\ncommits; createRetryableStream re-runs the whole call to make that work.',
-);
 process.exit(0);

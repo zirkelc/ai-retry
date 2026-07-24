@@ -1,9 +1,7 @@
 import { delay } from '@ai-sdk/provider-utils';
 import { BaseRetryableModel } from '../../internal/base-retryable-model.js';
 import { evaluateError } from '../../internal/evaluate-error.js';
-import { resolveAbortSignal } from '../../internal/merge-retry-call-options.js';
 import { resolveBackoffDelay } from '../../internal/resolve-backoff-delay.js';
-import { retryDiesOnAbortedSignal } from '../../internal/retry-dies-on-aborted-signal.js';
 import { resolveModel } from '../../internal/resolve-model.js';
 import { createRetryTelemetry } from '../../internal/telemetry.js';
 import type {
@@ -44,10 +42,19 @@ export type RetryCallAttempt<MODEL extends AnyModel = LanguageModel> = {
   /** 1-based attempt number. */
   attempt: number;
   /**
-   * Composed deadline for this attempt: the inbound caller signal merged with
-   * a fresh `AbortSignal.timeout(...)` when a timeout applies. Pass this to the
-   * underlying call rather than the caller's own signal so a re-run is not
-   * killed instantly by an already-spent deadline.
+   * The deadline for this attempt in milliseconds, if one applies: the matched
+   * `Retry.timeout`, or `RetryCallRunOptions.timeout` for the first attempt.
+   * Each attempt gets its own value, so a re-run starts from a fresh deadline.
+   *
+   * Apply it however the underlying call takes a deadline: pass it to a call
+   * with its own timeout option (`generateText({ timeout })`), or build an
+   * `AbortSignal.timeout(timeout)` from it for a call that only takes a signal.
+   */
+  timeout: number | undefined;
+  /**
+   * The caller's cancellation signal (`RetryCallRunOptions.abortSignal`), passed
+   * through unchanged — forward it to propagate a genuine caller cancel. It
+   * carries no deadline; the per-attempt timeout is {@link RetryCallAttempt.timeout}.
    */
   abortSignal: AbortSignal | undefined;
   /**
@@ -180,12 +187,8 @@ class RetryableCall<MODEL extends AnyModel> extends BaseRetryableModel<MODEL> {
       return fn({
         model: startModel,
         attempt: 1,
-        abortSignal: resolveAbortSignal(
-          runOptions?.abortSignal,
-          runOptions?.timeout !== undefined
-            ? ({ timeout: runOptions.timeout } as Retry<MODEL>)
-            : undefined,
-        ),
+        timeout: runOptions?.timeout,
+        abortSignal: runOptions?.abortSignal,
         options: {} as RetryCallOptions<MODEL>,
       });
     }
@@ -240,15 +243,11 @@ class RetryableCall<MODEL extends AnyModel> extends BaseRetryableModel<MODEL> {
 
         /**
          * The deadline for this attempt: the matched retry's timeout, or the
-         * first-attempt timeout from the run options.
+         * first-attempt timeout from the run options. Surfaced as a number for
+         * the call function to apply; the caller's signal is passed through
+         * separately, so a re-run is not killed by an already-spent deadline.
          */
         const attemptTimeout = currentRetry?.timeout ?? runOptions?.timeout;
-        const abortSignal = resolveAbortSignal(
-          runOptions?.abortSignal,
-          attemptTimeout !== undefined
-            ? ({ timeout: attemptTimeout } as Retry<MODEL>)
-            : currentRetry,
-        );
         const options = resolveRetryOptions(currentRetry, onRetryOverrides);
 
         recorder?.startAttempt({
@@ -262,7 +261,8 @@ class RetryableCall<MODEL extends AnyModel> extends BaseRetryableModel<MODEL> {
           const result = await fn({
             model: attemptModel,
             attempt: attemptNumber,
-            abortSignal,
+            timeout: attemptTimeout,
+            abortSignal: runOptions?.abortSignal,
             options,
           });
 
@@ -278,7 +278,10 @@ class RetryableCall<MODEL extends AnyModel> extends BaseRetryableModel<MODEL> {
           const evaluation = await evaluateError({
             error,
             model: attemptModel,
-            options: { abortSignal, ...options } as CallOptions<MODEL>,
+            options: {
+              abortSignal: runOptions?.abortSignal,
+              ...options,
+            } as CallOptions<MODEL>,
             attempts,
             retries: this.options.retries,
             onError: this.options.onError,
@@ -304,12 +307,11 @@ class RetryableCall<MODEL extends AnyModel> extends BaseRetryableModel<MODEL> {
           }
 
           /**
-           * If the inbound caller signal is already aborted and the chosen
-           * retry does not supply a fresh deadline, the retry would die
-           * instantly with the same abort. Surface the error rather than fire
-           * a misleading retry against a dead signal.
+           * If the caller's own signal is already aborted, any re-run would
+           * forward that dead signal and abort instantly. Respect the cancel:
+           * surface the error rather than fire a doomed retry.
            */
-          if (retryDiesOnAbortedSignal(runOptions?.abortSignal, retryModel)) {
+          if (runOptions?.abortSignal?.aborted) {
             recorder?.endAttempt({
               attempt: attemptNumber,
               outcome: 'failure',

@@ -23,9 +23,9 @@ const NAMED_ERROR = /^([A-Za-z]+Error): ([\s\S]*)$/;
  * conditions (`timeout()`, `aborted()`) and message-based ones (`error.message`)
  * can match — the same way they would against a thrown error.
  *
- * When the attempt's own signal did abort (a genuine caller cancel or an
- * ai-retry per-attempt deadline), its structured `reason` is preferred: it is
- * the real `Error` instance, so `instanceof` checks survive too.
+ * When the caller's own signal aborted (a genuine caller cancel), its structured
+ * `reason` is preferred: it is the real `Error` instance, so `instanceof` checks
+ * survive too.
  */
 function abortErrorFromPart(
   part: AbortPart,

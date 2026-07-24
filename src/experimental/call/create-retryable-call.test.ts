@@ -7,19 +7,6 @@ import {
   type RetryCallAttempt,
 } from './create-retryable-call.js';
 
-/**
- * Rejects with the signal's abort reason once it aborts. Simulates a call that
- * stalls until its per-attempt deadline fires.
- */
-const stallUntilAbort = (signal: AbortSignal | undefined): Promise<never> =>
-  new Promise((_resolve, reject) => {
-    if (signal?.aborted) reject(signal.reason);
-    else
-      signal?.addEventListener('abort', () => reject(signal.reason), {
-        once: true,
-      });
-  });
-
 /** A call function that succeeds on any model except the given failing ones. */
 const failOn = (
   failing: ReadonlyArray<MockLanguageModel>,
@@ -485,8 +472,22 @@ describe('createRetryableCall', () => {
       expect(fn.mock.calls[1]![0].attempt).toBe(2);
     });
 
-    it('should leave abortSignal undefined when no deadline applies', async () => {
-      // Arrange — no run timeout, no run signal, no retry timeout.
+    it('should pass the caller abortSignal through to the attempt', async () => {
+      // Arrange
+      const primary = MockLanguageModel.from();
+      const controller = new AbortController();
+      const fn = vi.fn(async (_attempt: RetryCallAttempt) => 'OK');
+      const run = createRetryableCall({ model: primary, retries: [] });
+
+      // Act
+      await run(fn, { abortSignal: controller.signal });
+
+      // Assert — the attempt's signal IS the caller's, unchanged.
+      expect(fn.mock.calls[0]![0].abortSignal).toBe(controller.signal);
+    });
+
+    it('should leave abortSignal undefined when the caller passes none', async () => {
+      // Arrange
       const primary = MockLanguageModel.from();
       const fn = vi.fn(async (_attempt: RetryCallAttempt) => 'OK');
       const run = createRetryableCall({ model: primary, retries: [] });
@@ -496,6 +497,32 @@ describe('createRetryableCall', () => {
 
       // Assert
       expect(fn.mock.calls[0]![0].abortSignal).toBeUndefined();
+    });
+
+    it('should expose the per-attempt timeout as a number', async () => {
+      // Arrange
+      const primary = MockLanguageModel.from();
+      const fn = vi.fn(async (_attempt: RetryCallAttempt) => 'OK');
+      const run = createRetryableCall({ model: primary, retries: [] });
+
+      // Act
+      await run(fn, { timeout: 250 });
+
+      // Assert
+      expect(fn.mock.calls[0]![0].timeout).toBe(250);
+    });
+
+    it('should leave timeout undefined when none applies', async () => {
+      // Arrange
+      const primary = MockLanguageModel.from();
+      const fn = vi.fn(async (_attempt: RetryCallAttempt) => 'OK');
+      const run = createRetryableCall({ model: primary, retries: [] });
+
+      // Act
+      await run(fn);
+
+      // Assert
+      expect(fn.mock.calls[0]![0].timeout).toBeUndefined();
     });
   });
 
@@ -659,14 +686,17 @@ describe('createRetryableCall', () => {
     });
 
     describe('timeout', () => {
-      it('should give a stalled attempt a fresh deadline so it recovers', async () => {
-        // Arrange
+      it('should surface a fresh per-attempt deadline as attempt.timeout', async () => {
+        // Arrange — the primary "hits" its deadline (a TimeoutError); the
+        // fallback answers. Each attempt receives its own timeout as a number:
+        // the run timeout first, then the matched retry's own.
         const primary = MockLanguageModel.from();
         const fallback = MockLanguageModel.from();
-        const signals: Array<AbortSignal | undefined> = [];
-        const fn = vi.fn(async ({ model, abortSignal }: RetryCallAttempt) => {
-          signals.push(abortSignal);
-          if (model === primary) return stallUntilAbort(abortSignal);
+        const timeouts: Array<number | undefined> = [];
+        const fn = vi.fn(async ({ model, timeout }: RetryCallAttempt) => {
+          timeouts.push(timeout);
+          if (model === primary)
+            throw new DOMException('The operation timed out', 'TimeoutError');
           return 'FALLBACK_OK';
         });
         const run = createRetryableCall({
@@ -677,18 +707,15 @@ describe('createRetryableCall', () => {
         // Act
         const result = await run(fn, { timeout: 30 });
 
-        // Assert — each attempt gets its own signal; the spent one is aborted.
+        // Assert
         expect(result).toBe('FALLBACK_OK');
-        expect(signals.length).toBe(2);
-        expect(signals[0]).toBeInstanceOf(AbortSignal);
-        expect(signals[1]).toBeInstanceOf(AbortSignal);
-        expect(signals[0]).not.toBe(signals[1]);
-        expect(signals[0]!.aborted).toBe(true);
-        expect(signals[1]!.aborted).toBe(false);
+        expect(timeouts).toEqual([30, 1_000]);
       });
 
-      it('should NOT retry when the inbound signal is aborted and the retry has no timeout', async () => {
-        // Arrange
+      it('should not retry when the caller signal is already aborted', async () => {
+        // Arrange — a cancelled caller signal is a hard stop; even a retry with
+        // its own timeout does not rescue it, since the dead signal is still
+        // passed through to the next attempt.
         const primary = MockLanguageModel.from();
         const fallback = MockLanguageModel.from();
         const controller = new AbortController();
@@ -699,7 +726,7 @@ describe('createRetryableCall', () => {
         });
         const run = createRetryableCall({
           model: primary,
-          retries: [fallback],
+          retries: [{ model: fallback, timeout: 1_000 }],
         });
 
         // Act
