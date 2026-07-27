@@ -1001,7 +1001,7 @@ interface SuccessContext<MODEL> {
 }
 ```
 
-Passed to the `onSuccess` callback.
+Passed to the `onSuccess` callback. `attempts` holds the preceding attempts that were retried, in order, and is empty when the first attempt succeeded. The successful attempt itself is `current` and is not repeated in `attempts`.
 
 ### License
 

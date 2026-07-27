@@ -228,7 +228,9 @@ export type SuccessContext<MODEL extends AnyResolvableModel> = {
    */
   current: SuccessAttempt<ResolvedModel<MODEL>>;
   /**
-   * All attempts made so far, including the current one
+   * The preceding attempts that were retried, in order. Empty when the first
+   * attempt succeeded. The successful attempt is `current` and is not repeated
+   * here.
    */
   attempts: Array<RetryAttempt<ResolvedModel<MODEL>>>;
 };

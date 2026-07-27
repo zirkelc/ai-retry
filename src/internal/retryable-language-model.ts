@@ -143,9 +143,14 @@ export class RetryableLanguageModel
             retryCallOptions,
           );
 
-          attempts.push(attempt);
-
           if (retryModel) {
+            /**
+             * Only record the attempt once it is known to be retried. A
+             * result that ends the loop is the successful outcome, not a
+             * failed attempt, so it stays out of the attempts list.
+             */
+            attempts.push(attempt);
+
             /**
              * Calculate exponential backoff delay based on the number of
              * attempts for this specific model: baseDelay * backoffFactor^attempts.
@@ -629,8 +634,6 @@ export class RetryableLanguageModel
                     finishCallOptions,
                   );
 
-                  attempts.push(attempt);
-
                   if (retryModel) {
                     /**
                      * If the inbound abort signal is already aborted and the
@@ -643,6 +646,13 @@ export class RetryableLanguageModel
                       retryModel.timeout === undefined;
 
                     if (!abortedNoTimeout) {
+                      /**
+                       * Only record the attempt once it is known to be
+                       * retried. A finish that flows downstream is the
+                       * successful outcome, not a failed attempt, so it stays
+                       * out of the attempts list.
+                       */
+                      attempts.push(attempt);
                       retryFromFinish = retryModel;
                       break;
                     }
