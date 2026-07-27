@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.1](https://github.com/zirkelc/ai-retry/compare/v2.2.0...v2.2.1) (2026-07-27)
+
+
+### Documentation
+
+* **README:** add section on maxRetries for AI SDK functions and usage example ([7d99cb0](https://github.com/zirkelc/ai-retry/commit/7d99cb071a6def464d874ce83f7efdca1d888b01))
+
 ## [2.2.0](https://github.com/zirkelc/ai-retry/compare/v2.1.1...v2.2.0) (2026-07-27)
 
 
