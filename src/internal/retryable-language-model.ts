@@ -142,9 +142,14 @@ export class RetryableLanguageModel
             retryCallOptions,
           );
 
-          attempts.push(attempt);
-
           if (retryModel) {
+            /**
+             * Only record the attempt once it is known to be retried. A
+             * result that ends the loop is the successful outcome, not a
+             * failed attempt, so it stays out of the attempts list.
+             */
+            attempts.push(attempt);
+
             const calculatedDelay = resolveBackoffDelay(retryModel, attempts);
 
             input.recorder?.endAttempt({
@@ -593,8 +598,6 @@ export class RetryableLanguageModel
                     finishCallOptions,
                   );
 
-                  attempts.push(attempt);
-
                   if (retryModel) {
                     /**
                      * If the inbound abort signal is already aborted and the
@@ -608,6 +611,13 @@ export class RetryableLanguageModel
                         retryModel,
                       )
                     ) {
+                      /**
+                       * Only record the attempt once it is known to be
+                       * retried. A finish that flows downstream is the
+                       * successful outcome, not a failed attempt, so it stays
+                       * out of the attempts list.
+                       */
+                      attempts.push(attempt);
                       retryFromFinish = retryModel;
                       break;
                     }

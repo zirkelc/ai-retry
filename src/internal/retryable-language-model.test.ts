@@ -968,7 +968,7 @@ describe('generateText', () => {
       expect(successCall.current.type).toBe('success');
       expect(successCall.current.model).toBe(baseModel);
       expect(successCall.current.result).toBeDefined();
-      expect(successCall.attempts.length).toBe(1);
+      expect(successCall.attempts.length).toBe(0);
     });
 
     it('should call onSuccess with fallback model after retry', async () => {
@@ -994,7 +994,42 @@ describe('generateText', () => {
       expect(successCall.current.type).toBe('success');
       expect(successCall.current.model).toBe(fallbackModel);
       expect(successCall.current.result).toBeDefined();
-      expect(successCall.attempts.length).toBe(2);
+      expect(successCall.attempts.length).toBe(1);
+    });
+
+    it('should call onSuccess with the retried result attempt after a result-based retry', async () => {
+      // Arrange
+      const baseModel = MockLanguageModel.from({
+        doGenerate: contentFilterResult,
+      });
+      const fallbackModel = MockLanguageModel.from({ doGenerate: mockResult });
+      const fallbackRetryable: Retryable<LanguageModel> = (context) => {
+        if (
+          isResultAttempt(context.current) &&
+          context.current.result.finishReason.unified === 'content-filter'
+        ) {
+          return { model: fallbackModel, maxAttempts: 1 };
+        }
+        return undefined;
+      };
+      const onSuccessSpy = vi.fn<OnSuccess>();
+
+      // Act
+      await generateText({
+        model: createRetryableModel({
+          model: baseModel,
+          retries: [fallbackRetryable],
+          onSuccess: onSuccessSpy,
+        }),
+        prompt: 'Hello!',
+      });
+
+      // Assert
+      const successCall = onSuccessSpy.mock.calls[0]![0];
+      expect(successCall.current.model).toBe(fallbackModel);
+      expect(successCall.attempts.length).toBe(1);
+      expect(successCall.attempts[0]!.type).toBe('result');
+      expect(successCall.attempts[0]!.model).toBe(baseModel);
     });
 
     it('should NOT call onSuccess when all retries fail', async () => {
@@ -2672,7 +2707,7 @@ describe('streamText', () => {
               "response": {
                 "headers": undefined,
                 "id": "aitxt-mock-id",
-                "modelId": "mock-model-146",
+                "modelId": "mock-model-148",
                 "timestamp": 1970-01-01T00:00:00.000Z,
               },
               "type": "finish-step",
@@ -2781,7 +2816,7 @@ describe('streamText', () => {
               "response": {
                 "headers": undefined,
                 "id": "aitxt-mock-id",
-                "modelId": "mock-model-148",
+                "modelId": "mock-model-150",
                 "timestamp": 1970-01-01T00:00:00.000Z,
               },
               "type": "finish-step",
@@ -3886,6 +3921,33 @@ describe('streamText', () => {
       expect(successCall.current.type).toBe('success');
       expect(successCall.current.model).toBe(fallbackModel);
       expect(successCall.attempts.length).toBe(1);
+    });
+
+    it('should call onSuccess with no attempts when a retryable finish reason matches no retry', async () => {
+      // Arrange
+      const baseModel = MockLanguageModel.from({
+        doStream: contentFilterStreamChunks,
+      });
+      const onSuccessSpy = vi.fn<OnSuccess>();
+
+      // Act
+      const result = streamText({
+        model: createRetryableModel({
+          model: baseModel,
+          retries: [],
+          onSuccess: onSuccessSpy,
+        }),
+        prompt,
+      });
+
+      await Iterables.toArray(result.fullStream);
+
+      // Assert
+      expect(onSuccessSpy).toHaveBeenCalledTimes(1);
+
+      const successCall = onSuccessSpy.mock.calls[0]![0];
+      expect(successCall.current.model).toBe(baseModel);
+      expect(successCall.attempts.length).toBe(0);
     });
   });
 
