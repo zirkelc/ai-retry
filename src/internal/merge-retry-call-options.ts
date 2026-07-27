@@ -61,7 +61,7 @@ function resolveProviderOptions<
  * other reason it propagates. Without a retry timeout, the base is preserved
  * unchanged.
  */
-function resolveAbortSignal<
+export function resolveAbortSignal<
   MODEL extends LanguageModel | EmbeddingModel | ImageModel,
 >(
   base: AbortSignal | undefined,
