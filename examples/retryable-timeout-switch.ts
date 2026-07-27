@@ -36,48 +36,46 @@ import type { LanguageModelV4CallOptions } from '@ai-sdk/provider';
  * fires, which is what the per-attempt deadline does, so any shorter deadline
  * pre-empts either call before it can commit.
  */
-const slowModel = () =>
-  MockLanguageModel.from({
-    doGenerate: ({ abortSignal }: LanguageModelV4CallOptions) =>
-      new Promise((resolve, reject) => {
-        const timer = setTimeout(
-          () => resolve(Language.result('...eventually, a slow answer.')),
-          5_000,
-        );
+const slowModel = MockLanguageModel.from({
+  doGenerate: ({ abortSignal }: LanguageModelV4CallOptions) =>
+    new Promise((resolve, reject) => {
+      const timer = setTimeout(
+        () => resolve(Language.result('...eventually, a slow answer.')),
+        5_000,
+      );
+      abortSignal?.addEventListener(
+        'abort',
+        () => {
+          clearTimeout(timer);
+          reject(abortSignal.reason);
+        },
+        { once: true },
+      );
+    }),
+  doStream: async ({ abortSignal }: LanguageModelV4CallOptions) => ({
+    stream: new ReadableStream({
+      start(controller) {
+        controller.enqueue(Language.streamStart());
         abortSignal?.addEventListener(
           'abort',
-          () => {
-            clearTimeout(timer);
-            reject(abortSignal.reason);
-          },
+          () => controller.error(abortSignal.reason),
           { once: true },
         );
-      }),
-    doStream: async ({ abortSignal }: LanguageModelV4CallOptions) => ({
-      stream: new ReadableStream({
-        start(controller) {
-          controller.enqueue(Language.streamStart());
-          abortSignal?.addEventListener(
-            'abort',
-            () => controller.error(abortSignal.reason),
-            { once: true },
-          );
-        },
-      }),
+      },
     }),
-  });
+  }),
+});
 
-const slow = slowModel();
-const fast = MockLanguageModel.from('A fast, complete answer.');
+const fastModel = MockLanguageModel.from('A fast, complete answer.');
 
 /** On a timeout, switch to the fast model under a fresh 1s deadline. */
-const retries = [timeout().switch({ model: fast, timeout: 1_000 })];
+const retries = [timeout().switch({ model: fastModel, timeout: 1_000 })];
 
 /**
  * generateText: `createRetryableCall` forwards `attempt.timeout` to
  * generateText's own `timeout` option.
  */
-const runGenerate = createRetryableCall({ model: slow, retries });
+const runGenerate = createRetryableCall({ model: slowModel, retries });
 
 const generated = await runGenerate(
   (attempt) =>
@@ -99,7 +97,7 @@ console.log(`generateText -> ${JSON.stringify(generated.text)}`);
  * time-to-first-chunk window; the slow stream stalls before content, so the
  * deadline trips pre-commit and fails over.
  */
-const runStream = createRetryableStream({ model: slow, retries });
+const runStream = createRetryableStream({ model: slowModel, retries });
 
 const streamed = await runStream(
   (attempt) =>
