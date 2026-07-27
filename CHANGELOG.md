@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.2.0](https://github.com/zirkelc/ai-retry/compare/v2.1.1...v2.2.0) (2026-07-27)
+
+
+### Features
+
+* experimental call-level streaming retry ([#55](https://github.com/zirkelc/ai-retry/issues/55)) ([1a991e7](https://github.com/zirkelc/ai-retry/commit/1a991e7babc2cbdcc1b76777bf3c807545e45697))
+
+
+### Documentation
+
+* **examples:** consolidate the experimental streaming examples ([c35c33a](https://github.com/zirkelc/ai-retry/commit/c35c33a40a32a2d7161d9d09dd1c42564d81f96e))
+* **examples:** merge the call and stream timeout examples into one ([5d6c85d](https://github.com/zirkelc/ai-retry/commit/5d6c85d0a136ddbe4991206c188d921ba9091c23))
+* **examples:** use slowModel/fastModel directly, drop the factory + extra vars ([b4450a7](https://github.com/zirkelc/ai-retry/commit/b4450a715782d461980948f11333fa32a298aa53))
+
 ## [2.1.1](https://github.com/zirkelc/ai-retry/compare/v2.1.0...v2.1.1) (2026-07-27)
 
 
