@@ -25,7 +25,6 @@
     "./embedding-model/conditions": "./dist/embedding-model/conditions/index.mjs",
     "./experimental/call": "./dist/experimental/call/index.mjs",
     "./experimental/stream": "./dist/experimental/stream/index.mjs",
-    "./experimental/transform": "./dist/experimental/transform/index.mjs",
     "./image-model": "./dist/image-model/index.mjs",
     "./image-model/conditions": "./dist/image-model/conditions/index.mjs",
     "./language-model": "./dist/language-model/index.mjs",

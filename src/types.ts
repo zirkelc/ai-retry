@@ -350,14 +350,6 @@ export interface RetryableModelOptions<
    * Not called when retries are disabled.
    */
   onFailure?: (context: FailureContext<MODEL>) => void;
-
-  /**
-   * Experimental. Language models only. A stream transform applied inside
-   * `doStream`, below `streamText`. It can buffer stream parts and convert a
-   * soft failure into an `error` part that the error-based retry conditions
-   * then handle. See {@link LanguageModelStreamTransform}.
-   */
-  experimental_transform?: LanguageModelStreamTransform;
 }
 
 /**
@@ -440,23 +432,6 @@ export type LanguageModelGenerate = Awaited<
 
 export type LanguageModelStream = Awaited<
   ReturnType<LanguageModel['doStream']>
->;
-
-/**
- * Experimental. A factory producing a fresh `TransformStream` over a language
- * model's provider-level stream parts, applied inside the retryable model's
- * `doStream` (below `streamText`).
- *
- * Because it runs below `streamText`, an `error` part the transform emits before
- * any content is forwarded is handled by the model layer's normal pre-content
- * retry path — the same as a provider error — so error-based conditions can fail
- * over from it. This is how a soft failure (e.g. a natural-language refusal
- * buffered from `text-delta` parts) can be turned into a recoverable error.
- * A fresh instance is created per attempt.
- */
-export type LanguageModelStreamTransform = () => TransformStream<
-  LanguageModelStreamPart,
-  LanguageModelStreamPart
 >;
 
 export type EmbeddingModelCallOptions = Parameters<
