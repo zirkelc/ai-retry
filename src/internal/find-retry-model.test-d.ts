@@ -199,7 +199,7 @@ describe('findRetryModel', () => {
       retryable,
       retry,
       fallback,
-      'anthropic/claude-3.5-haiku',
+      'anthropic/claude-haiku-4.5',
     ];
     const context: RetryContext<LanguageModel> = {
       current: {
