@@ -815,7 +815,91 @@ Result-based conditions (`finishReason`, `schemaInvalid`, `result(...)`) apply t
 
 `streamText` enforces its own timeouts (`timeout.stepMs`, `timeout.chunkMs`, `timeout.totalMs`, and any caller-supplied `abortSignal`) by merging them into a single signal that its stream pipeline watches directly. When that signal aborts, `streamText` finalizes the stream as aborted and **discards any output an `ai-retry` fallback produces underneath it**, even before the first content chunk. The fallback is still attempted (you'll see `onError`/`onRetry` fire), but its result never reaches the consumer.
 
-This is specific to `streamText`. The same timeouts on `generateText` recover normally, because `generateText` has no separate stream pipeline to tear down. That means `ai-retry` **cannot** recover `streamText`-level timeouts.
+This is specific to `streamText`. The same timeouts on `generateText` recover normally, because `generateText` has no separate stream pipeline to tear down. That means the model wrappers **cannot** recover `streamText`-level timeouts. The experimental call-level drivers below can.
+
+### Experimental: call-level retries
+
+> [!WARNING]
+> These APIs are experimental and may change in a patch release. They are imported from the `ai-retry/experimental/*` subpaths.
+
+`createRetryableModel` retries _below_ `streamText` / `generateText`. That is what makes it blind to a `streamText`-level timeout (`timeout.firstChunkMs`, `stepMs`, `totalMs`) or an inbound `abortSignal`: the timeout lives _on_ the call, and once it fires `streamText` tears its stream down and discards whatever a lower retry produced ([#50](https://github.com/zirkelc/ai-retry/issues/50)).
+
+The call-level drivers close that gap by re-running the **whole call** with the next model. They own the model selection and a fresh per-attempt timeout, then hand both to a function you supply that builds the actual `streamText` / `generateText` call. Because the failed call is torn down and re-issued from scratch, a `streamText`-level timeout finally has somewhere to fail over to.
+
+#### `createRetryableStream`
+
+Makes a streamed call retryable at the call level. For each attempt it reads the result's part stream up to the first content part: an `error` or `abort` part _before_ content (an API error, or a `streamText`-level timeout such as `firstChunkMs` / `stepMs` / `totalMs`) re-runs the whole call with the next model; once a content part is seen the attempt is committed and cannot fail over (the same commit boundary the model wrappers use).
+
+```ts
+import { streamText } from 'ai';
+import { createRetryableStream } from 'ai-retry/experimental/stream';
+import { timeout } from 'ai-retry/language-model';
+
+const run = createRetryableStream({
+  model: primaryModel,
+  retries: [timeout().switch({ model: fallbackModel })],
+});
+
+const result = await run((attempt) =>
+  streamText({
+    model: attempt.model,
+    abortSignal: attempt.abortSignal,
+    prompt: 'What sanitizes pool water?',
+    /** A pre-content timeout: firstChunkMs, stepMs, or totalMs. */
+    timeout: { firstChunkMs: 5_000 },
+    /** Leave retrying to the wrapper. */
+    maxRetries: 0,
+  }),
+);
+
+/** `result` is the winning attempt's streamText result — drive it as usual. */
+for await (const chunk of result.textStream) console.log(chunk);
+```
+
+- Each attempt builds its own `streamText`, wiring in `attempt.model` and `attempt.abortSignal`. Set `maxRetries: 0` so retrying is left to the wrapper.
+- It is **error-based only**. Result-based conditions (`finishReason('content-filter')`, `schemaInvalid()`) recover best _below_ `streamText` and compose: pass a `createRetryableModel(...)` as the `model` and let this wrapper handle errors and timeouts around the call.
+- It also accepts a `streamObject` result (it reads `fullStream` when `stream` is absent).
+- The winning result is returned unchanged, so back-pressure past the commit point is preserved.
+
+#### `createRetryableCall`
+
+The generic retry-loop driver that backs `createRetryableStream`. It is entry-point-agnostic: it loops over the `retries`, selects the model and a fresh per-attempt timeout for each try, and invokes a function you supply. Use it to make a `generateText` call recover its own `timeout`, or to wrap any call whose timeout must be re-established on each retry.
+
+```ts
+import { generateText } from 'ai';
+import { createRetryableCall } from 'ai-retry/experimental/call';
+import { timeout } from 'ai-retry/language-model';
+
+const run = createRetryableCall({
+  model: primaryModel,
+  retries: [timeout().switch({ model: fallbackModel, timeout: 1_000 })],
+});
+
+const result = await run(
+  (attempt) =>
+    generateText({
+      model: attempt.model,
+      /** Forward the fresh per-attempt timeout to generateText's own timeout. */
+      timeout: attempt.timeout,
+      abortSignal: attempt.abortSignal,
+      prompt: 'Invent a new holiday.',
+      maxRetries: 0,
+    }),
+  /** The first attempt's timeout; each fallback uses its own `.switch({ timeout })`. */
+  { timeout: 2_000 },
+);
+
+console.log(result.text);
+```
+
+Each attempt receives:
+
+- `attempt.model`: the resolved model to use.
+- `attempt.timeout`: a fresh timeout in milliseconds (the run's `timeout` for the first attempt, then each matched `.switch({ timeout })`). Apply it however the call takes a timeout: `generateText`'s native `timeout`, or `AbortSignal.timeout(attempt.timeout)` for a call that only takes a signal. Freshness is the point, since attempt 1's clock is already spent by the time it fails.
+- `attempt.abortSignal`: the caller's own cancellation signal (`RetryCallRunOptions.abortSignal`), passed through untouched.
+- `attempt.attempt`: the 1-based attempt number.
+
+The driver returns the call function's result unchanged, or throws the final error (wrapped in a `RetryError` if more than one attempt was made). It is error-based only: a returned result is terminal and never re-evaluated.
 
 ### Deprecated: function-style retryables
 
