@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.1.1](https://github.com/zirkelc/ai-retry/compare/v2.1.0...v2.1.1) (2026-07-27)
+
+
+### Bug Fixes
+
+* **callbacks:** exclude successful attempt from onSuccess attempts ([ecf568f](https://github.com/zirkelc/ai-retry/commit/ecf568f5351b2257c21000d9ddb9d77f0aefc702))
+
+
+### Tests
+
+* replace removed gateway model id in type test ([c4e471a](https://github.com/zirkelc/ai-retry/commit/c4e471ab7351ff06f670ac8bf851e95744a5bdd4))
+
 ## [2.1.0](https://github.com/zirkelc/ai-retry/compare/v2.0.0...v2.1.0) (2026-07-23)
 
 
