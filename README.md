@@ -78,6 +78,8 @@ const retryableModel = createRetryableModel({
 const result = await generateText({
   model: retryableModel,
   prompt: 'Hello world!',
+  // Let ai-retry own retries; see "Max retries" below
+  maxRetries: 0,
 });
 
 console.log(result.text);
@@ -470,6 +472,35 @@ try {
 ```
 
 Errors are tracked per unique model (`provider/modelId`). Once a model has hit its `maxAttempts`, no further retry will land on it.
+
+#### Max retries
+
+The AI SDK functions (`generateText`, `streamText`, …) wrap **every** model in their own retry loop, controlled by `maxRetries`, which **defaults to `2`**. That loop retries whenever the model throws a retryable error (an `APICallError` with `isRetryable === true`, e.g. many 429/5xx responses).
+
+This loop sits _above_ `ai-retry`, so the two can stack. When none of your conditions match a retryable error, `ai-retry` re-throws the original error unchanged. The AI SDK then sees a retryable `APICallError` and re-runs the **whole** retryable model, re-evaluating every condition and fallback from scratch, up to `maxRetries` more times, each with its own exponential backoff.
+
+It's recommended to pass `maxRetries: 0` to the AI SDK call and let `ai-retry` be the single authority on retries:
+
+```typescript
+import { anthropic } from '@ai-sdk/anthropic';
+import { openai } from '@ai-sdk/openai';
+import { createRetryableModel } from 'ai-retry/language-model';
+
+const retryableModel = createRetryableModel({
+  model: openai('gpt-4o'),
+  // only one retry attempt allowed per call
+  retries: [
+    anthropic('claude-3-haiku-20240307'),
+  ],
+});
+
+const result = await generateText({
+  model: retryableModel,
+  prompt: 'Hello world!',
+  // let ai-retry own all retries and fallbacks
+  maxRetries: 0, 
+});
+```
 
 ### Options
 
