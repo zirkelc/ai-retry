@@ -1135,6 +1135,46 @@ describe('generateText', () => {
       expect(onFailureSpy).not.toHaveBeenCalled();
     });
 
+    it('should NOT call onFailure when an onSuccess handler throws', async () => {
+      // Arrange — a throwing hook is not an attempt failure. The request
+      // succeeded, so reporting it as a failure would fire both callbacks
+      // for one request, with a stale attempt as `current`.
+      /**
+       * Explicit model ids so the shared auto-increment counter is untouched
+       * and the inline snapshots further down the file stay stable.
+       */
+      const baseModel = MockLanguageModel.from(
+        { doGenerate: retryableError },
+        { modelId: 'throwing-on-success-base' },
+      );
+      const fallbackModel = MockLanguageModel.from(
+        { doGenerate: mockResult },
+        { modelId: 'throwing-on-success-fallback' },
+      );
+      const handlerError = new Error('onSuccess blew up');
+      const onFailureSpy = vi.fn<OnFailure>();
+      const onSuccessSpy = vi.fn<OnSuccess>(() => {
+        throw handlerError;
+      });
+
+      // Act
+      const result = generateText({
+        model: createRetryableModel({
+          model: baseModel,
+          retries: [fallbackModel],
+          onFailure: onFailureSpy,
+          onSuccess: onSuccessSpy,
+        }),
+        prompt,
+      });
+      await expect(result).rejects.toThrow();
+
+      // Assert — the handler error surfaces unwrapped.
+      await result.catch((e) => expect(e).toBe(handlerError));
+      expect(onSuccessSpy).toHaveBeenCalledTimes(1);
+      expect(onFailureSpy).not.toHaveBeenCalled();
+    });
+
     it('should NOT call onSuccess on failure', async () => {
       // Arrange
       const baseModel = MockLanguageModel.from({ doGenerate: retryableError });
@@ -4005,6 +4045,43 @@ describe('streamText', () => {
       expect(failureCall.current.model).toBe(baseModel);
       expect(failureCall.attempts.length).toBe(1);
       expect(failureCall.error).toBe(nonRetryableError);
+    });
+
+    it('should call onFailure when the re-stream after a retry fails', async () => {
+      // Arrange — the base stream errors before content, so a retry is
+      // selected, but creating the fallback's stream throws and nothing
+      // matches it. That failure happens on the re-stream path, past the
+      // terminal branches of the read loop.
+      /**
+       * Explicit model ids so the shared auto-increment counter is untouched
+       * and the inline snapshots further down the file stay stable.
+       */
+      const baseModel = MockLanguageModel.from(
+        { doStream: errorStreamChunks(retryableError) },
+        { modelId: 're-stream-failure-base' },
+      );
+      const fallbackModel = MockLanguageModel.from(
+        { doStream: nonRetryableError },
+        { modelId: 're-stream-failure-fallback' },
+      );
+      const onFailureSpy = vi.fn<OnFailure>();
+
+      // Act
+      const result = streamText({
+        model: createRetryableModel({
+          model: baseModel,
+          retries: [fallbackModel],
+          onFailure: onFailureSpy,
+        }),
+        prompt,
+      });
+      const parts = await Iterables.toArray(result.fullStream);
+
+      // Assert — surfaced as an error part, not a stream rejection, so the
+      // consumer's own onError still fires.
+      expect(RetryError.isInstance(errorFromChunks(parts))).toBe(true);
+      expect(onFailureSpy).toHaveBeenCalledTimes(1);
+      expect(onFailureSpy.mock.calls[0]![0].attempts.length).toBe(2);
     });
 
     it('should NOT call onFailure on a successful stream', async () => {
