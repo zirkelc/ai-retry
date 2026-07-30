@@ -458,6 +458,111 @@ describe('createRetryableStream', () => {
     });
   });
 
+  describe('outcome hooks', () => {
+    it('should call onCommit with the model that committed', async () => {
+      // Arrange
+      const primary = MockLanguageModel.from();
+      const fallback = MockLanguageModel.from();
+      const fallbackResult = streamOf([{ type: 'text-delta', text: 'OK' }]);
+      const onCommit = vi.fn();
+      const retryableStream = createRetryableStream({
+        model: primary,
+        retries: [fallback],
+        onCommit,
+      });
+
+      // Act
+      const committed = await retryableStream((attempt) =>
+        attempt.model === primary
+          ? streamOf([Language.streamError(new Error('boom'))])
+          : fallbackResult,
+      );
+
+      // Assert — the result reaches the caller, not the hook.
+      expect(committed).toBe(fallbackResult);
+      expect(onCommit).toHaveBeenCalledTimes(1);
+      expect(onCommit.mock.calls[0]![0].current.model).toBe(fallback);
+      expect(onCommit.mock.calls[0]![0].attempts.length).toBe(1);
+    });
+
+    it('should call onCommit at the commit point, not at stream completion', async () => {
+      // Arrange — content, then an error the caller inherits past the commit.
+      const primary = MockLanguageModel.from();
+      const fallback = MockLanguageModel.from();
+      const onCommit = vi.fn();
+      const onFailure = vi.fn();
+      const retryableStream = createRetryableStream({
+        model: primary,
+        retries: [fallback],
+        onCommit,
+        onFailure,
+      });
+
+      // Act
+      await retryableStream(() =>
+        streamOf([
+          { type: 'text-delta', text: 'OK' },
+          Language.streamError(new Error('mid-stream')),
+        ]),
+      );
+
+      // Assert — the post-commit error is the caller's, so it fires nothing.
+      expect(onCommit).toHaveBeenCalledTimes(1);
+      expect(onCommit.mock.calls[0]![0].current.model).toBe(primary);
+      expect(onFailure).toHaveBeenCalledTimes(0);
+    });
+
+    it('should call onFailure when every attempt fails before content', async () => {
+      // Arrange
+      const primary = MockLanguageModel.from();
+      const fallback = MockLanguageModel.from();
+      const onCommit = vi.fn();
+      const onFailure = vi.fn();
+      const retryableStream = createRetryableStream({
+        model: primary,
+        retries: [fallback],
+        onCommit,
+        onFailure,
+      });
+
+      // Act
+      await retryableStream(() =>
+        streamOf([Language.streamError(new Error('boom'))]),
+      ).catch(() => {});
+
+      // Assert
+      expect(onCommit).toHaveBeenCalledTimes(0);
+      expect(onFailure).toHaveBeenCalledTimes(1);
+      expect(RetryError.isInstance(onFailure.mock.calls[0]![0].error)).toBe(
+        true,
+      );
+      expect(onFailure.mock.calls[0]![0].current.model).toBe(fallback);
+      expect(onFailure.mock.calls[0]![0].attempts.length).toBe(2);
+    });
+
+    it('should call neither hook when retries are disabled', async () => {
+      // Arrange
+      const onCommit = vi.fn();
+      const onFailure = vi.fn();
+      const retryableStream = createRetryableStream({
+        model: MockLanguageModel.from(),
+        retries: [],
+        disabled: true,
+        onCommit,
+        onFailure,
+      });
+
+      // Act
+      await retryableStream(() =>
+        streamOf([{ type: 'text-delta', text: 'OK' }]),
+      );
+
+      // Assert
+      expect(onCommit).toHaveBeenCalledTimes(0);
+      expect(onFailure).toHaveBeenCalledTimes(0);
+    });
+  });
+
   describe('disabled', () => {
     it('should bypass retries when disabled', async () => {
       // Arrange
@@ -660,6 +765,45 @@ describe('streamText integration', () => {
       // Assert
       expect(onError).toHaveBeenCalledTimes(1);
       expect(onRetry).toHaveBeenCalledTimes(1);
+    });
+
+    it('should call onCommit with the model that recovered the stream', async () => {
+      // Arrange
+      const primary = errorAtStartStreamModel(new Error('boom'));
+      const fallback = okStreamModel();
+      const onCommit = vi.fn();
+      const onFailure = vi.fn();
+
+      // Act
+      const result = await retryableStreamText(
+        { model: primary, retries: [fallback], onCommit, onFailure },
+        { prompt },
+      );
+      await result.text;
+
+      // Assert
+      expect(onCommit).toHaveBeenCalledTimes(1);
+      expect(onCommit.mock.calls[0]![0].current.model).toBe(fallback);
+      expect(onCommit.mock.calls[0]![0].attempts.length).toBe(1);
+      expect(onFailure).toHaveBeenCalledTimes(0);
+    });
+
+    it('should call onFailure when no retryable matches a pre-content error', async () => {
+      // Arrange
+      const primary = errorAtStartStreamModel(new Error('boom'));
+      const onCommit = vi.fn();
+      const onFailure = vi.fn();
+
+      // Act
+      await retryableStreamText(
+        { model: primary, retries: [], onCommit, onFailure },
+        { prompt },
+      ).catch(() => {});
+
+      // Assert
+      expect(onCommit).toHaveBeenCalledTimes(0);
+      expect(onFailure).toHaveBeenCalledTimes(1);
+      expect(onFailure.mock.calls[0]![0].current.model).toBe(primary);
     });
   });
 

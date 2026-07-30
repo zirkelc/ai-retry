@@ -891,6 +891,7 @@ for await (const chunk of result.textStream) console.log(chunk);
 - It is **error-based only**. Result-based conditions (`finishReason('content-filter')`, `schemaInvalid()`) recover best _below_ `streamText` and compose: pass a `createRetryableModel(...)` as the `model` and let this wrapper handle errors and timeouts around the call.
 - It also accepts a `streamObject` result (it reads `fullStream` when `stream` is absent).
 - The winning result is returned unchanged, so back-pressure past the commit point is preserved.
+- The callbacks follow the commit boundary: `onCommit` fires on the first content part, _not_ when the stream finishes, and `onFailure` fires when every attempt failed before committing. Past the commit point the stream is the caller's, so an error during consumption fires neither. See [Callbacks](#callbacks).
 
 #### `createRetryableCall`
 
@@ -931,6 +932,74 @@ Each attempt receives:
 - `attempt.attempt`: the 1-based attempt number.
 
 The driver returns the call function's result unchanged, or throws the final error (wrapped in a `RetryError` if more than one attempt was made). It is error-based only: a returned result is terminal and never re-evaluated.
+
+##### Callbacks
+
+Both drivers take `onError` and `onRetry` exactly as the model wrappers do ([Logging](#logging)), plus `onFailure`. The positive outcome is named for the boundary each one can actually observe — **`onComplete`** on `createRetryableCall`, **`onCommit`** on `createRetryableStream`:
+
+```ts
+const run = createRetryableCall({
+  model: primaryModel,
+  retries: [timeout().switch({ model: fallbackModel })],
+  /** The call function returned, so the driver stops retrying. */
+  onComplete: (context) => {
+    console.log(
+      `Handled by ${context.current.model.modelId} after ${context.attempts.length} failed attempts`,
+    );
+  },
+  onFailure: (context) => {
+    console.error(
+      `Failed after ${context.attempts.length} attempts:`,
+      context.error,
+    );
+  },
+});
+
+const runStream = createRetryableStream({
+  model: primaryModel,
+  retries: [timeout().switch({ model: fallbackModel })],
+  /** Same callback, later boundary: the first content part arrived. */
+  onCommit: (context) => {
+    console.log(`Streaming from ${context.current.model.modelId}`);
+  },
+});
+```
+
+Neither name is `onSuccess`, because how much has to succeed before the call function returns is that function's choice, not the driver's:
+
+| Layer | Positive hook | Fires when | Operation finished? |
+| ----- | ------------- | ---------- | ------------------- |
+| `createRetryableCall` + `generateText` | `onComplete` | the call function returns | yes |
+| `createRetryableCall` + `streamText` | `onComplete` | the call function returns — the result object, before any content | no |
+| `createRetryableStream` | `onCommit` | the first content part reaches the stream | no, the body is still streaming |
+| `createRetryableModel` | `onSuccess` | the request completed, or the stream fully drained | yes |
+
+That middle row is why `createRetryableStream` exists: it moves the boundary to the last point anything can still fail over. A stream can commit and *then* error, get truncated by a `chunkMs` deadline, or finish with `content-filter` — none of which fires anything here, because the wrapper stopped being able to fail over at the commit point. For a hook that waits for the stream to actually finish, use the model wrapper's [`onSuccess`](#logging) underneath, or `streamText`'s own `onFinish`.
+
+`onFailure` fires when the attempts are exhausted without completing: no retryable matched, every candidate was tried, the caller's signal was already aborted, or the caller aborted during a backoff delay. `context.error` is the error the run rejects with; `context.current` is the attempt that failed last.
+
+Neither fires when retries are disabled. `onFailure` reports *attempt* failures, so it also stays silent for a rejection no attempt caused — one of your own callbacks throwing, or a retryable throwing before the first attempt was recorded. Those still reject the run; there is simply no failed attempt to hand over.
+
+Each layer has its own context type — `RetryCallCompleteContext` and `RetryStreamCommitContext` — so neither API makes you import the other's vocabulary to type a callback. They are the same shape, and both are distinct from the model-level [`SuccessContext`](#successcontext) because the driver knows less about the attempt than a model wrapper does:
+
+```ts
+interface RetryCallCompleteContext<MODEL> {
+  current: {
+    model: MODEL;
+    /** The per-attempt overrides, not full call options. */
+    options: RetryCallOptions<MODEL>;
+  };
+  attempts: Array<RetryAttempt<MODEL>>;
+}
+
+/** The stream wrapper's equivalent, fixed to language models. */
+interface RetryStreamCommitContext {
+  current: { model: LanguageModel; options: RetryCallOptions<LanguageModel> };
+  attempts: Array<RetryAttempt<LanguageModel>>;
+}
+```
+
+It reports only what the driver itself knows. There is no `result`: the driver never inspects what the call function returned, and you already receive it, correctly typed, from `run`. `options` holds only the per-attempt overrides, since the driver has no call options of its own (the call function owns the prompt). `onFailure` reuses the shared [`FailureContext`](#failurecontext) unchanged.
 
 ### Deprecated: function-style retryables
 
@@ -1117,6 +1186,8 @@ interface SuccessContext<MODEL> {
 ```
 
 Passed to the `onSuccess` callback. `attempts` holds the preceding attempts that were retried, in order, and is empty when the first attempt succeeded. The successful attempt itself is `current` and is not repeated in `attempts`.
+
+The call-level drivers have their own [`RetryCallCompleteContext`](#callbacks) instead, which reports no result at all.
 
 ### License
 

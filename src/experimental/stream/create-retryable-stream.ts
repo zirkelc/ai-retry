@@ -4,6 +4,11 @@ import {
   type RetryCallAttempt,
   type RetryCallRunOptions,
 } from '../call/create-retryable-call.js';
+import type {
+  LanguageModel,
+  RetryAttempt,
+  RetryCallOptions,
+} from '../../types.js';
 import { detectStreamCommit } from './detect-stream-commit.js';
 
 /**
@@ -23,9 +28,56 @@ const resolveStream = (result: StreamResult): ReadableStream<unknown> =>
   'stream' in result ? result.stream : result.fullStream;
 
 /**
- * Options for {@link createRetryableStream}.
+ * The attempt that committed: the one whose first content part reached the
+ * stream, after which no further fail-over is possible.
+ *
+ * Language-model-shaped rather than generic, since commit is detected from the
+ * AI SDK stream protocol and has no meaning for the other model kinds.
  */
-export type RetryableStreamOptions = RetryableCallOptions;
+export type RetryStreamCommitAttempt = {
+  /** The model whose attempt committed. */
+  model: LanguageModel;
+  /** The per-attempt overrides applied to the committed attempt. */
+  options: RetryCallOptions<LanguageModel>;
+};
+
+/**
+ * The context passed to `onCommit`, with the committed attempt and the
+ * attempts that were retried before it.
+ */
+export type RetryStreamCommitContext = {
+  /** The attempt that committed. */
+  current: RetryStreamCommitAttempt;
+  /**
+   * The preceding attempts that were retried, in order. Empty when the first
+   * attempt committed. The committed attempt is `current` and is not repeated
+   * here.
+   */
+  attempts: Array<RetryAttempt<LanguageModel>>;
+};
+
+/**
+ * Options for {@link createRetryableStream}.
+ *
+ * The call driver's `onComplete` is replaced by `onCommit`, which is the same
+ * callback observed at a later boundary: this wrapper's attempt does not return
+ * until the stream has committed, so "the call function returned" and "the
+ * first content part arrived" are the same moment here.
+ */
+export type RetryableStreamOptions = Omit<
+  RetryableCallOptions,
+  'onComplete'
+> & {
+  /**
+   * Called once an attempt commits — its first content part reached the
+   * stream — so the wrapper will not fail over again. Not when the stream
+   * finishes: past this point the stream is the caller's, and an error during
+   * consumption fires nothing. For a hook that waits for the stream to
+   * actually finish, use the model wrapper's `onSuccess` below this one, or
+   * the SDK's own `onFinish`.
+   */
+  onCommit?: (context: RetryStreamCommitContext) => void;
+};
 
 /**
  * Runs a stream-producing function with retry/fail-over, deciding the outcome
@@ -66,11 +118,21 @@ export type RetryableStream = <RESULT extends StreamResult>(
  * Returns the winning attempt's result unchanged, so the caller drives the body
  * (`stream`, `toUIMessageStreamResponse()`, …) with back-pressure preserved
  * past the commit point.
+ *
+ * The outcome hooks follow that same boundary: `onCommit` fires once an attempt
+ * commits — the first content part, not the end of the stream — and `onFailure`
+ * fires when every attempt failed before committing. Past the commit point the
+ * caller owns the stream, so an error during consumption fires neither.
  */
 export function createRetryableStream(
   options: RetryableStreamOptions,
 ): RetryableStream {
-  const run = createRetryableCall(options);
+  const { onCommit, ...callOptions } = options;
+  /**
+   * The attempt only returns once the stream has committed, so the driver's
+   * completion callback is exactly this wrapper's commit callback.
+   */
+  const run = createRetryableCall({ ...callOptions, onComplete: onCommit });
 
   return <RESULT extends StreamResult>(
     streamFn: (attempt: RetryCallAttempt) => RESULT | Promise<RESULT>,

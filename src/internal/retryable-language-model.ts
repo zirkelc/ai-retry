@@ -352,8 +352,16 @@ export class RetryableLanguageModel
      */
     const attempts: Array<RetryAttempt<LanguageModel>> = [];
     let operationError: unknown;
+    /**
+     * Only the retry loop is guarded. `onSuccess` runs after it, so a throwing
+     * handler is not reported as an attempt failure — the request succeeded,
+     * and firing `onFailure` too would report both outcomes for one request
+     * with a stale attempt as `current`.
+     */
+    let result: LanguageModelResult;
+    let finalCallOptions: LanguageModelCallOptions;
     try {
-      const { result, callOptions: finalCallOptions } = await this.withRetry({
+      const retried = await this.withRetry({
         fn: async (retryCallOptions) => {
           return this.currentModel.doGenerate(retryCallOptions);
         },
@@ -361,20 +369,8 @@ export class RetryableLanguageModel
         attempts,
         recorder,
       });
-
-      this.updateStickyModel(startModel);
-
-      this.options.onSuccess?.({
-        current: {
-          type: 'success',
-          model: this.currentModel,
-          result,
-          options: finalCallOptions,
-        },
-        attempts,
-      });
-
-      return result;
+      result = retried.result;
+      finalCallOptions = retried.callOptions;
     } catch (error) {
       operationError = error;
       this.emitFailure(attempts, error);
@@ -386,6 +382,20 @@ export class RetryableLanguageModel
         error: operationError,
       });
     }
+
+    this.updateStickyModel(startModel);
+
+    this.options.onSuccess?.({
+      current: {
+        type: 'success',
+        model: this.currentModel,
+        result,
+        options: finalCallOptions,
+      },
+      attempts,
+    });
+
+    return result;
   }
 
   async doStream(
@@ -858,6 +868,19 @@ export class RetryableLanguageModel
             },
             attempts,
           });
+        } catch (error) {
+          /**
+           * Anything that escaped the loop without reaching one of its
+           * terminal branches — most notably a re-stream whose own retries
+           * are exhausted. Letting it escape `start()` would reject the
+           * stream, which bypasses the consumer's `onError` entirely, so it
+           * is surfaced as an error part like every other unrecovered
+           * failure.
+           */
+          operationError = error;
+          this.emitFailure(attempts, error);
+          controller.enqueue({ type: 'error', error });
+          controller.close();
         } finally {
           recorder?.endOperation({
             provider: this.currentModel.provider,
