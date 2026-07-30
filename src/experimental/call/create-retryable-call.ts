@@ -1,12 +1,14 @@
 import { delay } from '@ai-sdk/provider-utils';
 import { BaseRetryableModel } from '../../internal/base-retryable-model.js';
 import { evaluateError } from '../../internal/evaluate-error.js';
+import { isErrorAttempt } from '../../internal/guards.js';
 import { resolveBackoffDelay } from '../../internal/resolve-backoff-delay.js';
 import { resolveModel } from '../../internal/resolve-model.js';
 import { createRetryTelemetry } from '../../internal/telemetry.js';
 import type {
   CallOptions,
   EmbeddingModel,
+  FailureContext,
   ImageModel,
   LanguageModel,
   OnRetryOverrides,
@@ -80,6 +82,40 @@ export type RetryCallRunOptions = {
 };
 
 /**
+ * The attempt the driver committed to: the one whose call function returned,
+ * after which no further fail-over is possible.
+ *
+ * Deliberately distinct from the model-level `SuccessAttempt`. That one carries
+ * a model result and full call options; here the result is whatever the call
+ * function returned (opaque to the driver) and the options are only the
+ * per-attempt overrides, since the driver has no call options of its own.
+ */
+export type RetryCallCommitAttempt<MODEL extends AnyModel = LanguageModel> = {
+  type: 'commit';
+  /** The model whose attempt committed. */
+  model: MODEL;
+  /** Whatever the call function returned. Opaque: the driver never reads it. */
+  result: unknown;
+  /** The per-attempt overrides applied to the committed attempt. */
+  options: RetryCallOptions<MODEL>;
+};
+
+/**
+ * The context passed to `onCommit`, with the committed attempt and the
+ * attempts that were retried before it.
+ */
+export type RetryCallCommitContext<MODEL extends AnyModel = LanguageModel> = {
+  /** The attempt that committed. */
+  current: RetryCallCommitAttempt<MODEL>;
+  /**
+   * The preceding attempts that were retried, in order. Empty when the first
+   * attempt committed. The committed attempt is `current` and is not repeated
+   * here.
+   */
+  attempts: Array<RetryAttempt<MODEL>>;
+};
+
+/**
  * The driver returned by {@link createRetryableCall}. Invoke it with a function
  * that performs one attempt; it loops over the configured retries until the
  * function returns (the result is passed through unchanged) or no retry
@@ -95,8 +131,7 @@ export type RetryCall<MODEL extends AnyModel = LanguageModel> = <RESULT>(
  * Options for {@link createRetryableCall}.
  *
  * Mirrors the subset of `RetryableModelOptions` that applies to a generic
- * retry loop. There is no `onSuccess` here because the result is opaque to the
- * driver; the caller observes success directly from `run`'s return value.
+ * retry loop.
  */
 export interface RetryableCallOptions<MODEL extends AnyModel = LanguageModel> {
   /** Base model used for the first attempt (resolved on first use). */
@@ -126,7 +161,48 @@ export interface RetryableCallOptions<MODEL extends AnyModel = LanguageModel> {
   onRetry?: (
     context: RetryContext<MODEL>,
   ) => void | OnRetryOverrides<MODEL> | Promise<void | OnRetryOverrides<MODEL>>;
+  /**
+   * Called once an attempt commits: the call function returned, so the driver
+   * has locked that attempt in and will not fail over again. Reports the model
+   * that handled it and the attempts that were retried before it.
+   *
+   * Deliberately not named `onSuccess`, because committing is not the same as
+   * the operation succeeding. The call function decides how much has to happen
+   * before it returns: a `generateText` call has fully completed by then, but a
+   * `streamText` call has only produced its result object, and whatever it goes
+   * on to stream (or fail with) is past the driver's reach. The stream wrapper
+   * moves the boundary to the first content part, which is as far as anything
+   * can fail over.
+   *
+   * `current.result` is whatever the call function returned. The driver never
+   * inspects it, so it is typed `unknown`; the caller already has it typed
+   * from `run`'s return value.
+   */
+  onCommit?: (context: RetryCallCommitContext<MODEL>) => void;
+  /**
+   * Called once when the attempts are exhausted without committing: no retry
+   * matched, every candidate was tried, the caller's signal was already
+   * aborted, or the caller aborted during a backoff delay. `context.error` is
+   * the error the run rejects with, and `context.current` the attempt that
+   * failed last. The counterpart to `onCommit`.
+   *
+   * Reports attempt failures, so it stays silent for a rejection that no
+   * attempt caused — a callback of your own throwing, or a retryable throwing
+   * before the first attempt was recorded. Those still reject the run; there
+   * is simply no failed attempt to hand over. Also silent when retries are
+   * disabled.
+   */
+  onFailure?: (context: FailureContext<MODEL>) => void;
 }
+
+/**
+ * {@link RetryableCallOptions} once the base model has been resolved from its
+ * gateway-string form to an instance.
+ */
+type ResolvedCallOptions<MODEL extends AnyModel> = Omit<
+  RetryableCallOptions<MODEL>,
+  'model'
+> & { model: MODEL };
 
 /**
  * Resolve the per-attempt option overrides handed to the call function.
@@ -169,6 +245,48 @@ function resolveRetryOptions<MODEL extends AnyModel>(
  * already absorb internally.
  */
 class RetryableCall<MODEL extends AnyModel> extends BaseRetryableModel<MODEL> {
+  /**
+   * The options under their call-level types. `BaseRetryableModel` stores them
+   * under the model-level ones, which have no `onCommit` at all, so this is the
+   * handle the loop reads the hooks through.
+   */
+  private readonly callOptions: ResolvedCallOptions<MODEL>;
+
+  constructor(options: ResolvedCallOptions<MODEL>) {
+    super(options as unknown as RetryableModelOptions<MODEL>);
+    this.callOptions = options;
+  }
+
+  /**
+   * Fire the `onCommit` callback for a call that returned.
+   *
+   * No cast, unlike {@link RetryableCall.emitFailure}: the commit context is
+   * declared over `MODEL` directly, whereas the shared contexts are declared
+   * over `ResolvedModel<MODEL>` — the same type at runtime, but not provably so
+   * for a generic `MODEL`.
+   */
+  private emitCommit(
+    current: RetryCallCommitAttempt<MODEL>,
+    attempts: Array<RetryAttempt<MODEL>>,
+  ) {
+    this.callOptions.onCommit?.({ current, attempts });
+  }
+
+  /**
+   * Fire the `onFailure` callback for a terminally failed call. The final
+   * attempt (last entry of `attempts`) is surfaced as `current`.
+   */
+  private emitFailure(attempts: Array<RetryAttempt<MODEL>>, error: unknown) {
+    if (!this.callOptions.onFailure) return;
+    const current = attempts.at(-1);
+    if (!current || !isErrorAttempt(current)) return;
+    this.callOptions.onFailure({
+      current,
+      attempts,
+      error,
+    } as unknown as FailureContext<MODEL>);
+  }
+
   async run<RESULT>(
     fn: (attempt: RetryCallAttempt<MODEL>) => Promise<RESULT>,
     runOptions?: RetryCallRunOptions,
@@ -235,7 +353,7 @@ class RetryableCall<MODEL extends AnyModel> extends BaseRetryableModel<MODEL> {
           } as unknown as RetryContext<MODEL>;
 
           onRetryOverrides =
-            (await this.options.onRetry?.(context)) ?? undefined;
+            (await this.callOptions.onRetry?.(context)) ?? undefined;
         }
 
         const attemptModel = this.currentModel;
@@ -257,18 +375,21 @@ class RetryableCall<MODEL extends AnyModel> extends BaseRetryableModel<MODEL> {
           timeoutMs: attemptTimeout,
         });
 
+        /**
+         * Only the call itself is guarded. Everything that runs once the
+         * attempt has committed stays outside, so a throwing `onCommit`
+         * handler cannot be mistaken for a failed attempt and re-run a call
+         * that already succeeded.
+         */
+        let result: RESULT;
         try {
-          const result = await fn({
+          result = await fn({
             model: attemptModel,
             attempt: attemptNumber,
             timeout: attemptTimeout,
             abortSignal: runOptions?.abortSignal,
             options,
           });
-
-          recorder?.endAttempt({ attempt: attemptNumber, outcome: 'success' });
-          this.updateStickyModel(startModel);
-          return result;
         } catch (error) {
           /**
            * Evaluate the failure. `options` is a minimal placeholder: the
@@ -284,7 +405,7 @@ class RetryableCall<MODEL extends AnyModel> extends BaseRetryableModel<MODEL> {
             } as CallOptions<MODEL>,
             attempts,
             retries: this.options.retries,
-            onError: this.options.onError,
+            onError: this.callOptions.onError,
           });
 
           const retryModel = evaluation.retryModel as Retry<MODEL> | undefined;
@@ -302,7 +423,6 @@ class RetryableCall<MODEL extends AnyModel> extends BaseRetryableModel<MODEL> {
               outcome: 'failure',
               error,
             });
-            operationError = finalError;
             throw finalError;
           }
 
@@ -317,7 +437,6 @@ class RetryableCall<MODEL extends AnyModel> extends BaseRetryableModel<MODEL> {
               outcome: 'failure',
               error,
             });
-            operationError = error;
             throw error;
           }
 
@@ -338,8 +457,30 @@ class RetryableCall<MODEL extends AnyModel> extends BaseRetryableModel<MODEL> {
 
           this.currentModel = retryModel.model;
           currentRetry = retryModel;
+          continue;
         }
+
+        recorder?.endAttempt({ attempt: attemptNumber, outcome: 'success' });
+        this.updateStickyModel(startModel);
+
+        this.emitCommit(
+          { type: 'commit', model: attemptModel, result, options },
+          attempts,
+        );
+
+        return result;
       }
+    } catch (error) {
+      /**
+       * Every way the loop can end without committing lands here: no retry
+       * matched, the caller's signal was already aborted, the caller aborted
+       * during a backoff delay, or a caller-supplied handler threw. Reporting
+       * once at the boundary is what makes it impossible to reject without
+       * telling `onFailure` and the operation span about it.
+       */
+      operationError = error;
+      this.emitFailure(attempts, error);
+      throw error;
     } finally {
       recorder?.endOperation({
         provider: this.currentModel.provider,
@@ -366,11 +507,11 @@ class RetryableCall<MODEL extends AnyModel> extends BaseRetryableModel<MODEL> {
 export function createRetryableCall<MODEL extends AnyModel = LanguageModel>(
   options: RetryableCallOptions<MODEL>,
 ): RetryCall<MODEL> {
-  const model = resolveModel(options.model);
+  const model = resolveModel(options.model) as unknown as MODEL;
   const instance = new RetryableCall<MODEL>({
     ...options,
     model,
-  } as unknown as RetryableModelOptions<MODEL>);
+  });
 
   return (fn, runOptions) => instance.run(fn, runOptions);
 }

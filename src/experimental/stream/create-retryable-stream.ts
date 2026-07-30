@@ -66,6 +66,13 @@ export type RetryableStream = <RESULT extends StreamResult>(
  * Returns the winning attempt's result unchanged, so the caller drives the body
  * (`stream`, `toUIMessageStreamResponse()`, …) with back-pressure preserved
  * past the commit point.
+ *
+ * The outcome hooks follow that same boundary: `onCommit` fires once an attempt
+ * commits — the first content part, not the end of the stream — and `onFailure`
+ * fires when every attempt failed before committing. Past the commit point the
+ * caller owns the stream, so an error during consumption fires neither. For a
+ * hook that waits for the stream to actually finish, use the model wrapper's
+ * `onSuccess` (or the SDK's own `onFinish`) below this one.
  */
 export function createRetryableStream(
   options: RetryableStreamOptions,

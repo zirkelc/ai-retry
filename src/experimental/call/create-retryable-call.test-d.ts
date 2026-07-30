@@ -4,7 +4,12 @@ import {
   MockImageModel,
   MockLanguageModel,
 } from '../../internal/test-utils.js';
-import type { EmbeddingModel, ImageModel, LanguageModel } from '../../types.js';
+import type {
+  EmbeddingModel,
+  ImageModel,
+  LanguageModel,
+  RetryCallOptions,
+} from '../../types.js';
 import {
   createRetryableCall,
   type RetryCallAttempt,
@@ -37,6 +42,37 @@ describe('createRetryableCall types', () => {
     run((attempt) => {
       expectTypeOf(attempt.model).toEqualTypeOf<EmbeddingModel>();
       return Promise.resolve(0);
+    });
+  });
+
+  it('should type the commit context with an opaque result', () => {
+    // Act
+    createRetryableCall({
+      model: MockLanguageModel.from(),
+      retries: [],
+      onCommit: (context) => {
+        // Assert — the driver never inspects the result, hence `unknown`.
+        expectTypeOf(context.current.type).toEqualTypeOf<'commit'>();
+        expectTypeOf(context.current.model).toEqualTypeOf<LanguageModel>();
+        expectTypeOf(context.current.result).toEqualTypeOf<unknown>();
+        expectTypeOf(context.current.options).toEqualTypeOf<
+          RetryCallOptions<LanguageModel>
+        >();
+      },
+    });
+  });
+
+  it('should type the failure context with the final error attempt', () => {
+    // Act
+    createRetryableCall({
+      model: MockLanguageModel.from(),
+      retries: [],
+      onFailure: (context) => {
+        // Assert
+        expectTypeOf(context.current.type).toEqualTypeOf<'error'>();
+        expectTypeOf(context.current.model).toEqualTypeOf<LanguageModel>();
+        expectTypeOf(context.error).toEqualTypeOf<unknown>();
+      },
     });
   });
 
