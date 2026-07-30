@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.0](https://github.com/zirkelc/ai-retry/compare/v2.2.1...v2.3.0) (2026-07-30)
+
+
+### Features
+
+* **experimental:** outcome callbacks for call-level retry drivers ([#75](https://github.com/zirkelc/ai-retry/issues/75)) ([f1ba945](https://github.com/zirkelc/ai-retry/commit/f1ba945830fa36c7646d6ec6c05838176bfb3e45))
+
 ## [2.2.1](https://github.com/zirkelc/ai-retry/compare/v2.2.0...v2.2.1) (2026-07-27)
 
 
