@@ -454,16 +454,16 @@ describe('createRetryableCall', () => {
     });
   });
 
-  describe('onCommit', () => {
-    it('should call onCommit when the first attempt succeeds', async () => {
+  describe('onComplete', () => {
+    it('should call onComplete when the first attempt succeeds', async () => {
       // Arrange
       const primary = MockLanguageModel.from();
-      const onCommit = vi.fn();
+      const onComplete = vi.fn();
       const fn = vi.fn(async (_attempt: RetryCallAttempt) => 'OK');
       const run = createRetryableCall({
         model: primary,
         retries: [],
-        onCommit,
+        onComplete,
       });
 
       // Act
@@ -471,23 +471,22 @@ describe('createRetryableCall', () => {
 
       // Assert — the result reaches the caller, not the hook.
       expect(returned).toBe('OK');
-      expect(onCommit).toHaveBeenCalledTimes(1);
-      expect(onCommit.mock.calls[0]![0].current.type).toBe('commit');
-      expect(onCommit.mock.calls[0]![0].current.model).toBe(primary);
-      expect('result' in onCommit.mock.calls[0]![0].current).toBe(false);
-      expect(onCommit.mock.calls[0]![0].attempts.length).toBe(0);
+      expect(onComplete).toHaveBeenCalledTimes(1);
+      expect(onComplete.mock.calls[0]![0].current.model).toBe(primary);
+      expect('result' in onComplete.mock.calls[0]![0].current).toBe(false);
+      expect(onComplete.mock.calls[0]![0].attempts.length).toBe(0);
     });
 
-    it('should call onCommit with the model that recovered the call', async () => {
+    it('should call onComplete with the model that recovered the call', async () => {
       // Arrange
       const primary = MockLanguageModel.from();
       const fallback = MockLanguageModel.from();
-      const onCommit = vi.fn();
+      const onComplete = vi.fn();
       const fn = failOn([primary], 'FALLBACK_OK');
       const run = createRetryableCall({
         model: primary,
         retries: [fallback],
-        onCommit,
+        onComplete,
       });
 
       // Act
@@ -495,69 +494,71 @@ describe('createRetryableCall', () => {
 
       // Assert — the failed attempt precedes the successful one.
       expect(returned).toBe('FALLBACK_OK');
-      expect(onCommit).toHaveBeenCalledTimes(1);
-      expect(onCommit.mock.calls[0]![0].current.model).toBe(fallback);
-      expect(onCommit.mock.calls[0]![0].attempts.length).toBe(1);
-      expect(onCommit.mock.calls[0]![0].attempts[0].model).toBe(primary);
+      expect(onComplete).toHaveBeenCalledTimes(1);
+      expect(onComplete.mock.calls[0]![0].current.model).toBe(fallback);
+      expect(onComplete.mock.calls[0]![0].attempts.length).toBe(1);
+      expect(onComplete.mock.calls[0]![0].attempts[0].model).toBe(primary);
     });
 
-    it('should expose the committed attempt options on the context', async () => {
+    it('should expose the final attempt options on the context', async () => {
       // Arrange
       const primary = MockLanguageModel.from();
       const fallback = MockLanguageModel.from();
-      const onCommit = vi.fn();
+      const onComplete = vi.fn();
       const fn = failOn([primary]);
       const run = createRetryableCall({
         model: primary,
         retries: [{ model: fallback, options: { temperature: 0.5 } }],
-        onCommit,
+        onComplete,
       });
 
       // Act
       await run(fn);
 
       // Assert
-      expect(onCommit.mock.calls[0]![0].current.options.temperature).toBe(0.5);
+      expect(onComplete.mock.calls[0]![0].current.options.temperature).toBe(
+        0.5,
+      );
     });
 
-    it('should NOT call onCommit when every attempt fails', async () => {
+    it('should NOT call onComplete when every attempt fails', async () => {
       // Arrange
       const primary = MockLanguageModel.from();
       const fallback = MockLanguageModel.from();
-      const onCommit = vi.fn();
+      const onComplete = vi.fn();
       const fn = vi.fn(async () => {
         throw new Error('always fails');
       });
       const run = createRetryableCall({
         model: primary,
         retries: [fallback],
-        onCommit,
+        onComplete,
       });
 
       // Act
       await run(fn).catch(() => {});
 
       // Assert
-      expect(onCommit).toHaveBeenCalledTimes(0);
+      expect(onComplete).toHaveBeenCalledTimes(0);
     });
 
-    it('should NOT call onCommit when retries are disabled', async () => {
+    it('should NOT call onComplete when retries are disabled', async () => {
       // Arrange
       const primary = MockLanguageModel.from();
-      const onCommit = vi.fn();
+      const onComplete = vi.fn();
       const fn = vi.fn(async (_attempt: RetryCallAttempt) => 'OK');
       const run = createRetryableCall({
         model: primary,
         retries: [],
         disabled: true,
-        onCommit,
+        onComplete,
       });
 
       // Act
       await run(fn);
 
       // Assert
-      expect(onCommit).toHaveBeenCalledTimes(0);
+      expect(onComplete).toHaveBeenCalledTimes(0);
     });
   });
 
@@ -646,7 +647,7 @@ describe('createRetryableCall', () => {
       const primary = MockLanguageModel.from();
       const fallback = MockLanguageModel.from();
       const controller = new AbortController();
-      const onCommit = vi.fn();
+      const onComplete = vi.fn();
       const onFailure = vi.fn();
       const fn = vi.fn(async () => {
         setTimeout(() => controller.abort(), 10);
@@ -655,7 +656,7 @@ describe('createRetryableCall', () => {
       const run = createRetryableCall({
         model: primary,
         retries: [{ model: fallback, delay: 200 }],
-        onCommit,
+        onComplete,
         onFailure,
       });
 
@@ -665,7 +666,7 @@ describe('createRetryableCall', () => {
       // Assert
       await expect(result).rejects.toThrow();
       expect(fn).toHaveBeenCalledTimes(1);
-      expect(onCommit).toHaveBeenCalledTimes(0);
+      expect(onComplete).toHaveBeenCalledTimes(0);
       expect(onFailure).toHaveBeenCalledTimes(1);
       expect(onFailure.mock.calls[0]![0].attempts.length).toBe(1);
     });
@@ -695,18 +696,18 @@ describe('createRetryableCall', () => {
       expect(onFailure.mock.calls[0]![0].error).toBe(handlerError);
     });
 
-    it('should NOT re-run a committed call when an onCommit handler throws', async () => {
+    it('should NOT re-run a completed call when an onComplete handler throws', async () => {
       // Arrange — a throwing hook must not look like a failed attempt, or the
       // driver would fail over and issue the call a second time.
       const primary = MockLanguageModel.from();
       const fallback = MockLanguageModel.from();
-      const handlerError = new Error('onCommit blew up');
+      const handlerError = new Error('onComplete blew up');
       const onFailure = vi.fn();
       const fn = vi.fn(async (_attempt: RetryCallAttempt) => 'OK');
       const run = createRetryableCall({
         model: primary,
         retries: [fallback],
-        onCommit: () => {
+        onComplete: () => {
           throw handlerError;
         },
         onFailure,

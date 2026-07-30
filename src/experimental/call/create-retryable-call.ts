@@ -82,7 +82,7 @@ export type RetryCallRunOptions = {
 };
 
 /**
- * The attempt the driver committed to: the one whose call function returned,
+ * The attempt that ended the retry loop: the one whose call function returned,
  * after which no further fail-over is possible.
  *
  * Deliberately distinct from the model-level `SuccessAttempt`, which carries a
@@ -91,25 +91,23 @@ export type RetryCallRunOptions = {
  * the options are only the per-attempt overrides, since the driver has no call
  * options of its own.
  */
-export type RetryCallCommitAttempt<MODEL extends AnyModel = LanguageModel> = {
-  type: 'commit';
-  /** The model whose attempt committed. */
+export type RetryCallCompleteAttempt<MODEL extends AnyModel = LanguageModel> = {
+  /** The model whose attempt ended the loop. */
   model: MODEL;
-  /** The per-attempt overrides applied to the committed attempt. */
+  /** The per-attempt overrides applied to that attempt. */
   options: RetryCallOptions<MODEL>;
 };
 
 /**
- * The context passed to `onCommit`, with the committed attempt and the
- * attempts that were retried before it.
+ * The context passed to `onComplete`, with the attempt that ended the loop and
+ * the attempts that were retried before it.
  */
-export type RetryCallCommitContext<MODEL extends AnyModel = LanguageModel> = {
-  /** The attempt that committed. */
-  current: RetryCallCommitAttempt<MODEL>;
+export type RetryCallCompleteContext<MODEL extends AnyModel = LanguageModel> = {
+  /** The attempt that ended the loop. */
+  current: RetryCallCompleteAttempt<MODEL>;
   /**
    * The preceding attempts that were retried, in order. Empty when the first
-   * attempt committed. The committed attempt is `current` and is not repeated
-   * here.
+   * attempt returned. The final attempt is `current` and is not repeated here.
    */
   attempts: Array<RetryAttempt<MODEL>>;
 };
@@ -161,28 +159,26 @@ export interface RetryableCallOptions<MODEL extends AnyModel = LanguageModel> {
     context: RetryContext<MODEL>,
   ) => void | OnRetryOverrides<MODEL> | Promise<void | OnRetryOverrides<MODEL>>;
   /**
-   * Called once an attempt commits: the call function returned, so the driver
-   * has locked that attempt in and will not fail over again. Reports the model
-   * that handled it and the attempts that were retried before it.
+   * Called once the call function returns, so the driver stops retrying.
+   * Reports the model that handled it and the attempts retried before it.
    *
    * Not named `onSuccess`, because how much has to succeed before the call
    * function returns is the call function's choice, not the driver's. A
    * `generateText` call has fully completed by then; a `streamText` call has
    * only produced its result object, and whatever it goes on to stream — or
-   * fail with — is past the driver's reach. The stream wrapper moves the
-   * boundary to the first content part, which is as late as anything can still
-   * fail over.
+   * fail with — is past the driver's reach. For streaming, prefer
+   * `createRetryableStream`, whose `onCommit` waits for the first content part.
    *
    * The result is not reported here: the driver never inspects it, and the
    * caller receives it, correctly typed, from `run`.
    */
-  onCommit?: (context: RetryCallCommitContext<MODEL>) => void;
+  onComplete?: (context: RetryCallCompleteContext<MODEL>) => void;
   /**
-   * Called once when the attempts are exhausted without committing: no retry
+   * Called once when the attempts are exhausted without completing: no retry
    * matched, every candidate was tried, the caller's signal was already
    * aborted, or the caller aborted during a backoff delay. `context.error` is
    * the error the run rejects with, and `context.current` the attempt that
-   * failed last. The counterpart to `onCommit`.
+   * failed last. The counterpart to `onComplete`.
    *
    * Reports attempt failures, so it stays silent for a rejection that no
    * attempt caused — a callback of your own throwing, or a retryable throwing
@@ -245,7 +241,7 @@ function resolveRetryOptions<MODEL extends AnyModel>(
 class RetryableCall<MODEL extends AnyModel> extends BaseRetryableModel<MODEL> {
   /**
    * The options under their call-level types. `BaseRetryableModel` stores them
-   * under the model-level ones, which have no `onCommit` at all, so this is the
+   * under the model-level ones, which have no `onComplete` at all, so this is the
    * handle the loop reads the hooks through.
    */
   private readonly callOptions: ResolvedCallOptions<MODEL>;
@@ -256,18 +252,18 @@ class RetryableCall<MODEL extends AnyModel> extends BaseRetryableModel<MODEL> {
   }
 
   /**
-   * Fire the `onCommit` callback for a call that returned.
+   * Fire the `onComplete` callback for a call that returned.
    *
-   * No cast, unlike {@link RetryableCall.emitFailure}: the commit context is
+   * No cast, unlike {@link RetryableCall.emitFailure}: the complete context is
    * declared over `MODEL` directly, whereas the shared contexts are declared
    * over `ResolvedModel<MODEL>` — the same type at runtime, but not provably so
    * for a generic `MODEL`.
    */
-  private emitCommit(
-    current: RetryCallCommitAttempt<MODEL>,
+  private emitComplete(
+    current: RetryCallCompleteAttempt<MODEL>,
     attempts: Array<RetryAttempt<MODEL>>,
   ) {
-    this.callOptions.onCommit?.({ current, attempts });
+    this.callOptions.onComplete?.({ current, attempts });
   }
 
   /**
@@ -375,7 +371,7 @@ class RetryableCall<MODEL extends AnyModel> extends BaseRetryableModel<MODEL> {
 
         /**
          * Only the call itself is guarded. Everything that runs once the
-         * attempt has committed stays outside, so a throwing `onCommit`
+         * attempt has completed stays outside, so a throwing `onComplete`
          * handler cannot be mistaken for a failed attempt and re-run a call
          * that already succeeded.
          */
@@ -461,16 +457,13 @@ class RetryableCall<MODEL extends AnyModel> extends BaseRetryableModel<MODEL> {
         recorder?.endAttempt({ attempt: attemptNumber, outcome: 'success' });
         this.updateStickyModel(startModel);
 
-        this.emitCommit(
-          { type: 'commit', model: attemptModel, options },
-          attempts,
-        );
+        this.emitComplete({ model: attemptModel, options }, attempts);
 
         return result;
       }
     } catch (error) {
       /**
-       * Every way the loop can end without committing lands here: no retry
+       * Every way the loop can end without completing lands here: no retry
        * matched, the caller's signal was already aborted, the caller aborted
        * during a backoff delay, or a caller-supplied handler threw. Reporting
        * once at the boundary is what makes it impossible to reject without

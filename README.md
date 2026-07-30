@@ -935,13 +935,14 @@ The driver returns the call function's result unchanged, or throws the final err
 
 ##### Callbacks
 
-Both drivers take `onError` and `onRetry` exactly as the model wrappers do ([Logging](#logging)). The positive outcome is reported by **`onCommit`**, not `onSuccess`:
+Both drivers take `onError` and `onRetry` exactly as the model wrappers do ([Logging](#logging)), plus `onFailure`. The positive outcome is named for the boundary each one can actually observe — **`onComplete`** on `createRetryableCall`, **`onCommit`** on `createRetryableStream`:
 
 ```ts
 const run = createRetryableCall({
   model: primaryModel,
   retries: [timeout().switch({ model: fallbackModel })],
-  onCommit: (context) => {
+  /** The call function returned, so the driver stops retrying. */
+  onComplete: (context) => {
     console.log(
       `Handled by ${context.current.model.modelId} after ${context.attempts.length} failed attempts`,
     );
@@ -953,29 +954,37 @@ const run = createRetryableCall({
     );
   },
 });
+
+const runStream = createRetryableStream({
+  model: primaryModel,
+  retries: [timeout().switch({ model: fallbackModel })],
+  /** Same callback, later boundary: the first content part arrived. */
+  onCommit: (context) => {
+    console.log(`Streaming from ${context.current.model.modelId}`);
+  },
+});
 ```
 
-`onCommit` fires when an attempt **commits** — the driver has locked it in and will not fail over again. `onFailure` fires when the attempts are exhausted without committing: no retryable matched, every candidate was tried, the caller's signal was already aborted, or the caller aborted during a backoff delay. `context.error` is the error the run rejects with; `context.current` is the attempt that failed last.
+Neither name is `onSuccess`, because how much has to succeed before the call function returns is that function's choice, not the driver's:
+
+| Layer | Positive hook | Fires when | Operation finished? |
+| ----- | ------------- | ---------- | ------------------- |
+| `createRetryableCall` + `generateText` | `onComplete` | the call function returns | yes |
+| `createRetryableCall` + `streamText` | `onComplete` | the call function returns — the result object, before any content | no |
+| `createRetryableStream` | `onCommit` | the first content part reaches the stream | no, the body is still streaming |
+| `createRetryableModel` | `onSuccess` | the request completed, or the stream fully drained | yes |
+
+That middle row is why `createRetryableStream` exists: it moves the boundary to the last point anything can still fail over. A stream can commit and *then* error, get truncated by a `chunkMs` deadline, or finish with `content-filter` — none of which fires anything here, because the wrapper stopped being able to fail over at the commit point. For a hook that waits for the stream to actually finish, use the model wrapper's [`onSuccess`](#logging) underneath, or `streamText`'s own `onFinish`.
+
+`onFailure` fires when the attempts are exhausted without completing: no retryable matched, every candidate was tried, the caller's signal was already aborted, or the caller aborted during a backoff delay. `context.error` is the error the run rejects with; `context.current` is the attempt that failed last.
 
 Neither fires when retries are disabled. `onFailure` reports *attempt* failures, so it also stays silent for a rejection no attempt caused — one of your own callbacks throwing, or a retryable throwing before the first attempt was recorded. Those still reject the run; there is simply no failed attempt to hand over.
 
-Committing is not the same as the operation succeeding, which is why the hook is not called `onSuccess`. Where the boundary lands depends on the layer:
-
-| Layer | Commits when | Operation finished? |
-| ----- | ------------ | ------------------- |
-| `createRetryableCall` + `generateText` | the call function returns | yes |
-| `createRetryableCall` + `streamText` | the call function returns — the result object, before any content | no |
-| `createRetryableStream` | the first content part reaches the stream | no, the body is still streaming |
-| `createRetryableModel` (`onSuccess`) | the wrapped stream has fully drained | yes |
-
-So a stream can commit and still error, get truncated by a `chunkMs` deadline, or finish with `content-filter` afterwards — none of which fires anything here, because the driver stopped being able to fail over at the commit point. When you need a hook that waits for the stream to actually finish, use the model wrapper's [`onSuccess`](#logging) underneath, or `streamText`'s own `onFinish`.
-
-`onCommit` receives its own context type rather than the model-level [`SuccessContext`](#successcontext), since the driver knows less about the attempt than a model wrapper does:
+Both positive hooks share a context type, distinct from the model-level [`SuccessContext`](#successcontext) because the driver knows less about the attempt than a model wrapper does:
 
 ```ts
-interface RetryCallCommitContext<MODEL> {
+interface RetryCallCompleteContext<MODEL> {
   current: {
-    type: 'commit';
     model: MODEL;
     /** The per-attempt overrides, not full call options. */
     options: RetryCallOptions<MODEL>;
@@ -1172,7 +1181,7 @@ interface SuccessContext<MODEL> {
 
 Passed to the `onSuccess` callback. `attempts` holds the preceding attempts that were retried, in order, and is empty when the first attempt succeeded. The successful attempt itself is `current` and is not repeated in `attempts`.
 
-The call-level drivers have their own [`RetryCallCommitContext`](#callbacks) instead, which reports no result at all.
+The call-level drivers have their own [`RetryCallCompleteContext`](#callbacks) instead, which reports no result at all.
 
 ### License
 

@@ -45,14 +45,13 @@ describe('createRetryableCall types', () => {
     });
   });
 
-  it('should type the commit context with what the driver knows', () => {
+  it('should type the completion context with what the driver knows', () => {
     // Act
     createRetryableCall({
       model: MockLanguageModel.from(),
       retries: [],
-      onCommit: (context) => {
+      onComplete: (context) => {
         // Assert — only what the driver itself knows about the attempt.
-        expectTypeOf(context.current.type).toEqualTypeOf<'commit'>();
         expectTypeOf(context.current.model).toEqualTypeOf<LanguageModel>();
         expectTypeOf(context.current.options).toEqualTypeOf<
           RetryCallOptions<LanguageModel>

@@ -2,8 +2,8 @@ export {
   createRetryableCall,
   type RetryCall,
   type RetryCallAttempt,
-  type RetryCallCommitAttempt,
-  type RetryCallCommitContext,
+  type RetryCallCompleteAttempt,
+  type RetryCallCompleteContext,
   type RetryCallRunOptions,
   type RetryableCallOptions,
 } from './create-retryable-call.js';

@@ -2,6 +2,7 @@ import {
   createRetryableCall,
   type RetryableCallOptions,
   type RetryCallAttempt,
+  type RetryCallCompleteContext,
   type RetryCallRunOptions,
 } from '../call/create-retryable-call.js';
 import { detectStreamCommit } from './detect-stream-commit.js';
@@ -24,8 +25,26 @@ const resolveStream = (result: StreamResult): ReadableStream<unknown> =>
 
 /**
  * Options for {@link createRetryableStream}.
+ *
+ * The call driver's `onComplete` is replaced by `onCommit`, which is the same
+ * callback observed at a later boundary: this wrapper's attempt does not return
+ * until the stream has committed, so "the call function returned" and "the
+ * first content part arrived" are the same moment here.
  */
-export type RetryableStreamOptions = RetryableCallOptions;
+export type RetryableStreamOptions = Omit<
+  RetryableCallOptions,
+  'onComplete'
+> & {
+  /**
+   * Called once an attempt commits — its first content part reached the
+   * stream — so the wrapper will not fail over again. Not when the stream
+   * finishes: past this point the stream is the caller's, and an error during
+   * consumption fires nothing. For a hook that waits for the stream to
+   * actually finish, use the model wrapper's `onSuccess` below this one, or
+   * the SDK's own `onFinish`.
+   */
+  onCommit?: (context: RetryCallCompleteContext) => void;
+};
 
 /**
  * Runs a stream-producing function with retry/fail-over, deciding the outcome
@@ -70,14 +89,17 @@ export type RetryableStream = <RESULT extends StreamResult>(
  * The outcome hooks follow that same boundary: `onCommit` fires once an attempt
  * commits — the first content part, not the end of the stream — and `onFailure`
  * fires when every attempt failed before committing. Past the commit point the
- * caller owns the stream, so an error during consumption fires neither. For a
- * hook that waits for the stream to actually finish, use the model wrapper's
- * `onSuccess` (or the SDK's own `onFinish`) below this one.
+ * caller owns the stream, so an error during consumption fires neither.
  */
 export function createRetryableStream(
   options: RetryableStreamOptions,
 ): RetryableStream {
-  const run = createRetryableCall(options);
+  const { onCommit, ...callOptions } = options;
+  /**
+   * The attempt only returns once the stream has committed, so the driver's
+   * completion callback is exactly this wrapper's commit callback.
+   */
+  const run = createRetryableCall({ ...callOptions, onComplete: onCommit });
 
   return <RESULT extends StreamResult>(
     streamFn: (attempt: RetryCallAttempt) => RESULT | Promise<RESULT>,

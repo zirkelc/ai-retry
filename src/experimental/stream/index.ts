@@ -1,6 +1,6 @@
 export type {
-  RetryCallCommitAttempt,
-  RetryCallCommitContext,
+  RetryCallCompleteAttempt,
+  RetryCallCompleteContext,
 } from '../call/create-retryable-call.js';
 export {
   createRetryableStream,
