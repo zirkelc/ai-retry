@@ -2,9 +2,13 @@ import {
   createRetryableCall,
   type RetryableCallOptions,
   type RetryCallAttempt,
-  type RetryCallCompleteContext,
   type RetryCallRunOptions,
 } from '../call/create-retryable-call.js';
+import type {
+  LanguageModel,
+  RetryAttempt,
+  RetryCallOptions,
+} from '../../types.js';
 import { detectStreamCommit } from './detect-stream-commit.js';
 
 /**
@@ -22,6 +26,35 @@ export type StreamResult =
 /** Resolve the re-readable part stream, preferring the v7 `stream` getter. */
 const resolveStream = (result: StreamResult): ReadableStream<unknown> =>
   'stream' in result ? result.stream : result.fullStream;
+
+/**
+ * The attempt that committed: the one whose first content part reached the
+ * stream, after which no further fail-over is possible.
+ *
+ * Language-model-shaped rather than generic, since commit is detected from the
+ * AI SDK stream protocol and has no meaning for the other model kinds.
+ */
+export type RetryStreamCommitAttempt = {
+  /** The model whose attempt committed. */
+  model: LanguageModel;
+  /** The per-attempt overrides applied to the committed attempt. */
+  options: RetryCallOptions<LanguageModel>;
+};
+
+/**
+ * The context passed to `onCommit`, with the committed attempt and the
+ * attempts that were retried before it.
+ */
+export type RetryStreamCommitContext = {
+  /** The attempt that committed. */
+  current: RetryStreamCommitAttempt;
+  /**
+   * The preceding attempts that were retried, in order. Empty when the first
+   * attempt committed. The committed attempt is `current` and is not repeated
+   * here.
+   */
+  attempts: Array<RetryAttempt<LanguageModel>>;
+};
 
 /**
  * Options for {@link createRetryableStream}.
@@ -43,7 +76,7 @@ export type RetryableStreamOptions = Omit<
    * actually finish, use the model wrapper's `onSuccess` below this one, or
    * the SDK's own `onFinish`.
    */
-  onCommit?: (context: RetryCallCompleteContext) => void;
+  onCommit?: (context: RetryStreamCommitContext) => void;
 };
 
 /**

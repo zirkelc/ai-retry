@@ -980,7 +980,7 @@ That middle row is why `createRetryableStream` exists: it moves the boundary to 
 
 Neither fires when retries are disabled. `onFailure` reports *attempt* failures, so it also stays silent for a rejection no attempt caused — one of your own callbacks throwing, or a retryable throwing before the first attempt was recorded. Those still reject the run; there is simply no failed attempt to hand over.
 
-Both positive hooks share a context type, distinct from the model-level [`SuccessContext`](#successcontext) because the driver knows less about the attempt than a model wrapper does:
+Each layer has its own context type — `RetryCallCompleteContext` and `RetryStreamCommitContext` — so neither API makes you import the other's vocabulary to type a callback. They are the same shape, and both are distinct from the model-level [`SuccessContext`](#successcontext) because the driver knows less about the attempt than a model wrapper does:
 
 ```ts
 interface RetryCallCompleteContext<MODEL> {
@@ -990,6 +990,12 @@ interface RetryCallCompleteContext<MODEL> {
     options: RetryCallOptions<MODEL>;
   };
   attempts: Array<RetryAttempt<MODEL>>;
+}
+
+/** The stream wrapper's equivalent, fixed to language models. */
+interface RetryStreamCommitContext {
+  current: { model: LanguageModel; options: RetryCallOptions<LanguageModel> };
+  attempts: Array<RetryAttempt<LanguageModel>>;
 }
 ```
 
