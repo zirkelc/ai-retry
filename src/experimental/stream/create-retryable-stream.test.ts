@@ -472,16 +472,16 @@ describe('createRetryableStream', () => {
       });
 
       // Act
-      await retryableStream((attempt) =>
+      const committed = await retryableStream((attempt) =>
         attempt.model === primary
           ? streamOf([Language.streamError(new Error('boom'))])
           : fallbackResult,
       );
 
-      // Assert
+      // Assert — the result reaches the caller, not the hook.
+      expect(committed).toBe(fallbackResult);
       expect(onCommit).toHaveBeenCalledTimes(1);
       expect(onCommit.mock.calls[0]![0].current.model).toBe(fallback);
-      expect(onCommit.mock.calls[0]![0].current.result).toBe(fallbackResult);
       expect(onCommit.mock.calls[0]![0].attempts.length).toBe(1);
     });
 

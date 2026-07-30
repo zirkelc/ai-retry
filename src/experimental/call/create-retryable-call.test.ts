@@ -467,13 +467,14 @@ describe('createRetryableCall', () => {
       });
 
       // Act
-      await run(fn);
+      const returned = await run(fn);
 
-      // Assert
+      // Assert — the result reaches the caller, not the hook.
+      expect(returned).toBe('OK');
       expect(onCommit).toHaveBeenCalledTimes(1);
       expect(onCommit.mock.calls[0]![0].current.type).toBe('commit');
       expect(onCommit.mock.calls[0]![0].current.model).toBe(primary);
-      expect(onCommit.mock.calls[0]![0].current.result).toBe('OK');
+      expect('result' in onCommit.mock.calls[0]![0].current).toBe(false);
       expect(onCommit.mock.calls[0]![0].attempts.length).toBe(0);
     });
 
@@ -490,12 +491,12 @@ describe('createRetryableCall', () => {
       });
 
       // Act
-      await run(fn);
+      const returned = await run(fn);
 
       // Assert — the failed attempt precedes the successful one.
+      expect(returned).toBe('FALLBACK_OK');
       expect(onCommit).toHaveBeenCalledTimes(1);
       expect(onCommit.mock.calls[0]![0].current.model).toBe(fallback);
-      expect(onCommit.mock.calls[0]![0].current.result).toBe('FALLBACK_OK');
       expect(onCommit.mock.calls[0]![0].attempts.length).toBe(1);
       expect(onCommit.mock.calls[0]![0].attempts[0].model).toBe(primary);
     });

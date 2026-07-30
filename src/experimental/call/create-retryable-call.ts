@@ -85,17 +85,16 @@ export type RetryCallRunOptions = {
  * The attempt the driver committed to: the one whose call function returned,
  * after which no further fail-over is possible.
  *
- * Deliberately distinct from the model-level `SuccessAttempt`. That one carries
- * a model result and full call options; here the result is whatever the call
- * function returned (opaque to the driver) and the options are only the
- * per-attempt overrides, since the driver has no call options of its own.
+ * Deliberately distinct from the model-level `SuccessAttempt`, which carries a
+ * model result and full call options. Neither has an equivalent here: the
+ * result is the call function's own and reaches the caller through `run`, and
+ * the options are only the per-attempt overrides, since the driver has no call
+ * options of its own.
  */
 export type RetryCallCommitAttempt<MODEL extends AnyModel = LanguageModel> = {
   type: 'commit';
   /** The model whose attempt committed. */
   model: MODEL;
-  /** Whatever the call function returned. Opaque: the driver never reads it. */
-  result: unknown;
   /** The per-attempt overrides applied to the committed attempt. */
   options: RetryCallOptions<MODEL>;
 };
@@ -166,17 +165,16 @@ export interface RetryableCallOptions<MODEL extends AnyModel = LanguageModel> {
    * has locked that attempt in and will not fail over again. Reports the model
    * that handled it and the attempts that were retried before it.
    *
-   * Deliberately not named `onSuccess`, because committing is not the same as
-   * the operation succeeding. The call function decides how much has to happen
-   * before it returns: a `generateText` call has fully completed by then, but a
-   * `streamText` call has only produced its result object, and whatever it goes
-   * on to stream (or fail with) is past the driver's reach. The stream wrapper
-   * moves the boundary to the first content part, which is as far as anything
-   * can fail over.
+   * Not named `onSuccess`, because how much has to succeed before the call
+   * function returns is the call function's choice, not the driver's. A
+   * `generateText` call has fully completed by then; a `streamText` call has
+   * only produced its result object, and whatever it goes on to stream — or
+   * fail with — is past the driver's reach. The stream wrapper moves the
+   * boundary to the first content part, which is as late as anything can still
+   * fail over.
    *
-   * `current.result` is whatever the call function returned. The driver never
-   * inspects it, so it is typed `unknown`; the caller already has it typed
-   * from `run`'s return value.
+   * The result is not reported here: the driver never inspects it, and the
+   * caller receives it, correctly typed, from `run`.
    */
   onCommit?: (context: RetryCallCommitContext<MODEL>) => void;
   /**
@@ -464,7 +462,7 @@ class RetryableCall<MODEL extends AnyModel> extends BaseRetryableModel<MODEL> {
         this.updateStickyModel(startModel);
 
         this.emitCommit(
-          { type: 'commit', model: attemptModel, result, options },
+          { type: 'commit', model: attemptModel, options },
           attempts,
         );
 

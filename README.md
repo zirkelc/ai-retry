@@ -977,8 +977,6 @@ interface RetryCallCommitContext<MODEL> {
   current: {
     type: 'commit';
     model: MODEL;
-    /** Whatever the call function returned. Opaque: the driver never reads it. */
-    result: unknown;
     /** The per-attempt overrides, not full call options. */
     options: RetryCallOptions<MODEL>;
   };
@@ -986,7 +984,7 @@ interface RetryCallCommitContext<MODEL> {
 }
 ```
 
-`result` is `unknown` because the driver never inspects what the call function returned — the caller already has it typed from `run`'s return value. `options` holds only the per-attempt overrides, since the driver has no call options of its own (the call function owns the prompt). `onFailure` reuses the shared [`FailureContext`](#failurecontext) unchanged.
+It reports only what the driver itself knows. There is no `result`: the driver never inspects what the call function returned, and you already receive it, correctly typed, from `run`. `options` holds only the per-attempt overrides, since the driver has no call options of its own (the call function owns the prompt). `onFailure` reuses the shared [`FailureContext`](#failurecontext) unchanged.
 
 ### Deprecated: function-style retryables
 
@@ -1174,7 +1172,7 @@ interface SuccessContext<MODEL> {
 
 Passed to the `onSuccess` callback. `attempts` holds the preceding attempts that were retried, in order, and is empty when the first attempt succeeded. The successful attempt itself is `current` and is not repeated in `attempts`.
 
-The call-level drivers have their own [`RetryCallCommitContext`](#callbacks) instead, since their result is opaque.
+The call-level drivers have their own [`RetryCallCommitContext`](#callbacks) instead, which reports no result at all.
 
 ### License
 

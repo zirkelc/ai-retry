@@ -45,19 +45,19 @@ describe('createRetryableCall types', () => {
     });
   });
 
-  it('should type the commit context with an opaque result', () => {
+  it('should type the commit context with what the driver knows', () => {
     // Act
     createRetryableCall({
       model: MockLanguageModel.from(),
       retries: [],
       onCommit: (context) => {
-        // Assert — the driver never inspects the result, hence `unknown`.
+        // Assert — only what the driver itself knows about the attempt.
         expectTypeOf(context.current.type).toEqualTypeOf<'commit'>();
         expectTypeOf(context.current.model).toEqualTypeOf<LanguageModel>();
-        expectTypeOf(context.current.result).toEqualTypeOf<unknown>();
         expectTypeOf(context.current.options).toEqualTypeOf<
           RetryCallOptions<LanguageModel>
         >();
+        expectTypeOf(context.current).not.toHaveProperty('result');
       },
     });
   });
