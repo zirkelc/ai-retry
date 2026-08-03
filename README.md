@@ -541,7 +541,7 @@ const retryableModel = createRetryableModel({
 
 The same `delay` / `backoffFactor` / `maxAttempts` options are accepted by `.switch({...})` and `.retry({...})`.
 
-#### Timeouts
+#### Retry timeouts
 
 When a retry specifies a `timeout`, a fresh `AbortSignal.timeout()` is created for that attempt. If the original `abortSignal` is still alive, the fresh deadline is composed with it via `AbortSignal.any()` so user cancellation still works. If the original signal is already aborted (a request-level deadline already fired), it is dropped so the retry runs against the fresh deadline alone.
 
@@ -563,6 +563,8 @@ await generateText({
   abortSignal: AbortSignal.timeout(60_000),
 });
 ```
+
+This option is one of several places a deadline can live, and the choice decides whether a fallback can recover at all. See [Timeouts](#timeouts) for the full picture.
 
 #### Max attempts
 
@@ -842,18 +844,69 @@ Result-based conditions (`finishReason`, `schemaInvalid`, `result(...)`) apply t
 > [!IMPORTANT]
 > **Streaming limitation:** retries and fallbacks only apply before the first content chunk is emitted. Once streaming begins delivering content, the response is committed to the current model. Mid-stream errors will propagate to the caller rather than triggering a fallback. If reliable retries are critical for your use case, consider using `generateText` instead of `streamText`.
 
-#### Timeouts and abort signals under `streamText`
+Timeouts have a second limitation on top of that boundary: a deadline set on the `streamText` call itself can never fail over, whether or not content has been emitted. See [Timeouts](#timeouts).
 
-`streamText` enforces its own timeouts (`timeout.stepMs`, `timeout.chunkMs`, `timeout.totalMs`, and any caller-supplied `abortSignal`) by merging them into a single signal that its stream pipeline watches directly. When that signal aborts, `streamText` finalizes the stream as aborted and **discards any output an `ai-retry` fallback produces underneath it**, even before the first content chunk. The fallback is still attempted (you'll see `onError`/`onRetry` fire), but its result never reaches the consumer.
+### Timeouts
 
-This is specific to `streamText`. The same timeouts on `generateText` recover normally, because `generateText` has no separate stream pipeline to tear down. That means the model wrappers **cannot** recover `streamText`-level timeouts. The experimental call-level drivers below can.
+Whether a deadline can fail over depends on two things: **where it is enforced** relative to the retry loop, and **when it fires** relative to the first content chunk.
+
+`ai-retry` retries at one of two layers, and only one of them can see past a deadline the call owns:
+
+- **Model layer** ([`createRetryableModel`](#usage)) wraps `doGenerate` / `doStream` and retries _below_ the `generateText` / `streamText` call.
+- **Call layer** ([`createRetryableStream` / `createRetryableCall`](#experimental-call-level-retries)) wraps the call itself and re-runs it _around_ the model.
+
+| Layer       | Retries                                   | `generateText` deadlines | `streamText` deadlines |
+| ----------- | ----------------------------------------- | ------------------------ | ---------------------- |
+| Model layer | `doGenerate` / `doStream`, below the call | recovers                 | cannot recover         |
+| Call layer  | the whole call, above the model           | recovers                 | recovers               |
+
+A deadline set on the call belongs to the call. At the model layer the retry happens underneath it, so by the time a fallback produces anything `streamText` has already finalized the stream as aborted and drops it. At the call layer the failed call is torn down and re-issued from scratch, so the next attempt gets a fresh signal and the deadline has somewhere to fail over to.
+
+A deadline the model layer sets _itself_ is a different matter: a retry's own `timeout` aborts only that attempt's signal, never the call's, so it recovers under both entry points (see [Retry timeouts](#retry-timeouts)).
+
+**Which deadline fires when under `generateText`**
+
+| Deadline             | Clock                           | Outcome  |
+| -------------------- | ------------------------------- | -------- |
+| `timeout.totalMs`    | the whole call, from call start | recovers |
+| `timeout.stepMs`     | one step, from step start       | recovers |
+| caller `abortSignal` | whenever the caller aborts      | recovers |
+
+**Which deadline fires when under `streamText`**
+
+| Deadline               | Clock                                                                 | Outcome                    |
+| ---------------------- | --------------------------------------------------------------------- | -------------------------- |
+| `timeout.totalMs`      | the whole call, from call start                                       | discarded                  |
+| `timeout.stepMs`       | one step, from step start                                             | discarded                  |
+| `timeout.firstChunkMs` | step start until the first content chunk                              | discarded                  |
+| `timeout.chunkMs`      | the gap between content chunks, armed only once the first one arrives | never fires before content |
+| caller `abortSignal`   | whenever the caller aborts                                            | discarded                  |
+
+"Discarded" means the fallback is attempted and runs, but its output never reaches the consumer.
+
+Three sharp edges in those tables:
+
+- `firstChunkMs` and `chunkMs` are streaming-only, but all four keys share one type, so `generateText` accepts them and then never reads them. A `generateText` call configured with only those keys has no deadline at all, and a stalled model hangs indefinitely.
+- `chunkMs` measures the gap _between_ content chunks, so its timer is only armed once the first content chunk arrives. It never catches a model that stalls before producing anything, and once it can fire the attempt is already committed.
+- Where a table says "recovers", the retry must still supply its own `timeout` whenever the inbound signal has already fired, otherwise `ai-retry` re-throws instead of retrying against a dead signal (see [Retry timeouts](#retry-timeouts)).
+
+**Why `streamText` discards the fallback**
+
+`streamText` merges `timeout.*` and any caller-supplied `abortSignal` into a single signal, then reads its own output stream through a gate that checks that signal before forwarding each chunk. The signal latches: once any deadline fires it stays aborted for the rest of the call. `ai-retry` still detects the error and still runs the fallback (`onError` and `onRetry` fire, and the fallback model is called), but every chunk the fallback produces is dropped at that gate, which emits a single `abort` part and closes the stream.
+
+This is unrelated to the streaming commit boundary above: it applies even when no content was ever emitted, so a pre-content stall is discarded just the same ([#50](https://github.com/zirkelc/ai-retry/issues/50)).
+
+A `streamText` deadline is still useful as a hard ceiling on the call, but to actually recover from it, retry at the call layer with the experimental drivers below.
+
+> [!IMPORTANT]
+> The streaming commit boundary still applies at either layer. A deadline that fires after the first content chunk cannot fail over, because the response is already committed to the current model.
 
 ### Experimental: call-level retries
 
 > [!WARNING]
 > These APIs are experimental and may change in a patch release. They are imported from the `ai-retry/experimental/*` subpaths.
 
-`createRetryableModel` retries _below_ `streamText` / `generateText`. That is what makes it blind to a `streamText`-level timeout (`timeout.firstChunkMs`, `stepMs`, `totalMs`) or an inbound `abortSignal`: the timeout lives _on_ the call, and once it fires `streamText` tears its stream down and discards whatever a lower retry produced ([#50](https://github.com/zirkelc/ai-retry/issues/50)).
+`createRetryableModel` retries _below_ `streamText` / `generateText`. That is what makes it blind to a `streamText`-level timeout (`timeout.firstChunkMs`, `stepMs`, `totalMs`) or an inbound `abortSignal`: the timeout lives _on_ the call, and once it fires `streamText` tears its stream down and discards whatever a lower retry produced (see [Timeouts](#timeouts) and [#50](https://github.com/zirkelc/ai-retry/issues/50)).
 
 The call-level drivers close that gap by re-running the **whole call** with the next model. They own the model selection and a fresh per-attempt timeout, then hand both to a function you supply that builds the actual `streamText` / `generateText` call. Because the failed call is torn down and re-issued from scratch, a `streamText`-level timeout finally has somewhere to fail over to.
 
