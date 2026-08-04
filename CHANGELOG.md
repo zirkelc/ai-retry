@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.1](https://github.com/zirkelc/ai-retry/compare/v2.3.0...v2.3.1) (2026-08-04)
+
+
+### Documentation
+
+* **README:** add Timeouts section on which deadlines can fail over ([4325a9b](https://github.com/zirkelc/ai-retry/commit/4325a9b4b7e2453ed6c2e4cac7958b82ae1580dc))
+
 ## [2.3.0](https://github.com/zirkelc/ai-retry/compare/v2.2.1...v2.3.0) (2026-07-30)
 
 
