@@ -2,7 +2,7 @@ import { anthropic } from '@ai-sdk/anthropic';
 import { openai } from '@ai-sdk/openai';
 import { APICallError } from 'ai';
 import { describe, expectTypeOf, it } from 'vitest';
-import type { ResolvableLanguageModel, Retryable } from '../../types.js';
+import type { ResolvableLanguageModel, ModelRetryable } from '../../types.js';
 import { and, error, httpStatus, not, or } from '../index.js';
 
 describe('top-level combinators (language-model)', () => {
@@ -13,19 +13,19 @@ describe('top-level combinators (language-model)', () => {
         error((e) => APICallError.isInstance(e) && e.statusCode === 418),
         httpStatus(529, 'overloaded'),
       ).switch({ model: anthropic('claude-sonnet-4-0') }),
-    ).toMatchTypeOf<Retryable<ResolvableLanguageModel>>();
+    ).toEqualTypeOf<ModelRetryable<ResolvableLanguageModel, never>>();
 
     // and() finalized with a gateway string fallback
     expectTypeOf(
       and(httpStatus(503), error.message('temporary')).switch({
         model: 'openai/gpt-5',
       }),
-    ).toMatchTypeOf<Retryable<ResolvableLanguageModel>>();
+    ).toEqualTypeOf<ModelRetryable<ResolvableLanguageModel, never>>();
 
     // not() finalized with retry()
     expectTypeOf(
       not(error.isRetryable(true)).retry({ delay: 1_000, maxAttempts: 2 }),
-    ).toMatchTypeOf<Retryable<ResolvableLanguageModel>>();
+    ).toEqualTypeOf<ModelRetryable<ResolvableLanguageModel, never>>();
   });
 
   it('rejects an invalid switch model (inference is real, not any)', () => {

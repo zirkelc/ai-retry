@@ -22,9 +22,9 @@ import type {
   LanguageModel,
   LanguageModelCallOptions,
   LanguageModelStreamPart,
-  Retryable,
+  ModelRetryable,
   RetryableModelOptions,
-  RetryContext,
+  ModelRetryContext,
 } from '../types.js';
 import { isErrorAttempt, isResultAttempt } from './guards.js';
 
@@ -136,7 +136,7 @@ describe('generateText', () => {
           doGenerate: mockResult,
         });
 
-        const fallbackRetryable: Retryable<LanguageModel> = (context) => {
+        const fallbackRetryable: ModelRetryable<LanguageModel> = (context) => {
           if (
             isErrorAttempt(context.current) &&
             APICallError.isInstance(context.current.error)
@@ -200,7 +200,7 @@ describe('generateText', () => {
           doGenerate: mockResult,
         });
 
-        const fallbackRetryable: Retryable<LanguageModel> = (context) => {
+        const fallbackRetryable: ModelRetryable<LanguageModel> = (context) => {
           if (
             isErrorAttempt(context.current) &&
             APICallError.isInstance(context.current.error)
@@ -238,7 +238,7 @@ describe('generateText', () => {
           doGenerate: mockResult,
         });
 
-        const fallbackRetryable: Retryable<LanguageModel> = (context) => {
+        const fallbackRetryable: ModelRetryable<LanguageModel> = (context) => {
           if (
             isErrorAttempt(context.current) &&
             APICallError.isInstance(context.current.error)
@@ -274,7 +274,7 @@ describe('generateText', () => {
         const fallbackModel = MockLanguageModel.from({
           doGenerate: mockResult,
         });
-        const fallbackRetryable: Retryable<LanguageModel> = (context) => {
+        const fallbackRetryable: ModelRetryable<LanguageModel> = (context) => {
           if (
             isResultAttempt(context.current) &&
             context.current.result.finishReason.unified === 'content-filter'
@@ -311,7 +311,7 @@ describe('generateText', () => {
           doGenerate: mockResult,
         });
 
-        const fallbackRetryable: Retryable<LanguageModel> = (context) => {
+        const fallbackRetryable: ModelRetryable<LanguageModel> = (context) => {
           if (
             isResultAttempt(context.current) &&
             context.current.result.finishReason.unified === 'content-filter'
@@ -352,7 +352,7 @@ describe('generateText', () => {
           doGenerate: mockResult,
         });
 
-        const fallbackRetryable: Retryable<LanguageModel> = (context) => {
+        const fallbackRetryable: ModelRetryable<LanguageModel> = (context) => {
           if (
             isResultAttempt(context.current) &&
             context.current.result.finishReason.unified === 'content-filter'
@@ -389,7 +389,7 @@ describe('generateText', () => {
       const baseModel = MockLanguageModel.from({ doGenerate: retryableError });
       const fallbackModel = MockLanguageModel.from({ doGenerate: mockResult });
 
-      const fallbackRetryable: Retryable<LanguageModel> = () => {
+      const fallbackRetryable: ModelRetryable<LanguageModel> = () => {
         return { model: fallbackModel, maxAttempts: 1 };
       };
 
@@ -417,7 +417,7 @@ describe('generateText', () => {
       const baseModel = MockLanguageModel.from({ doGenerate: retryableError });
       const fallbackModel = MockLanguageModel.from({ doGenerate: mockResult });
 
-      const fallbackRetryable: Retryable<LanguageModel> = () => {
+      const fallbackRetryable: ModelRetryable<LanguageModel> = () => {
         return { model: fallbackModel, maxAttempts: 1 };
       };
 
@@ -444,7 +444,7 @@ describe('generateText', () => {
       const baseModel = MockLanguageModel.from({ doGenerate: retryableError });
       const fallbackModel = MockLanguageModel.from({ doGenerate: mockResult });
 
-      const fallbackRetryable: Retryable<LanguageModel> = () => {
+      const fallbackRetryable: ModelRetryable<LanguageModel> = () => {
         return { model: fallbackModel, maxAttempts: 1 };
       };
 
@@ -475,7 +475,7 @@ describe('generateText', () => {
       const baseModel = MockLanguageModel.from({ doGenerate: retryableError });
       const fallbackModel = MockLanguageModel.from({ doGenerate: mockResult });
 
-      const fallbackRetryable: Retryable<LanguageModel> = () => {
+      const fallbackRetryable: ModelRetryable<LanguageModel> = () => {
         return { model: fallbackModel, maxAttempts: 1 };
       };
 
@@ -505,7 +505,7 @@ describe('generateText', () => {
       const baseModel = MockLanguageModel.from({ doGenerate: retryableError });
       const fallbackModel = MockLanguageModel.from({ doGenerate: mockResult });
 
-      const fallbackRetryable: Retryable<LanguageModel> = () => {
+      const fallbackRetryable: ModelRetryable<LanguageModel> = () => {
         return { model: fallbackModel, maxAttempts: 1 };
       };
 
@@ -606,7 +606,7 @@ describe('generateText', () => {
         model: createRetryableModel({
           model: baseModel,
           retries: [
-            (context: RetryContext<LanguageModel>) => {
+            (context: ModelRetryContext<LanguageModel>) => {
               if (
                 isResultAttempt(context.current) &&
                 context.current.result.finishReason.unified === 'content-filter'
@@ -707,7 +707,7 @@ describe('generateText', () => {
         model: createRetryableModel({
           model: baseModel,
           retries: [
-            (context: RetryContext<LanguageModel>) => {
+            (context: ModelRetryContext<LanguageModel>) => {
               if (
                 isResultAttempt(context.current) &&
                 context.current.result.finishReason.unified === 'content-filter'
@@ -1003,7 +1003,7 @@ describe('generateText', () => {
         doGenerate: contentFilterResult,
       });
       const fallbackModel = MockLanguageModel.from({ doGenerate: mockResult });
-      const fallbackRetryable: Retryable<LanguageModel> = (context) => {
+      const fallbackRetryable: ModelRetryable<LanguageModel> = (context) => {
         if (
           isResultAttempt(context.current) &&
           context.current.result.finishReason.unified === 'content-filter'
@@ -1394,7 +1394,7 @@ describe('generateText', () => {
           model: createRetryableModel({
             model: baseModel,
             retries: [
-              // Retryable<LanguageModel>  with different maxAttempts
+              // ModelRetryable<LanguageModel>  with different maxAttempts
               { model: fallbackModel1, maxAttempts: 2 },
               async () => ({ model: fallbackModel2, maxAttempts: 3 }),
               finalModel,
@@ -2803,7 +2803,7 @@ describe('streamText', () => {
           doStream: [Language.streamStart(), Language.streamError(error)],
         });
 
-        const noopRetryable: Retryable<LanguageModel> = () => undefined;
+        const noopRetryable: ModelRetryable<LanguageModel> = () => undefined;
 
         const retryableModel = createRetryableModel({
           model: baseModel,
@@ -3068,7 +3068,7 @@ describe('streamText', () => {
         const fallbackModel = MockLanguageModel.from({
           doStream: mockStreamChunks,
         });
-        const fallbackRetryable: Retryable<LanguageModel> = (context) => {
+        const fallbackRetryable: ModelRetryable<LanguageModel> = (context) => {
           if (
             isResultAttempt(context.current) &&
             context.current.result.finishReason.unified === 'content-filter'
@@ -3244,7 +3244,7 @@ describe('streamText', () => {
         const fallbackModel = MockLanguageModel.from({
           doStream: mockStreamChunks,
         });
-        const fallbackRetryable: Retryable<LanguageModel> = (context) => {
+        const fallbackRetryable: ModelRetryable<LanguageModel> = (context) => {
           if (
             isResultAttempt(context.current) &&
             context.current.result.finishReason.unified === 'content-filter'
@@ -3363,7 +3363,7 @@ describe('streamText', () => {
           doStream: mockStreamChunks,
         });
 
-        const fallbackRetryable: Retryable<LanguageModel> = (context) => {
+        const fallbackRetryable: ModelRetryable<LanguageModel> = (context) => {
           if (
             isResultAttempt(context.current) &&
             context.current.result.finishReason.unified === 'content-filter'
@@ -3495,7 +3495,7 @@ describe('streamText', () => {
           doStream: mockStreamChunks,
         });
 
-        const fallbackRetryable: Retryable<LanguageModel> = (context) => {
+        const fallbackRetryable: ModelRetryable<LanguageModel> = (context) => {
           if (
             isResultAttempt(context.current) &&
             context.current.result.finishReason.unified === 'content-filter'
@@ -3625,7 +3625,7 @@ describe('streamText', () => {
         doStream: mockStreamChunks,
       });
 
-      const fallbackRetryable: Retryable<LanguageModel> = () => {
+      const fallbackRetryable: ModelRetryable<LanguageModel> = () => {
         return { model: fallbackModel, maxAttempts: 1 };
       };
 
@@ -3663,7 +3663,7 @@ describe('streamText', () => {
         doStream: mockStreamChunks,
       });
 
-      const fallbackRetryable: Retryable<LanguageModel> = () => {
+      const fallbackRetryable: ModelRetryable<LanguageModel> = () => {
         return { model: fallbackModel, maxAttempts: 1 };
       };
 
@@ -4166,7 +4166,7 @@ describe('streamText', () => {
         const retryableModel = createRetryableModel({
           model: baseModel,
           retries: [
-            // Retryable<LanguageModel>  with different maxAttempts
+            // ModelRetryable<LanguageModel>  with different maxAttempts
             { model: fallbackModel1, maxAttempts: 2 },
             async () => ({ model: fallbackModel2, maxAttempts: 3 }),
             finalModel,

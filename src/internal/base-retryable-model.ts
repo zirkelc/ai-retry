@@ -1,14 +1,7 @@
 import { type ParsedReset, parseReset } from './parse-reset.js';
-import type {
-  EmbeddingModel,
-  ImageModel,
-  LanguageModel,
-  RetryableModelOptions,
-} from '../types.js';
+import type { AnyModel, RetryableModelOptions } from '../types.js';
 
-export abstract class BaseRetryableModel<
-  MODEL extends LanguageModel | EmbeddingModel | ImageModel,
-> {
+export abstract class BaseRetryableModel<MODEL extends AnyModel> {
   protected baseModel: MODEL;
   protected currentModel: MODEL;
   protected options: RetryableModelOptions<MODEL>;

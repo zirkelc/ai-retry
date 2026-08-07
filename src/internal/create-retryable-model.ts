@@ -2,6 +2,7 @@ import { createRetryableModel as createRetryableEmbeddingModel } from '../embedd
 import { createRetryableModel as createRetryableImageModel } from '../image-model/create-retryable-model.js';
 import { createRetryableModel as createRetryableLanguageModel } from '../language-model/create-retryable-model.js';
 import type {
+  AnyModel,
   EmbeddingModel,
   GatewayLanguageModelId,
   ImageModel,
@@ -40,7 +41,7 @@ export function createRetryableModel(
     | (Omit<RetryableModelOptions<LanguageModel>, 'model'> & {
         model: GatewayLanguageModelId;
       }),
-): LanguageModel | EmbeddingModel | ImageModel {
+): AnyModel {
   const model = isModel(options.model)
     ? options.model
     : resolveLanguageModel(options.model);

@@ -10,9 +10,9 @@ import {
 } from './test-utils.js';
 import type {
   EmbeddingModel,
-  Retryable,
+  ModelRetryable,
   RetryableModelOptions,
-  RetryContext,
+  ModelRetryContext,
 } from '../types.js';
 import { isErrorAttempt } from './guards.js';
 
@@ -48,7 +48,9 @@ describe('embed', () => {
         const baseModel = MockEmbeddingModel.from(retryableError);
         const fallbackModel = MockEmbeddingModel.from(mockEmbeddings);
 
-        const fallbackRetryable = (context: RetryContext<EmbeddingModel>) => {
+        const fallbackRetryable = (
+          context: ModelRetryContext<EmbeddingModel>,
+        ) => {
           if (
             isErrorAttempt(context.current) &&
             APICallError.isInstance(context.current.error)
@@ -102,7 +104,9 @@ describe('embed', () => {
         const fallbackModel1 = MockEmbeddingModel.from(mockEmbeddings);
         const fallbackModel2 = MockEmbeddingModel.from(mockEmbeddings);
 
-        const fallbackRetryable = (context: RetryContext<EmbeddingModel>) => {
+        const fallbackRetryable = (
+          context: ModelRetryContext<EmbeddingModel>,
+        ) => {
           if (
             isErrorAttempt(context.current) &&
             APICallError.isInstance(context.current.error)
@@ -136,7 +140,7 @@ describe('embed', () => {
       const baseModel = MockEmbeddingModel.from(retryableError);
       const fallbackModel = MockEmbeddingModel.from(mockEmbeddings);
 
-      const fallbackRetryable: Retryable<EmbeddingModel> = () => {
+      const fallbackRetryable: ModelRetryable<EmbeddingModel> = () => {
         return { model: fallbackModel, maxAttempts: 1 };
       };
 
@@ -164,7 +168,7 @@ describe('embed', () => {
       const baseModel = MockEmbeddingModel.from(retryableError);
       const fallbackModel = MockEmbeddingModel.from(mockEmbeddings);
 
-      const fallbackRetryable: Retryable<EmbeddingModel> = () => {
+      const fallbackRetryable: ModelRetryable<EmbeddingModel> = () => {
         return { model: fallbackModel, maxAttempts: 1 };
       };
 
@@ -191,7 +195,7 @@ describe('embed', () => {
       const baseModel = MockEmbeddingModel.from(retryableError);
       const fallbackModel = MockEmbeddingModel.from(mockEmbeddings);
 
-      const fallbackRetryable: Retryable<EmbeddingModel> = () => {
+      const fallbackRetryable: ModelRetryable<EmbeddingModel> = () => {
         return { model: fallbackModel, maxAttempts: 1 };
       };
 
@@ -222,7 +226,7 @@ describe('embed', () => {
       const baseModel = MockEmbeddingModel.from(retryableError);
       const fallbackModel = MockEmbeddingModel.from(mockEmbeddings);
 
-      const fallbackRetryable: Retryable<EmbeddingModel> = () => {
+      const fallbackRetryable: ModelRetryable<EmbeddingModel> = () => {
         return { model: fallbackModel, maxAttempts: 1 };
       };
 
@@ -252,7 +256,7 @@ describe('embed', () => {
       const baseModel = MockEmbeddingModel.from(retryableError);
       const fallbackModel = MockEmbeddingModel.from(mockEmbeddings);
 
-      const fallbackRetryable: Retryable<EmbeddingModel> = () => {
+      const fallbackRetryable: ModelRetryable<EmbeddingModel> = () => {
         return { model: fallbackModel, maxAttempts: 1 };
       };
 
@@ -860,7 +864,7 @@ describe('embed', () => {
           model: createRetryableModel({
             model: baseModel,
             retries: [
-              // Retryable  with different maxAttempts
+              // ModelRetryable  with different maxAttempts
               { model: fallbackModel1, maxAttempts: 2 },
               async () => ({ model: fallbackModel2, maxAttempts: 3 }),
               finalModel,

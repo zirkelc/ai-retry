@@ -1,7 +1,7 @@
 import { NoImageGeneratedError } from 'ai';
 import type {
   ResolvableImageModel,
-  Retryable,
+  ModelRetryable,
   RetryableOptions,
 } from '../types.js';
 import { isErrorAttempt } from '../internal/guards.js';
@@ -18,7 +18,7 @@ import { isErrorAttempt } from '../internal/guards.js';
 export function noImageGenerated<MODEL extends ResolvableImageModel>(
   model: MODEL,
   options?: RetryableOptions<MODEL>,
-): Retryable<MODEL> {
+): ModelRetryable<MODEL> {
   return (context) => {
     const { current } = context;
 

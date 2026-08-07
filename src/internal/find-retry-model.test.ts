@@ -7,8 +7,8 @@ import type {
   LanguageModelCallOptions,
   ResolvableLanguageModel,
   Retry,
-  Retryable,
-  RetryContext,
+  ModelRetryable,
+  ModelRetryContext,
 } from '../types.js';
 
 const options: LanguageModelCallOptions = {
@@ -24,14 +24,14 @@ describe('findRetryModel', () => {
       const fallbackModel = MockLanguageModel.from();
       const error = Errors.internalServerError();
 
-      const retryable: Retryable<LanguageModel> = (context) => {
+      const retryable: ModelRetryable<LanguageModel> = (context) => {
         if (context.current.type === 'error') {
           return { model: fallbackModel, maxAttempts: 1 };
         }
         return undefined;
       };
 
-      const context: RetryContext<LanguageModel> = {
+      const context: ModelRetryContext<LanguageModel> = {
         current: { type: 'error', error, model: primaryModel, options },
         attempts: [{ type: 'error', error, model: primaryModel, options }],
       };
@@ -48,9 +48,9 @@ describe('findRetryModel', () => {
       const primaryModel = MockLanguageModel.from();
       const error = new Error('Test error');
 
-      const retryable: Retryable<LanguageModel> = () => undefined;
+      const retryable: ModelRetryable<LanguageModel> = () => undefined;
 
-      const context: RetryContext<LanguageModel> = {
+      const context: ModelRetryContext<LanguageModel> = {
         current: { type: 'error', error, model: primaryModel, options },
         attempts: [{ type: 'error', error, model: primaryModel, options }],
       };
@@ -65,12 +65,12 @@ describe('findRetryModel', () => {
       const fallbackModel = MockLanguageModel.from();
       const error = new Error('Test error');
 
-      const retryable: Retryable<LanguageModel> = async () => {
+      const retryable: ModelRetryable<LanguageModel> = async () => {
         await new Promise((resolve) => setTimeout(resolve, 10));
         return { model: fallbackModel, maxAttempts: 2 };
       };
 
-      const context: RetryContext<LanguageModel> = {
+      const context: ModelRetryContext<LanguageModel> = {
         current: { type: 'error', error, model: primaryModel, options },
         attempts: [{ type: 'error', error, model: primaryModel, options }],
       };
@@ -96,7 +96,7 @@ describe('findRetryModel', () => {
         delay: 1000,
       };
 
-      const context: RetryContext<LanguageModel> = {
+      const context: ModelRetryContext<LanguageModel> = {
         current: { type: 'error', error, model: primaryModel, options },
         attempts: [{ type: 'error', error, model: primaryModel, options }],
       };
@@ -119,9 +119,10 @@ describe('findRetryModel', () => {
         maxAttempts: 1,
       };
 
-      const context: RetryContext<LanguageModel> = {
+      const context: ModelRetryContext<LanguageModel> = {
         current: {
           type: 'result',
+          finishReason: 'content-filter',
           result: {
             content: [],
             finishReason: { unified: 'content-filter', raw: undefined },
@@ -154,7 +155,7 @@ describe('findRetryModel', () => {
       const fallbackModel = MockLanguageModel.from();
       const error = new Error('Test error');
 
-      const context: RetryContext<LanguageModel> = {
+      const context: ModelRetryContext<LanguageModel> = {
         current: { type: 'error', error, model: primaryModel, options },
         attempts: [{ type: 'error', error, model: primaryModel, options }],
       };
@@ -170,9 +171,10 @@ describe('findRetryModel', () => {
       const primaryModel = MockLanguageModel.from();
       const fallbackModel = MockLanguageModel.from();
 
-      const context: RetryContext<LanguageModel> = {
+      const context: ModelRetryContext<LanguageModel> = {
         current: {
           type: 'result',
+          finishReason: 'content-filter',
           result: {
             content: [],
             finishReason: { unified: 'content-filter', raw: undefined },
@@ -210,7 +212,7 @@ describe('findRetryModel', () => {
         maxAttempts: 2,
       };
 
-      const context: RetryContext<LanguageModel> = {
+      const context: ModelRetryContext<LanguageModel> = {
         current: { type: 'error', error, model: primaryModel, options },
         attempts: [
           { type: 'error', error, model: fallbackModel, options: options },
@@ -233,7 +235,7 @@ describe('findRetryModel', () => {
         maxAttempts: 3,
       };
 
-      const context: RetryContext<LanguageModel> = {
+      const context: ModelRetryContext<LanguageModel> = {
         current: {
           type: 'error',
           error,
@@ -263,7 +265,7 @@ describe('findRetryModel', () => {
         model: fallbackModel,
       };
 
-      const context: RetryContext<LanguageModel> = {
+      const context: ModelRetryContext<LanguageModel> = {
         current: { type: 'error', error, model: primaryModel, options },
         attempts: [{ type: 'error', error, model: fallbackModel, options }],
       };
@@ -281,17 +283,17 @@ describe('findRetryModel', () => {
       const fallback2 = MockLanguageModel.from();
       const error = Errors.serviceUnavailable();
 
-      const retryable1: Retryable<LanguageModel> = () => undefined;
-      const retryable2: Retryable<LanguageModel> = () => ({
+      const retryable1: ModelRetryable<LanguageModel> = () => undefined;
+      const retryable2: ModelRetryable<LanguageModel> = () => ({
         model: fallback1,
         maxAttempts: 1,
       });
-      const retryable3: Retryable<LanguageModel> = () => ({
+      const retryable3: ModelRetryable<LanguageModel> = () => ({
         model: fallback2,
         maxAttempts: 1,
       });
 
-      const context: RetryContext<LanguageModel> = {
+      const context: ModelRetryContext<LanguageModel> = {
         current: {
           type: 'error',
           error,
@@ -326,7 +328,7 @@ describe('findRetryModel', () => {
         maxAttempts: 1,
       };
 
-      const context: RetryContext<LanguageModel> = {
+      const context: ModelRetryContext<LanguageModel> = {
         current: {
           type: 'error',
           error,
@@ -350,7 +352,7 @@ describe('findRetryModel', () => {
       const primaryModel = MockLanguageModel.from();
       const error = new Error('Test error');
 
-      const context: RetryContext<LanguageModel> = {
+      const context: ModelRetryContext<LanguageModel> = {
         current: {
           type: 'error',
           error,
@@ -376,7 +378,7 @@ describe('findRetryModel', () => {
       const resolved = MockLanguageModel.from();
       const resolve = vi.fn(() => resolved);
 
-      const context: RetryContext<LanguageModel> = {
+      const context: ModelRetryContext<LanguageModel> = {
         current: { type: 'error', error, model: primaryModel, options },
         attempts: [{ type: 'error', error, model: primaryModel, options }],
       };
@@ -402,7 +404,7 @@ describe('findRetryModel', () => {
         timeout: 30000,
       };
 
-      const context: RetryContext<LanguageModel> = {
+      const context: ModelRetryContext<LanguageModel> = {
         current: {
           type: 'error',
           error,

@@ -29,7 +29,7 @@ import type {
   EmbeddingModel,
   ImageModel,
   LanguageModel,
-  Retryable,
+  ModelRetryable,
 } from '../types.js';
 
 let exporter: InMemorySpanExporter;
@@ -127,7 +127,7 @@ describe('telemetry', () => {
       // Arrange
       const baseModel = MockLanguageModel.from({ doGenerate: retryableError });
       const fallbackModel = MockLanguageModel.from('ok');
-      const fallback: Retryable<LanguageModel> = (ctx) =>
+      const fallback: ModelRetryable<LanguageModel> = (ctx) =>
         isErrorAttempt(ctx.current)
           ? { model: fallbackModel, maxAttempts: 1 }
           : undefined;
@@ -192,7 +192,7 @@ describe('telemetry', () => {
       });
       const baseModel = MockLanguageModel.from({ doGenerate: wrappedError });
       const fallbackModel = MockLanguageModel.from('ok');
-      const fallback: Retryable<LanguageModel> = (ctx) =>
+      const fallback: ModelRetryable<LanguageModel> = (ctx) =>
         isErrorAttempt(ctx.current)
           ? { model: fallbackModel, maxAttempts: 1 }
           : undefined;
@@ -227,7 +227,7 @@ describe('telemetry', () => {
       const fallbackModel = MockLanguageModel.from({
         doGenerate: retryableError,
       });
-      const fallback: Retryable<LanguageModel> = (ctx) =>
+      const fallback: ModelRetryable<LanguageModel> = (ctx) =>
         isErrorAttempt(ctx.current) &&
         APICallError.isInstance(ctx.current.error)
           ? { model: fallbackModel, maxAttempts: 1 }
@@ -262,7 +262,7 @@ describe('telemetry', () => {
       // Arrange
       const baseModel = MockLanguageModel.from({ doGenerate: retryableError });
       const fallbackModel = MockLanguageModel.from('ok');
-      const fallback: Retryable<LanguageModel> = (ctx) =>
+      const fallback: ModelRetryable<LanguageModel> = (ctx) =>
         isErrorAttempt(ctx.current)
           ? { model: fallbackModel, maxAttempts: 1, timeout: 5000 }
           : undefined;
@@ -398,7 +398,7 @@ describe('telemetry', () => {
       const fallbackModel = MockLanguageModel.from({
         doStream: successStreamChunks('hi'),
       });
-      const fallback: Retryable<LanguageModel> = (ctx) =>
+      const fallback: ModelRetryable<LanguageModel> = (ctx) =>
         isErrorAttempt(ctx.current)
           ? { model: fallbackModel, maxAttempts: 1 }
           : undefined;
@@ -439,7 +439,7 @@ describe('telemetry', () => {
       // Arrange
       const baseModel = MockEmbeddingModel.from(retryableError);
       const fallbackModel = MockEmbeddingModel.from(mockEmbeddings);
-      const fallback: Retryable<EmbeddingModel> = (ctx) =>
+      const fallback: ModelRetryable<EmbeddingModel> = (ctx) =>
         isErrorAttempt(ctx.current)
           ? { model: fallbackModel, maxAttempts: 1 }
           : undefined;
@@ -470,7 +470,7 @@ describe('telemetry', () => {
       // Arrange
       const baseModel = MockImageModel.from(retryableError);
       const fallbackModel = MockImageModel.from(mockImageResult);
-      const fallback: Retryable<ImageModel> = (ctx) =>
+      const fallback: ModelRetryable<ImageModel> = (ctx) =>
         isErrorAttempt(ctx.current)
           ? { model: fallbackModel, maxAttempts: 1 }
           : undefined;

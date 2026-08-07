@@ -12,8 +12,8 @@ import type {
   EmbeddingModelEmbed,
   OnRetryOverrides,
   Retry,
-  RetryContext,
-  RetryErrorAttempt,
+  ModelRetryContext,
+  ModelRetryErrorAttempt,
 } from '../types.js';
 export class RetryableEmbeddingModel
   extends BaseRetryableModel<EmbeddingModel>
@@ -43,17 +43,17 @@ export class RetryableEmbeddingModel
   private async withRetry<RESULT extends EmbeddingModelEmbed>(input: {
     fn: (retryCallOptions: EmbeddingModelCallOptions) => Promise<RESULT>;
     callOptions: EmbeddingModelCallOptions;
-    attempts?: Array<RetryErrorAttempt<EmbeddingModel>>;
+    attempts?: Array<ModelRetryErrorAttempt<EmbeddingModel>>;
     recorder?: RetryTelemetry;
   }): Promise<{
     result: RESULT;
-    attempts: Array<RetryErrorAttempt<EmbeddingModel>>;
+    attempts: Array<ModelRetryErrorAttempt<EmbeddingModel>>;
     callOptions: EmbeddingModelCallOptions;
   }> {
     /**
      * Track all attempts.
      */
-    const attempts: Array<RetryErrorAttempt<EmbeddingModel>> =
+    const attempts: Array<ModelRetryErrorAttempt<EmbeddingModel>> =
       input.attempts ?? [];
 
     /**
@@ -75,7 +75,7 @@ export class RetryableEmbeddingModel
       // a retry actually fires (today it is purely observational).
       let onRetryOverrides: OnRetryOverrides<EmbeddingModel> | undefined;
       if (previousAttempt) {
-        const currentAttempt: RetryErrorAttempt<EmbeddingModel> = {
+        const currentAttempt: ModelRetryErrorAttempt<EmbeddingModel> = {
           ...previousAttempt,
           model: this.currentModel,
         };
@@ -85,7 +85,7 @@ export class RetryableEmbeddingModel
          */
         const updatedAttempts = [...attempts];
 
-        const context: RetryContext<EmbeddingModel> = {
+        const context: ModelRetryContext<EmbeddingModel> = {
           current: currentAttempt,
           attempts: updatedAttempts,
         };
@@ -191,7 +191,7 @@ export class RetryableEmbeddingModel
    */
   private async handleError(
     error: unknown,
-    attempts: ReadonlyArray<RetryErrorAttempt<EmbeddingModel>>,
+    attempts: ReadonlyArray<ModelRetryErrorAttempt<EmbeddingModel>>,
     callOptions: EmbeddingModelCallOptions,
   ) {
     return evaluateError({
@@ -210,7 +210,7 @@ export class RetryableEmbeddingModel
    * final attempt (last entry of `attempts`) is surfaced as `current`.
    */
   private emitFailure(
-    attempts: Array<RetryErrorAttempt<EmbeddingModel>>,
+    attempts: Array<ModelRetryErrorAttempt<EmbeddingModel>>,
     error: unknown,
   ) {
     if (!this.options.onFailure) return;
@@ -246,7 +246,7 @@ export class RetryableEmbeddingModel
      * Shared attempts array, threaded into `withRetry` so it stays populated
      * (including the final failed attempt) when the retry loop throws.
      */
-    const attempts: Array<RetryErrorAttempt<EmbeddingModel>> = [];
+    const attempts: Array<ModelRetryErrorAttempt<EmbeddingModel>> = [];
     let operationError: unknown;
     try {
       const { result, callOptions: finalCallOptions } = await this.withRetry({

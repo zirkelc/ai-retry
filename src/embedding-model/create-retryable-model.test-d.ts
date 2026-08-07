@@ -4,7 +4,7 @@ import type {
   EmbeddingModel,
   EmbeddingModelCallOptions,
   EmbeddingModelEmbed,
-  SuccessContext,
+  ModelSuccessContext,
 } from '../types.js';
 import { createRetryableModel } from './create-retryable-model.js';
 
@@ -32,8 +32,8 @@ describe('createRetryableModel', () => {
     expectTypeOf(retryable).toEqualTypeOf<EmbeddingModel>();
   });
 
-  it('should type SuccessContext correctly', () => {
-    type Ctx = SuccessContext<EmbeddingModel>;
+  it('should type ModelSuccessContext correctly', () => {
+    type Ctx = ModelSuccessContext<EmbeddingModel>;
 
     expectTypeOf<Ctx['current']['model']>().toEqualTypeOf<EmbeddingModel>();
     expectTypeOf<

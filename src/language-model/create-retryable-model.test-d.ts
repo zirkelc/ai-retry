@@ -5,7 +5,7 @@ import type {
   LanguageModelCallOptions,
   LanguageModelGenerate,
   LanguageModelStream,
-  SuccessContext,
+  ModelSuccessContext,
 } from '../types.js';
 import { createRetryableModel } from './create-retryable-model.js';
 
@@ -33,8 +33,8 @@ describe('createRetryableModel', () => {
     expectTypeOf(retryable).toEqualTypeOf<LanguageModel>();
   });
 
-  it('should type SuccessContext correctly', () => {
-    type Ctx = SuccessContext<LanguageModel>;
+  it('should type ModelSuccessContext correctly', () => {
+    type Ctx = ModelSuccessContext<LanguageModel>;
 
     expectTypeOf<Ctx['current']['model']>().toEqualTypeOf<LanguageModel>();
     expectTypeOf<Ctx['current']['result']>().toEqualTypeOf<

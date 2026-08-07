@@ -1,7 +1,7 @@
 import { APICallError } from 'ai';
 import type {
   AnyResolvableModel,
-  Retryable,
+  ModelRetryable,
   RetryableOptions,
 } from '../types.js';
 import { isErrorAttempt, isObject, isString } from '../internal/guards.js';
@@ -22,7 +22,7 @@ import { isErrorAttempt, isObject, isString } from '../internal/guards.js';
 export function serviceOverloaded<MODEL extends AnyResolvableModel>(
   model: MODEL,
   options?: RetryableOptions<MODEL>,
-): Retryable<MODEL> {
+): ModelRetryable<MODEL> {
   return (context) => {
     const { current } = context;
 

@@ -49,6 +49,14 @@ export type ResolvableEmbeddingModel =
 export type ResolvableImageModel = ImageModel | Literals<GatewayImageModelId>;
 
 /**
+ * Any model the retry system accepts, already resolved to an instance.
+ *
+ * The bound almost every generic in the library carries. {@link AnyResolvableModel}
+ * is the wider one, which also admits a gateway model-id string.
+ */
+export type AnyModel = LanguageModel | EmbeddingModel | ImageModel;
+
+/**
  * Any model the retry system accepts, in resolvable (instance or gateway
  * string) form.
  */
@@ -57,13 +65,12 @@ export type AnyResolvableModel =
   | ResolvableEmbeddingModel
   | ResolvableImageModel;
 
-export type ResolvableModel<
-  MODEL extends LanguageModel | EmbeddingModel | ImageModel,
-> = MODEL extends LanguageModel
-  ? ResolvableLanguageModel
-  : MODEL extends EmbeddingModel
-    ? ResolvableEmbeddingModel
-    : ResolvableImageModel;
+export type ResolvableModel<MODEL extends AnyModel> =
+  MODEL extends LanguageModel
+    ? ResolvableLanguageModel
+    : MODEL extends EmbeddingModel
+      ? ResolvableEmbeddingModel
+      : ResolvableImageModel;
 
 export type ResolvedModel<MODEL extends AnyResolvableModel> =
   MODEL extends ResolvableLanguageModel
@@ -76,6 +83,15 @@ export type ResolvedModel<MODEL extends AnyResolvableModel> =
  * Result from a generateText call.
  */
 export type LanguageModelResult = LanguageModelV4GenerateResult;
+
+/**
+ * The unified finish reason for a generation, as a provider reports it (nested
+ * under `finishReason.unified`).
+ *
+ * The SDK entry points report the same set of values flat; a call-level
+ * condition reads that one directly and has no need for this.
+ */
+export type ModelFinishReason = LanguageModelResult['finishReason']['unified'];
 
 /**
  * Call options that can be overridden during retry for language models.
@@ -118,48 +134,48 @@ export type ImageModelRetryCallOptions = Partial<
  * Maps a model type to its retry call options type — the subset of call
  * options that may be overridden for a single retry attempt.
  */
-export type RetryCallOptions<
-  MODEL extends LanguageModel | EmbeddingModel | ImageModel,
-> = MODEL extends LanguageModel
-  ? LanguageModelRetryCallOptions
-  : MODEL extends EmbeddingModel
-    ? EmbeddingModelRetryCallOptions
-    : ImageModelRetryCallOptions;
+export type ModelRetryCallOptions<MODEL extends AnyModel> =
+  MODEL extends LanguageModel
+    ? LanguageModelRetryCallOptions
+    : MODEL extends EmbeddingModel
+      ? EmbeddingModelRetryCallOptions
+      : ImageModelRetryCallOptions;
 
 /**
  * Override returned by `onRetry` to influence the upcoming retry attempt.
+ *
+ * `INPUT` is the shape of the overridable call arguments. It defaults to the
+ * provider-level call options, which is what the model wrappers use; the
+ * call-level entry points substitute their own argument shape.
  */
 export type OnRetryOverrides<
-  MODEL extends LanguageModel | EmbeddingModel | ImageModel,
-> = Pick<Retry<MODEL>, 'options'>;
+  MODEL extends AnyModel,
+  INPUT = ModelRetryCallOptions<MODEL>,
+> = { options?: INPUT };
 
 /**
  * Maps a model type to its call options type.
  */
-export type CallOptions<
-  MODEL extends LanguageModel | EmbeddingModel | ImageModel,
-> = MODEL extends LanguageModel
-  ? LanguageModelCallOptions
-  : MODEL extends EmbeddingModel
-    ? EmbeddingModelCallOptions
-    : ImageModelCallOptions;
+export type ModelCallOptions<MODEL extends AnyModel> =
+  MODEL extends LanguageModel
+    ? LanguageModelCallOptions
+    : MODEL extends EmbeddingModel
+      ? EmbeddingModelCallOptions
+      : ImageModelCallOptions;
 
 /**
  * Maps a model type to its result type.
  */
-export type Result<MODEL extends LanguageModel | EmbeddingModel | ImageModel> =
-  MODEL extends LanguageModel
-    ? LanguageModelResult | LanguageModelStream
-    : MODEL extends EmbeddingModel
-      ? EmbeddingModelEmbed
-      : ImageModelGenerate;
+export type ModelResult<MODEL extends AnyModel> = MODEL extends LanguageModel
+  ? LanguageModelResult | LanguageModelStream
+  : MODEL extends EmbeddingModel
+    ? EmbeddingModelEmbed
+    : ImageModelGenerate;
 
 /**
  * A retry attempt with an error
  */
-export type RetryErrorAttempt<
-  MODEL extends LanguageModel | EmbeddingModel | ImageModel,
-> = {
+export type ModelRetryErrorAttempt<MODEL extends AnyModel> = {
   type: 'error';
   error: unknown;
   result?: undefined;
@@ -167,15 +183,23 @@ export type RetryErrorAttempt<
   /**
    * The call options used for this attempt.
    */
-  options: CallOptions<MODEL>;
+  options: ModelCallOptions<MODEL>;
 };
 
 /**
  * A retry attempt with a successful result
  */
-export type RetryResultAttempt = {
+export type ModelRetryResultAttempt = {
   type: 'result';
+  /**
+   * The generation result, provider-shaped — what the model returned.
+   */
   result: LanguageModelResult;
+  /**
+   * The unified finish reason, lifted out of the provider's nested shape so a
+   * condition need not dig for it.
+   */
+  finishReason: ModelFinishReason;
   error?: undefined;
   model: LanguageModel;
   /**
@@ -187,69 +211,64 @@ export type RetryResultAttempt = {
 /**
  * A retry attempt with either an error or a result and the model used
  */
-export type RetryAttempt<
-  MODEL extends LanguageModel | EmbeddingModel | ImageModel,
-> = MODEL extends LanguageModel
-  ? RetryErrorAttempt<MODEL> | RetryResultAttempt
-  : RetryErrorAttempt<MODEL>;
+export type ModelRetryAttempt<MODEL extends AnyModel> =
+  MODEL extends LanguageModel
+    ? ModelRetryErrorAttempt<MODEL> | ModelRetryResultAttempt
+    : ModelRetryErrorAttempt<MODEL>;
 
 /**
  * The context provided to Retryables with the current attempt and all previous attempts.
  */
-export type RetryContext<MODEL extends AnyResolvableModel> = {
+export type ModelRetryContext<MODEL extends AnyResolvableModel> = {
   /**
    * Current attempt that caused the retry
    */
-  current: RetryAttempt<ResolvedModel<MODEL>>;
+  current: ModelRetryAttempt<ResolvedModel<MODEL>>;
   /**
    * All attempts made so far, including the current one
    */
-  attempts: Array<RetryAttempt<ResolvedModel<MODEL>>>;
+  attempts: Array<ModelRetryAttempt<ResolvedModel<MODEL>>>;
 };
 
 /**
  * A successful attempt with the result
  */
-export type SuccessAttempt<
-  MODEL extends LanguageModel | EmbeddingModel | ImageModel,
-> = {
+export type ModelSuccessAttempt<MODEL extends AnyModel> = {
   type: 'success';
   model: MODEL;
-  result: Result<MODEL>;
-  options: CallOptions<MODEL>;
+  result: ModelResult<MODEL>;
+  options: ModelCallOptions<MODEL>;
 };
 
 /**
  * The context provided to onSuccess with the successful attempt and all previous attempts.
  */
-export type SuccessContext<MODEL extends AnyResolvableModel> = {
+export type ModelSuccessContext<MODEL extends AnyResolvableModel> = {
   /**
    * The successful attempt
    */
-  current: SuccessAttempt<ResolvedModel<MODEL>>;
+  current: ModelSuccessAttempt<ResolvedModel<MODEL>>;
   /**
    * The preceding attempts that were retried, in order. Empty when the first
    * attempt succeeded. The successful attempt is `current` and is not repeated
    * here.
    */
-  attempts: Array<RetryAttempt<ResolvedModel<MODEL>>>;
+  attempts: Array<ModelRetryAttempt<ResolvedModel<MODEL>>>;
 };
 
 /**
  * The context provided to onFailure when an operation terminally fails
  * (no retry matched, retries exhausted, or the retry itself failed).
  */
-export type FailureContext<
-  MODEL extends ResolvableLanguageModel | EmbeddingModel | ImageModel,
-> = {
+export type ModelFailureContext<MODEL extends AnyResolvableModel> = {
   /**
    * The final attempt that failed.
    */
-  current: RetryErrorAttempt<ResolvedModel<MODEL>>;
+  current: ModelRetryErrorAttempt<ResolvedModel<MODEL>>;
   /**
    * All attempts made, including the final failed one.
    */
-  attempts: Array<RetryAttempt<ResolvedModel<MODEL>>>;
+  attempts: Array<ModelRetryAttempt<ResolvedModel<MODEL>>>;
   /**
    * The error surfaced to the caller. When more than one attempt was made,
    * this is a `RetryError` wrapping every attempt error; otherwise the raw
@@ -297,11 +316,9 @@ export interface RetryTelemetrySettings {
 /**
  * Options for creating a retryable model.
  */
-export interface RetryableModelOptions<
-  MODEL extends LanguageModel | EmbeddingModel | ImageModel,
-> {
+export interface RetryableModelOptions<MODEL extends AnyModel> {
   model: MODEL;
-  retries: Retries<MODEL>;
+  retries: ModelRetries<MODEL>;
   disabled?: boolean | (() => boolean);
   /**
    * Controls when to reset back to the base model after a successful retry.
@@ -325,7 +342,7 @@ export interface RetryableModelOptions<
   experimental_telemetry?: RetryTelemetrySettings;
 
   // TODO: future iteration could let `onError` similarly decide whether a retry actually fires (today it is purely observational).
-  onError?: (context: RetryContext<MODEL>) => void;
+  onError?: (context: ModelRetryContext<MODEL>) => void;
   /**
    * Called after a retry has been decided and the next model has been
    * selected, but before the retry call is issued.
@@ -339,9 +356,9 @@ export interface RetryableModelOptions<
    * Returning `undefined`/`void` leaves behavior unchanged.
    */
   onRetry?: (
-    context: RetryContext<MODEL>,
+    context: ModelRetryContext<MODEL>,
   ) => void | OnRetryOverrides<MODEL> | Promise<void | OnRetryOverrides<MODEL>>;
-  onSuccess?: (context: SuccessContext<MODEL>) => void;
+  onSuccess?: (context: ModelSuccessContext<MODEL>) => void;
   /**
    * Called once when an operation terminally fails and the error could not
    * be recovered by a retry: no retry matched, all retries were exhausted,
@@ -349,7 +366,7 @@ export interface RetryableModelOptions<
    *
    * Not called when retries are disabled.
    */
-  onFailure?: (context: FailureContext<MODEL>) => void;
+  onFailure?: (context: ModelFailureContext<MODEL>) => void;
 }
 
 /**
@@ -363,7 +380,10 @@ export interface RetryableModelOptions<
  * This flexible approach allows retryable functions to return the exact model type
  * they received without type assertions, while still supporting string-based gateway models.
  */
-export type Retry<MODEL extends AnyResolvableModel> = {
+export type Retry<
+  MODEL extends AnyResolvableModel,
+  INPUT = ModelRetryCallOptions<ResolvedModel<MODEL>>,
+> = {
   model: MODEL;
   /**
    * Maximum number of attempts for this model.
@@ -384,8 +404,17 @@ export type Retry<MODEL extends AnyResolvableModel> = {
   timeout?: number;
   /**
    * Call options to override for this retry.
+   *
+   * The shape is whatever the consuming API can override: written bare, the
+   * provider-level call options the model wrappers accept; parameterized, the
+   * entry point's own arguments for a call-level function.
+   *
+   * A retryable built by `.switch()`/`.retry()` leaves it unbound instead
+   * (`never` when no options are given), which is what keeps one that sets no
+   * options usable by both, and one that does set them checked against
+   * whichever list it ends up in.
    */
-  options?: RetryCallOptions<ResolvedModel<MODEL>>;
+  options?: INPUT;
   /**
    * @deprecated Use `options.providerOptions` instead.
    * Provider options to override for this retry.
@@ -399,16 +428,31 @@ export type Retry<MODEL extends AnyResolvableModel> = {
 /**
  * A function that determines whether to retry with a different model based on the current attempt and all previous attempts.
  */
-export type Retryable<MODEL extends AnyResolvableModel> = (
-  context: RetryContext<MODEL>,
-) => Retry<MODEL> | Promise<Retry<MODEL> | undefined> | undefined;
+export type ModelRetryable<
+  MODEL extends AnyResolvableModel,
+  INPUT = ModelRetryCallOptions<ResolvedModel<MODEL>>,
+> = (
+  context: ModelRetryContext<MODEL>,
+) => Retry<MODEL, INPUT> | Promise<Retry<MODEL, INPUT> | undefined> | undefined;
 
-export type Retries<MODEL extends LanguageModel | EmbeddingModel | ImageModel> =
-  Array<
-    | Retryable<ResolvableModel<MODEL>>
-    | Retry<ResolvableModel<MODEL>>
-    | ResolvableModel<MODEL>
-  >;
+/**
+ * The configured retry handlers. `INPUT` is the shape `Retry.options` is
+ * checked against; it defaults to the provider-level call options, which is
+ * what the model wrappers accept.
+ *
+ * `Retry.options` sits in return position (a `ModelRetryable` returns a `Retry`),
+ * so it is covariant: a retryable that sets no options has `options?: never`
+ * and is accepted everywhere, while one that sets them only fits a target
+ * whose `INPUT` covers them.
+ */
+export type ModelRetries<
+  MODEL extends AnyModel,
+  INPUT = ModelRetryCallOptions<MODEL>,
+> = Array<
+  | ModelRetryable<ResolvableModel<MODEL>, INPUT>
+  | Retry<ResolvableModel<MODEL>, INPUT>
+  | ResolvableModel<MODEL>
+>;
 
 export type RetryableOptions<MODEL extends AnyResolvableModel> = Partial<
   Omit<Retry<MODEL>, 'model'>
@@ -443,3 +487,66 @@ export type EmbeddingModelEmbed = Awaited<
 >;
 
 export type ImageModelGenerate = Awaited<ReturnType<ImageModel['doGenerate']>>;
+
+/* ------------------------------------------------------------------ *
+ * Deprecated aliases
+ *
+ * These names predate the call-level retry API, when there was only one
+ * layer and no prefix was needed. Each now has a `Model`-prefixed name that
+ * says which layer it belongs to, alongside a `Call`-prefixed counterpart in
+ * `src/call/types.ts`. The old names still work and are unchanged; they will
+ * be removed when the model layer is.
+ *
+ * Not renamed, because they are genuinely shared by both layers: `Retry`,
+ * `OnRetryOverrides`, `Reset`, `RetryTelemetrySettings`.
+ * ------------------------------------------------------------------ */
+
+/** @deprecated Use {@link ModelFinishReason}. */
+export type FinishReason = ModelFinishReason;
+
+/** @deprecated Use {@link ModelRetryCallOptions}. */
+export type RetryCallOptions<MODEL extends AnyModel> =
+  ModelRetryCallOptions<MODEL>;
+
+/** @deprecated Use {@link ModelCallOptions}. */
+export type CallOptions<MODEL extends AnyModel> = ModelCallOptions<MODEL>;
+
+/** @deprecated Use {@link ModelResult}. */
+export type Result<MODEL extends AnyModel> = ModelResult<MODEL>;
+
+/** @deprecated Use {@link ModelRetryErrorAttempt}. */
+export type RetryErrorAttempt<MODEL extends AnyModel> =
+  ModelRetryErrorAttempt<MODEL>;
+
+/** @deprecated Use {@link ModelRetryResultAttempt}. */
+export type RetryResultAttempt = ModelRetryResultAttempt;
+
+/** @deprecated Use {@link ModelRetryAttempt}. */
+export type RetryAttempt<MODEL extends AnyModel> = ModelRetryAttempt<MODEL>;
+
+/** @deprecated Use {@link ModelRetryContext}. */
+export type RetryContext<MODEL extends AnyResolvableModel> =
+  ModelRetryContext<MODEL>;
+
+/** @deprecated Use {@link ModelSuccessAttempt}. */
+export type SuccessAttempt<MODEL extends AnyModel> = ModelSuccessAttempt<MODEL>;
+
+/** @deprecated Use {@link ModelSuccessContext}. */
+export type SuccessContext<MODEL extends AnyResolvableModel> =
+  ModelSuccessContext<MODEL>;
+
+/** @deprecated Use {@link ModelFailureContext}. */
+export type FailureContext<MODEL extends AnyResolvableModel> =
+  ModelFailureContext<MODEL>;
+
+/** @deprecated Use {@link ModelRetryable}. */
+export type Retryable<
+  MODEL extends AnyResolvableModel,
+  INPUT = ModelRetryCallOptions<ResolvedModel<MODEL>>,
+> = ModelRetryable<MODEL, INPUT>;
+
+/** @deprecated Use {@link ModelRetries}. */
+export type Retries<
+  MODEL extends AnyModel,
+  INPUT = ModelRetryCallOptions<MODEL>,
+> = ModelRetries<MODEL, INPUT>;

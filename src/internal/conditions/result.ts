@@ -3,7 +3,7 @@ import { fromJSONSchema } from 'zod';
 import type {
   LanguageModelResult,
   ResolvableLanguageModel,
-  RetryContext,
+  ModelRetryContext,
 } from '../../types.js';
 import { isResultAttempt } from '../guards.js';
 import { Condition } from './condition.js';
@@ -11,7 +11,7 @@ import { Condition } from './condition.js';
 /**
  * The unified finish reason produced by the AI SDK.
  */
-export type FinishReason = LanguageModelResult['finishReason']['unified'];
+export type ModelFinishReason = LanguageModelResult['finishReason']['unified'];
 
 /**
  * Build the result-side condition helpers (`result`, `finishReason`,
@@ -19,8 +19,9 @@ export type FinishReason = LanguageModelResult['finishReason']['unified'];
  * by `language-model/conditions/index.ts` so the entry point exposes
  * helpers whose `MODEL` generic is constrained to the right family.
  *
- * Result-based conditions are language-model only — embedding and image
- * results have a different shape and are not supported.
+ * Result-based conditions are language-model only here: the embedding and image
+ * model wrappers have no result branch, so a condition for those families would
+ * silently never fire. The call-level functions do support all three.
  */
 export function createResultAPI<BOUND extends ResolvableLanguageModel>() {
   /**
@@ -28,7 +29,14 @@ export function createResultAPI<BOUND extends ResolvableLanguageModel>() {
    * The predicate runs only when the current attempt succeeded; error
    * attempts return false.
    *
-   * **Important:** returns a `Condition`, not a `Retryable`. Call
+   * The result is provider-shaped — what the model returned, one layer below
+   * `generateText`, not the result the caller receives. The call-level retry
+   * functions have their own `result()` under
+   * `ai-retry/call/<family>-model/conditions`, which hands over the entry
+   * point's own result instead; the two are different types and are not
+   * interchangeable.
+   *
+   * **Important:** returns a `Condition`, not a `ModelRetryable`. Call
    * `.switch()` or `.retry()` to plug it into `retries: [...]`.
    *
    * @example
@@ -38,7 +46,7 @@ export function createResultAPI<BOUND extends ResolvableLanguageModel>() {
   function result<MODEL extends BOUND = BOUND>(
     predicate: (
       res: LanguageModelResult,
-      ctx: RetryContext<MODEL>,
+      ctx: ModelRetryContext<MODEL>,
     ) => boolean | Promise<boolean>,
   ): Condition<MODEL> {
     return new Condition<MODEL>(async (ctx) => {
@@ -50,7 +58,12 @@ export function createResultAPI<BOUND extends ResolvableLanguageModel>() {
   /**
    * Match the result's finish reason against one of the given values.
    *
-   * **Important:** returns a `Condition`, not a `Retryable`. Call
+   * Reads the attempt's normalized finish reason rather than digging into the
+   * result, so it matches identically whether the retry ran below the model
+   * (where the reason arrives nested) or around the call (where it arrives
+   * flat).
+   *
+   * **Important:** returns a `Condition`, not a `ModelRetryable`. Call
    * `.switch()` or `.retry()` to plug it into `retries: [...]`.
    *
    * @example
@@ -58,15 +71,19 @@ export function createResultAPI<BOUND extends ResolvableLanguageModel>() {
    * result.finishReason('length').retry({ maxAttempts: 3 })
    */
   result.finishReason = function finishReason<MODEL extends BOUND = BOUND>(
-    ...reasons: Array<FinishReason>
+    ...reasons: Array<ModelFinishReason>
   ): Condition<MODEL> {
-    return result<MODEL>((res) => reasons.includes(res.finishReason.unified));
+    return new Condition<MODEL>(
+      (ctx) =>
+        isResultAttempt(ctx.current) &&
+        reasons.includes(ctx.current.finishReason),
+    );
   };
 
   /**
    * Match the result's finish reason against one of the given values.
    *
-   * **Important:** returns a `Condition`, not a `Retryable`. Call
+   * **Important:** returns a `Condition`, not a `ModelRetryable`. Call
    * `.switch()` or `.retry()` to plug it into `retries: [...]`.
    *
    * @example
@@ -74,7 +91,7 @@ export function createResultAPI<BOUND extends ResolvableLanguageModel>() {
    * finishReason('length').retry({ maxAttempts: 3 })
    */
   function finishReason<MODEL extends BOUND = BOUND>(
-    ...reasons: Array<FinishReason>
+    ...reasons: Array<ModelFinishReason>
   ): Condition<MODEL> {
     return result.finishReason<MODEL>(...reasons);
   }
@@ -84,8 +101,12 @@ export function createResultAPI<BOUND extends ResolvableLanguageModel>() {
    * is read from the call's `responseFormat`, which `Output.object()`
    * sets automatically. No-op when no schema is configured.
    *
-   * **Important:** returns a `Condition`, not a `Retryable`. Call
+   * **Important:** returns a `Condition`, not a `ModelRetryable`. Call
    * `.switch()` or `.retry()` to plug it into `retries: [...]`.
+   *
+   * @deprecated Only meaningful for `createRetryableModel`. It reads
+   * `responseFormat` off the provider call options, which do not exist around
+   * a call, so it never matches for the call-level retry functions.
    *
    * @example
    * schemaInvalid().switch({ model: fallback })

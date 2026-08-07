@@ -5,7 +5,7 @@ import {
   MockImageModel,
   MockLanguageModel,
 } from '../internal/test-utils.js';
-import type { Retryable } from '../types.js';
+import type { ModelRetryable } from '../types.js';
 import { requestNotRetryable } from './request-not-retryable.js';
 
 describe('requestNotRetryable', () => {
@@ -18,7 +18,7 @@ describe('requestNotRetryable', () => {
       retries: [retryable],
     });
 
-    expectTypeOf(retryable).toEqualTypeOf<Retryable<MockLanguageModel>>();
+    expectTypeOf(retryable).toEqualTypeOf<ModelRetryable<MockLanguageModel>>();
   });
 
   it('should accept embedding model instance', () => {
@@ -30,7 +30,7 @@ describe('requestNotRetryable', () => {
       retries: [retryable],
     });
 
-    expectTypeOf(retryable).toEqualTypeOf<Retryable<MockEmbeddingModel>>();
+    expectTypeOf(retryable).toEqualTypeOf<ModelRetryable<MockEmbeddingModel>>();
   });
 
   it('should accept language model with options', () => {
@@ -42,7 +42,7 @@ describe('requestNotRetryable', () => {
       retries: [retryable],
     });
 
-    expectTypeOf(retryable).toEqualTypeOf<Retryable<MockLanguageModel>>();
+    expectTypeOf(retryable).toEqualTypeOf<ModelRetryable<MockLanguageModel>>();
   });
 
   it('should accept embedding model with options', () => {
@@ -54,7 +54,7 @@ describe('requestNotRetryable', () => {
       retries: [retryable],
     });
 
-    expectTypeOf(retryable).toEqualTypeOf<Retryable<MockEmbeddingModel>>();
+    expectTypeOf(retryable).toEqualTypeOf<ModelRetryable<MockEmbeddingModel>>();
   });
 
   it('should accept model string', () => {
@@ -65,7 +65,7 @@ describe('requestNotRetryable', () => {
       retries: [retryable],
     });
 
-    // expectTypeOf(retryable).toEqualTypeOf<Retryable<LanguageModel>>();
+    // expectTypeOf(retryable).toEqualTypeOf<ModelRetryable<LanguageModel>>();
   });
 
   it('should accept image model instance', () => {
@@ -77,7 +77,7 @@ describe('requestNotRetryable', () => {
       retries: [retryable],
     });
 
-    expectTypeOf(retryable).toEqualTypeOf<Retryable<MockImageModel>>();
+    expectTypeOf(retryable).toEqualTypeOf<ModelRetryable<MockImageModel>>();
   });
 
   it('should accept image model with options', () => {
@@ -89,6 +89,6 @@ describe('requestNotRetryable', () => {
       retries: [retryable],
     });
 
-    expectTypeOf(retryable).toEqualTypeOf<Retryable<MockImageModel>>();
+    expectTypeOf(retryable).toEqualTypeOf<ModelRetryable<MockImageModel>>();
   });
 });

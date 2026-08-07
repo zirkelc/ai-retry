@@ -5,7 +5,14 @@ import {
   type ReadableSpan,
   SimpleSpanProcessor,
 } from '@opentelemetry/sdk-trace-base';
-import { APICallError, type TextStreamPart } from 'ai';
+import {
+  APICallError,
+  embed,
+  embedMany,
+  generateImage,
+  generateText,
+  type TextStreamPart,
+} from 'ai';
 import { Errors, Streams } from 'ai-test-kit';
 import { Embedding, MockEmbeddingModel } from 'ai-test-kit/embedding';
 import { Image, MockImageModel } from 'ai-test-kit/image';
@@ -21,10 +28,24 @@ import type {
   LanguageModelGenerate,
   LanguageModelResult,
   LanguageModelStreamPart,
-  RetryContext,
-  RetryErrorAttempt,
-  RetryResultAttempt,
+  ModelRetryContext,
+  ModelRetryErrorAttempt,
+  ModelRetryResultAttempt,
 } from '../types.js';
+import type {
+  CallArgs,
+  CallFinishReason,
+  CallResult,
+  CallRetryContext,
+  CallRetryErrorAttempt,
+  CallRetryResultAttempt,
+  EmbedManyResultInfo,
+  EmbedResultInfo,
+  GenerateImageResultInfo,
+  GenerateTextResultInfo,
+  StreamTextResultInfo,
+} from '../call/types.js';
+import { tagResult } from '../call/tag-result.js';
 
 /**
  * Re-exported for test convenience: the auto-detecting factory builds a
@@ -74,15 +95,15 @@ export const errorFromChunks = (
 };
 
 /**
- * Build a synthetic `RetryContext` carrying an error attempt for a language
+ * Build a synthetic `ModelRetryContext` carrying an error attempt for a language
  * model. Used by unit tests that exercise condition predicates without
  * spinning up `generateText`.
  */
 export const buildErrorContext = (
   error: unknown,
   model: MockLanguageModel = MockLanguageModel.from(),
-): RetryContext<MockLanguageModel> => {
-  const attempt: RetryErrorAttempt<MockLanguageModel> = {
+): ModelRetryContext<MockLanguageModel> => {
+  const attempt: ModelRetryErrorAttempt<MockLanguageModel> = {
     type: 'error',
     error,
     model,
@@ -92,16 +113,17 @@ export const buildErrorContext = (
 };
 
 /**
- * Build a synthetic `RetryContext` carrying a result attempt for a language
+ * Build a synthetic `ModelRetryContext` carrying a result attempt for a language
  * model.
  */
 export const buildResultContext = (
   result: LanguageModelGenerate = Language.result([]),
   model: MockLanguageModel = MockLanguageModel.from(),
-): RetryContext<MockLanguageModel> => {
-  const attempt: RetryResultAttempt = {
+): ModelRetryContext<MockLanguageModel> => {
+  const attempt: ModelRetryResultAttempt = {
     type: 'result',
     result,
+    finishReason: result.finishReason.unified,
     model,
     options: {} as LanguageModelCallOptions,
   };
@@ -109,14 +131,14 @@ export const buildResultContext = (
 };
 
 /**
- * Build a synthetic `RetryContext` carrying an error attempt for an image
+ * Build a synthetic `ModelRetryContext` carrying an error attempt for an image
  * model.
  */
 export const buildImageErrorContext = (
   error: unknown,
   model: MockImageModel = MockImageModel.from(),
-): RetryContext<MockImageModel> => {
-  const attempt: RetryErrorAttempt<MockImageModel> = {
+): ModelRetryContext<MockImageModel> => {
+  const attempt: ModelRetryErrorAttempt<MockImageModel> = {
     type: 'error',
     error,
     model,
@@ -323,3 +345,162 @@ export const attemptSpans = (
         Number(a.attributes['ai_retry.attempt.number']) -
         Number(b.attributes['ai_retry.attempt.number']),
     );
+
+/* ------------------------------------------------------------------ *
+ * Call-layer fixtures
+ * ------------------------------------------------------------------ */
+
+/**
+ * Build a real `generateText` result and present it as its tagged union member.
+ *
+ * Run through the SDK rather than assembled from a literal, and that is the
+ * point: the SDK exposes most of a result through prototype getters, so a
+ * hand-built stand-in would not exercise what {@link tagResult} exists to
+ * forward. A condition under test sees exactly the object a caller would.
+ */
+export const callGenerateTextResult = async (
+  text: string = mockResultText,
+  options?: Parameters<typeof generateText>[0],
+): Promise<GenerateTextResultInfo> =>
+  tagResult(
+    'generateText',
+    await generateText({
+      model: MockLanguageModel.from(text),
+      prompt: 'Hello!',
+      ...options,
+    } as Parameters<typeof generateText>[0]),
+  );
+
+/** A real `embed` result, tagged. */
+export const callEmbedResult = async (
+  vector: Array<number> = [0.1, 0.2, 0.3],
+): Promise<EmbedResultInfo> =>
+  tagResult(
+    'embed',
+    await embed({
+      model: MockEmbeddingModel.from([vector]),
+      value: 'Hello!',
+    }),
+  );
+
+/** A real `embedMany` result, tagged. */
+export const callEmbedManyResult = async (
+  vectors: Array<Array<number>> = [[0.1, 0.2, 0.3]],
+): Promise<EmbedManyResultInfo> =>
+  tagResult(
+    'embedMany',
+    await embedMany({
+      model: MockEmbeddingModel.from(vectors),
+      values: vectors.map((_, i) => `value ${i}`),
+    }),
+  );
+
+/** A real `generateImage` result, tagged. */
+export const callImageResult = async (
+  count = 1,
+): Promise<GenerateImageResultInfo> =>
+  tagResult(
+    'generateImage',
+    await generateImage({
+      model: MockImageModel.from(
+        Image.result(Array.from({ length: count }, () => Image.png())),
+      ),
+      prompt: 'a cat',
+    }),
+  );
+
+/** A `streamText` result as a contentless stream reports it. */
+export const callStreamTextResult = (
+  finishReason: CallFinishReason = 'stop',
+): StreamTextResultInfo => ({
+  operation: 'streamText',
+  finishReason,
+  usage: {
+    inputTokens: 10,
+    outputTokens: 0,
+    totalTokens: 10,
+    inputTokenDetails: {
+      noCacheTokens: 10,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+    },
+    outputTokenDetails: { textTokens: 0, reasoningTokens: 0 },
+  },
+  providerMetadata: undefined,
+});
+
+/**
+ * Build a synthetic `CallRetryContext` carrying an error attempt for a
+ * language model. The call-layer counterpart of {@link buildErrorContext}.
+ */
+export const buildCallErrorContext = (
+  error: unknown,
+  model: MockLanguageModel = MockLanguageModel.from(),
+): CallRetryContext<MockLanguageModel> => {
+  const attempt: CallRetryErrorAttempt<MockLanguageModel> = {
+    type: 'error',
+    error,
+    model,
+    options: {} as CallArgs<MockLanguageModel>,
+  };
+  return { current: attempt, attempts: [attempt] };
+};
+
+/**
+ * Build a synthetic `CallRetryContext` carrying a result attempt for a
+ * language model. The call-layer counterpart of {@link buildResultContext}.
+ */
+export const buildCallResultContext = (
+  result: CallResult<MockLanguageModel>,
+  model: MockLanguageModel = MockLanguageModel.from(),
+): CallRetryContext<MockLanguageModel> => {
+  const attempt: CallRetryResultAttempt<MockLanguageModel> = {
+    type: 'result',
+    result,
+    model,
+    options: {} as CallArgs<MockLanguageModel>,
+  };
+  return { current: attempt, attempts: [attempt] };
+};
+
+/** As {@link buildCallResultContext}, for an embedding model. */
+export const buildCallEmbeddingResultContext = (
+  result: CallResult<MockEmbeddingModel>,
+  model: MockEmbeddingModel = MockEmbeddingModel.from(),
+): CallRetryContext<MockEmbeddingModel> => {
+  const attempt: CallRetryResultAttempt<MockEmbeddingModel> = {
+    type: 'result',
+    result,
+    model,
+    options: {} as CallArgs<MockEmbeddingModel>,
+  };
+  return { current: attempt, attempts: [attempt] };
+};
+
+/** As {@link buildCallResultContext}, for an image model. */
+export const buildCallImageResultContext = (
+  result: CallResult<MockImageModel>,
+  model: MockImageModel = MockImageModel.from(),
+): CallRetryContext<MockImageModel> => {
+  const attempt: CallRetryResultAttempt<MockImageModel> = {
+    type: 'result',
+    result,
+    model,
+    options: {} as CallArgs<MockImageModel>,
+  };
+  return { current: attempt, attempts: [attempt] };
+};
+
+/** As {@link buildCallErrorContext}, for an image model. */
+export const buildCallImageErrorContext = (
+  error: unknown,
+  model: MockImageModel = MockImageModel.from(),
+): CallRetryContext<MockImageModel> => {
+  const attempt: CallRetryErrorAttempt<MockImageModel> = {
+    type: 'error',
+    error,
+    model,
+    options: {} as CallArgs<MockImageModel>,
+  };
+  return { current: attempt, attempts: [attempt] };
+};

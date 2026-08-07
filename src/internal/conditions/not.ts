@@ -1,13 +1,17 @@
-import { type AnyModel, Condition } from './condition.js';
+import { Condition, type RetryLayer } from './condition.js';
+import type { AnyResolvableModel } from '../../types.js';
 
 /**
- * Invert a condition.
+ * Invert a condition. Follows whichever layer the given condition belongs to.
  *
  * @example
  * not(error.isRetryable(true))
  */
-export function not<MODEL extends AnyModel>(
-  condition: Condition<MODEL>,
-): Condition<MODEL> {
-  return new Condition<MODEL>(async (ctx) => !(await condition.evaluate(ctx)));
+export function not<
+  MODEL extends AnyResolvableModel,
+  LAYER extends RetryLayer = 'model',
+>(condition: Condition<MODEL, LAYER>): Condition<MODEL, LAYER> {
+  return new Condition<MODEL, LAYER>(
+    async (ctx) => !(await condition.evaluate(ctx)),
+  );
 }

@@ -24,7 +24,7 @@ import type {
   EmbeddingModel,
   ImageModel,
   LanguageModel,
-  Retryable,
+  ModelRetryable,
 } from '../types.js';
 import { isErrorAttempt } from '../internal/guards.js';
 import { retryAfterDelay } from './retry-after-delay.js';
@@ -291,7 +291,7 @@ describe('retryAfterDelay', () => {
         },
       });
 
-      const fallbackOnError: Retryable<LanguageModel> = (context) => {
+      const fallbackOnError: ModelRetryable<LanguageModel> = (context) => {
         if (
           isErrorAttempt(context.current) &&
           APICallError.isInstance(context.current.error)
@@ -392,7 +392,7 @@ describe('retryAfterDelay', () => {
         },
       });
 
-      const fallbackOnError: Retryable<LanguageModel> = (context) => {
+      const fallbackOnError: ModelRetryable<LanguageModel> = (context) => {
         if (
           isErrorAttempt(context.current) &&
           APICallError.isInstance(context.current.error)
@@ -503,7 +503,7 @@ describe('retryAfterDelay', () => {
         return mockEmbeddings;
       });
 
-      const fallbackOnError: Retryable<EmbeddingModel> = (context) => {
+      const fallbackOnError: ModelRetryable<EmbeddingModel> = (context) => {
         if (
           isErrorAttempt(context.current) &&
           APICallError.isInstance(context.current.error)
@@ -596,7 +596,7 @@ describe('retryAfterDelay', () => {
         return mockImageResult;
       });
 
-      const fallbackOnError: Retryable<ImageModel> = (context) => {
+      const fallbackOnError: ModelRetryable<ImageModel> = (context) => {
         if (
           isErrorAttempt(context.current) &&
           APICallError.isInstance(context.current.error)

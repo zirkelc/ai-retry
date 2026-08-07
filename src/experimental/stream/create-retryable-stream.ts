@@ -6,8 +6,8 @@ import {
 } from '../call/create-retryable-call.js';
 import type {
   LanguageModel,
-  RetryAttempt,
-  RetryCallOptions,
+  ModelRetryAttempt,
+  ModelRetryCallOptions,
 } from '../../types.js';
 import { detectStreamCommit } from './detect-stream-commit.js';
 
@@ -38,7 +38,7 @@ export type RetryStreamCommitAttempt = {
   /** The model whose attempt committed. */
   model: LanguageModel;
   /** The per-attempt overrides applied to the committed attempt. */
-  options: RetryCallOptions<LanguageModel>;
+  options: ModelRetryCallOptions<LanguageModel>;
 };
 
 /**
@@ -53,7 +53,7 @@ export type RetryStreamCommitContext = {
    * attempt committed. The committed attempt is `current` and is not repeated
    * here.
    */
-  attempts: Array<RetryAttempt<LanguageModel>>;
+  attempts: Array<ModelRetryAttempt<LanguageModel>>;
 };
 
 /**
@@ -123,6 +123,18 @@ export type RetryableStream = <RESULT extends StreamResult>(
  * commits — the first content part, not the end of the stream — and `onFailure`
  * fires when every attempt failed before committing. Past the commit point the
  * caller owns the stream, so an error during consumption fires neither.
+ *
+ * @deprecated Use `retryableStreamText` from `ai-retry`. It takes `streamText`'s own
+ * arguments plus a `retry` field, so there is no `streamFn` to write, and it detects
+ * commit at the same boundary. It also recovers a contentless `content-filter` finish,
+ * which this wrapper cannot — being error-based only, it streams that result through.
+ *
+ * Note that `retryableStreamText` deliberately does **not** accept a `streamObject`
+ * result. This wrapper claims to, but the claim is wrong: `streamObject`'s `fullStream`
+ * is the base stream rather than a fresh tee, so reading it here locks it and the
+ * caller's `partialObjectStream` yields nothing.
+ *
+ * Still exported so existing code keeps working; scheduled for removal.
  */
 export function createRetryableStream(
   options: RetryableStreamOptions,

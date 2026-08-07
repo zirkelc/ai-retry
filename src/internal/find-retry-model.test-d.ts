@@ -8,10 +8,10 @@ import type {
   LanguageModelCallOptions,
   ResolvableLanguageModel,
   ResolvedModel,
-  Retries,
+  ModelRetries,
   Retry,
-  Retryable,
-  RetryContext,
+  ModelRetryable,
+  ModelRetryContext,
 } from '../types.js';
 
 const languageModelOptions: LanguageModelCallOptions = {
@@ -26,8 +26,8 @@ const embeddingModelOptions: EmbeddingModelCallOptions = {
 describe('findRetryModel', () => {
   it('should accept LanguageModel retries', async () => {
     const model = MockLanguageModel.from();
-    const retries: Retries<LanguageModel> = [model];
-    const context: RetryContext<LanguageModel> = {
+    const retries: ModelRetries<LanguageModel> = [model];
+    const context: ModelRetryContext<LanguageModel> = {
       current: {
         type: 'error',
         error: new Error(),
@@ -46,8 +46,8 @@ describe('findRetryModel', () => {
 
   it('should accept EmbeddingModel retries', async () => {
     const model = MockEmbeddingModel.from();
-    const retries: Retries<EmbeddingModel> = [model];
-    const context: RetryContext<EmbeddingModel> = {
+    const retries: ModelRetries<EmbeddingModel> = [model];
+    const context: ModelRetryContext<EmbeddingModel> = {
       current: {
         type: 'error',
         error: new Error(),
@@ -66,11 +66,11 @@ describe('findRetryModel', () => {
 
   it('should accept string literal models in retries for LanguageModel', async () => {
     const model = MockLanguageModel.from();
-    const retries: Retries<LanguageModel> = [
+    const retries: ModelRetries<LanguageModel> = [
       'openai/gpt-4o',
       'anthropic/claude-sonnet-4',
     ];
-    const context: RetryContext<LanguageModel> = {
+    const context: ModelRetryContext<LanguageModel> = {
       current: {
         type: 'error',
         error: new Error(),
@@ -87,14 +87,14 @@ describe('findRetryModel', () => {
     >();
   });
 
-  it('should accept Retryable functions', async () => {
+  it('should accept ModelRetryable functions', async () => {
     const model = MockLanguageModel.from();
-    const retryable: Retryable<LanguageModel> = () => ({
+    const retryable: ModelRetryable<LanguageModel> = () => ({
       model,
       maxAttempts: 1,
     });
-    const retries: Retries<LanguageModel> = [retryable];
-    const context: RetryContext<LanguageModel> = {
+    const retries: ModelRetries<LanguageModel> = [retryable];
+    const context: ModelRetryContext<LanguageModel> = {
       current: {
         type: 'error',
         error: new Error(),
@@ -111,14 +111,14 @@ describe('findRetryModel', () => {
     >();
   });
 
-  it('should accept Retryable functions with string models', async () => {
+  it('should accept ModelRetryable functions with string models', async () => {
     const model = MockLanguageModel.from();
-    const retryable: Retryable<ResolvableLanguageModel> = () => ({
+    const retryable: ModelRetryable<ResolvableLanguageModel> = () => ({
       model: 'openai/gpt-4o',
       maxAttempts: 1,
     });
-    const retries: Retries<LanguageModel> = [retryable];
-    const context: RetryContext<LanguageModel> = {
+    const retries: ModelRetries<LanguageModel> = [retryable];
+    const context: ModelRetryContext<LanguageModel> = {
       current: {
         type: 'error',
         error: new Error(),
@@ -142,8 +142,8 @@ describe('findRetryModel', () => {
       maxAttempts: 3,
       delay: 1000,
     };
-    const retries: Retries<LanguageModel> = [retry];
-    const context: RetryContext<LanguageModel> = {
+    const retries: ModelRetries<LanguageModel> = [retry];
+    const context: ModelRetryContext<LanguageModel> = {
       current: {
         type: 'error',
         error: new Error(),
@@ -166,8 +166,8 @@ describe('findRetryModel', () => {
       model: 'anthropic/claude-sonnet-4',
       maxAttempts: 2,
     };
-    const retries: Retries<LanguageModel> = [retry];
-    const context: RetryContext<LanguageModel> = {
+    const retries: ModelRetries<LanguageModel> = [retry];
+    const context: ModelRetryContext<LanguageModel> = {
       current: {
         type: 'error',
         error: new Error(),
@@ -187,7 +187,7 @@ describe('findRetryModel', () => {
   it('should accept mixed retry types', async () => {
     const model = MockLanguageModel.from();
     const fallback = MockLanguageModel.from();
-    const retryable: Retryable<LanguageModel> = () => ({
+    const retryable: ModelRetryable<LanguageModel> = () => ({
       model: fallback,
       maxAttempts: 1,
     });
@@ -195,13 +195,13 @@ describe('findRetryModel', () => {
       model: 'openai/gpt-4o-mini',
       maxAttempts: 2,
     };
-    const retries: Retries<LanguageModel> = [
+    const retries: ModelRetries<LanguageModel> = [
       retryable,
       retry,
       fallback,
       'anthropic/claude-haiku-4.5',
     ];
-    const context: RetryContext<LanguageModel> = {
+    const context: ModelRetryContext<LanguageModel> = {
       current: {
         type: 'error',
         error: new Error(),
@@ -220,8 +220,8 @@ describe('findRetryModel', () => {
 
   it('should resolve string models to LanguageModel', async () => {
     const model = MockLanguageModel.from();
-    const retries: Retries<LanguageModel> = ['openai/gpt-4o'];
-    const context: RetryContext<LanguageModel> = {
+    const retries: ModelRetries<LanguageModel> = ['openai/gpt-4o'];
+    const context: ModelRetryContext<LanguageModel> = {
       current: {
         type: 'error',
         error: new Error(),

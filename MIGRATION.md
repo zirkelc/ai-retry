@@ -40,16 +40,16 @@ Use the entry point that matches your model: `ai-retry/language-model`, `ai-retr
 
 Every deprecated retryable maps to a condition built from the matchers exported by `ai-retry/<family>-model` (also available on the `ai-retry/<family>-model/conditions` subpath). `.switch({ model })` switches to a fallback for a single attempt (matching the old default); `.retry({ ... })` retries the same model.
 
-| Deprecated retryable | Matches | Condition equivalent |
-| --- | --- | --- |
-| `contentFilterTriggered(fallback)` | result `finishReason === 'content-filter'` | `finishReason('content-filter').switch({ model: fallback })` |
-| `requestTimeout(fallback)` | `TimeoutError` (from `AbortSignal.timeout()`) | `timeout().switch({ model: fallback, timeout: 60_000 })` |
-| `requestNotRetryable(fallback)` | `APICallError` with `isRetryable === false` | `error.isRetryable(false).switch({ model: fallback })` |
+| Deprecated retryable                                     | Matches                                                                  | Condition equivalent                                                   |
+| -------------------------------------------------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------- |
+| `contentFilterTriggered(fallback)`                       | result `finishReason === 'content-filter'`                               | `finishReason('content-filter').switch({ model: fallback })`           |
+| `requestTimeout(fallback)`                               | `TimeoutError` (from `AbortSignal.timeout()`)                            | `timeout().switch({ model: fallback, timeout: 60_000 })`               |
+| `requestNotRetryable(fallback)`                          | `APICallError` with `isRetryable === false`                              | `error.isRetryable(false).switch({ model: fallback })`                 |
 | `retryAfterDelay({ delay, backoffFactor, maxAttempts })` | `APICallError` with `isRetryable === true`; honors `Retry-After` headers | `error.isRetryable(true).retry({ delay, backoffFactor, maxAttempts })` |
-| `schemaMismatch(fallback)` | result text fails JSON-schema validation | `schemaInvalid().switch({ model: fallback })` |
-| `serviceOverloaded(fallback)` | status `529` | `httpStatus(529).switch({ model: fallback })` |
-| `serviceUnavailable(fallback)` | status `503` | `httpStatus(503).switch({ model: fallback })` |
-| `noImageGenerated(fallback)` | `NoImageGeneratedError` | `noImage().switch({ model: fallback })` (from `ai-retry/image-model`) |
+| `schemaMismatch(fallback)`                               | result text fails JSON-schema validation                                 | `schemaInvalid().switch({ model: fallback })`                          |
+| `serviceOverloaded(fallback)`                            | status `529`                                                             | `httpStatus(529).switch({ model: fallback })`                          |
+| `serviceUnavailable(fallback)`                           | status `503`                                                             | `httpStatus(503).switch({ model: fallback })`                          |
+| `noImageGenerated(fallback)`                             | `NoImageGeneratedError`                                                  | `noImage().switch({ model: fallback })` (from `ai-retry/image-model`)  |
 
 Full example:
 

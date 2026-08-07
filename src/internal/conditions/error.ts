@@ -1,7 +1,7 @@
 import { APICallError } from 'ai';
-import type { RetryContext } from '../../types.js';
+import type { AnyResolvableModel, ModelRetryAttempt } from '../../types.js';
 import { isAbortError, isErrorAttempt, isTimeoutError } from '../guards.js';
-import { type AnyModel, Condition } from './condition.js';
+import { Condition, type LayerContext, type RetryLayer } from './condition.js';
 import { or } from './or.js';
 
 /**
@@ -28,13 +28,16 @@ export type ErrorClass = (new (...args: Array<any>) => Error) & {
  * `language-model.ts` and `image-model.ts` so each entry point exposes
  * helpers whose `MODEL` generic is constrained to the right family.
  */
-export function createErrorAPI<BOUND extends AnyModel>() {
+export function createErrorAPI<
+  BOUND extends AnyResolvableModel,
+  LAYER extends RetryLayer = 'model',
+>() {
   /**
    * Build a condition from a predicate over the current error. The
    * predicate runs only when the current attempt failed with an error;
    * result attempts return false.
    *
-   * **Important:** returns a `Condition`, not a `Retryable`. Call
+   * **Important:** returns a `Condition`, not a retryable. Call
    * `.switch()` or `.retry()` to plug it into `retries: [...]`.
    *
    * @example
@@ -43,11 +46,19 @@ export function createErrorAPI<BOUND extends AnyModel>() {
    * ).switch({ model: fallback })
    */
   function error<MODEL extends BOUND = BOUND, E = unknown>(
-    predicate: (err: E, ctx: RetryContext<MODEL>) => boolean | Promise<boolean>,
-  ): Condition<MODEL> {
-    return new Condition<MODEL>(async (ctx) => {
-      if (!isErrorAttempt(ctx.current)) return false;
-      return predicate(ctx.current.error as E, ctx);
+    predicate: (
+      err: E,
+      ctx: LayerContext<LAYER, MODEL>,
+    ) => boolean | Promise<boolean>,
+  ): Condition<MODEL, LAYER> {
+    return new Condition<MODEL, LAYER>(async (ctx) => {
+      /**
+       * Both layers report a failed attempt the same way — a discriminant and
+       * the raw error — so the unwrapping reads identically for either.
+       */
+      const current = (ctx as { current: ModelRetryAttempt<any> }).current;
+      if (!isErrorAttempt(current)) return false;
+      return predicate(current.error as E, ctx);
     });
   }
 
@@ -59,7 +70,7 @@ export function createErrorAPI<BOUND extends AnyModel>() {
    * classes do), it is preferred over `instanceof`, so matching survives
    * across realms and duplicate package installs.
    *
-   * **Important:** returns a `Condition`, not a `Retryable`. Call
+   * **Important:** returns a `Condition`, not a retryable. Call
    * `.switch()` or `.retry()` to plug it into `retries: [...]`.
    *
    * @example
@@ -68,7 +79,7 @@ export function createErrorAPI<BOUND extends AnyModel>() {
    */
   error.isInstance = function isInstance<MODEL extends BOUND = BOUND>(
     cls: ErrorClass,
-  ): Condition<MODEL> {
+  ): Condition<MODEL, LAYER> {
     return error<MODEL>((e) =>
       typeof cls.isInstance === 'function'
         ? cls.isInstance(e)
@@ -79,7 +90,7 @@ export function createErrorAPI<BOUND extends AnyModel>() {
   /**
    * Match when the error explicitly carries `isRetryable === flag`.
    *
-   * **Important:** returns a `Condition`, not a `Retryable`. Call
+   * **Important:** returns a `Condition`, not a retryable. Call
    * `.switch()` or `.retry()` to plug it into `retries: [...]`.
    *
    * @example
@@ -88,7 +99,7 @@ export function createErrorAPI<BOUND extends AnyModel>() {
    */
   error.isRetryable = function isRetryable<MODEL extends BOUND = BOUND>(
     flag = true,
-  ): Condition<MODEL> {
+  ): Condition<MODEL, LAYER> {
     return error<MODEL>(
       (e) => APICallError.isInstance(e) && e.isRetryable === flag,
     );
@@ -98,7 +109,7 @@ export function createErrorAPI<BOUND extends AnyModel>() {
    * Match by HTTP status code. Numbers match exactly; regular expressions
    * match against the stringified code, useful for range checks.
    *
-   * **Important:** returns a `Condition`, not a `Retryable`. Call
+   * **Important:** returns a `Condition`, not a retryable. Call
    * `.switch()` or `.retry()` to plug it into `retries: [...]`.
    *
    * @example
@@ -107,7 +118,7 @@ export function createErrorAPI<BOUND extends AnyModel>() {
    */
   error.statusCode = function statusCode<MODEL extends BOUND = BOUND>(
     ...patterns: Array<number | RegExp>
-  ): Condition<MODEL> {
+  ): Condition<MODEL, LAYER> {
     return error<MODEL>((e) => {
       if (!APICallError.isInstance(e)) return false;
       const code = e.statusCode;
@@ -124,7 +135,7 @@ export function createErrorAPI<BOUND extends AnyModel>() {
    * message are lowercased before matching. Regular expressions match
    * as written; use the `i` flag for case-insensitive regex matching.
    *
-   * **Important:** returns a `Condition`, not a `Retryable`. Call
+   * **Important:** returns a `Condition`, not a retryable. Call
    * `.switch()` or `.retry()` to plug it into `retries: [...]`.
    *
    * @example
@@ -133,7 +144,7 @@ export function createErrorAPI<BOUND extends AnyModel>() {
    */
   error.message = function message<MODEL extends BOUND = BOUND>(
     ...patterns: Array<string | RegExp>
-  ): Condition<MODEL> {
+  ): Condition<MODEL, LAYER> {
     return error<MODEL>((e) => {
       if (!(e instanceof Error)) return false;
       const lower = e.message.toLowerCase();
@@ -150,7 +161,7 @@ export function createErrorAPI<BOUND extends AnyModel>() {
    * which `AbortSignal.timeout()` produces when the timeout fires.
    * Distinct from `error.isAbort()`, which matches manual aborts.
    *
-   * **Important:** returns a `Condition`, not a `Retryable`. Call
+   * **Important:** returns a `Condition`, not a retryable. Call
    * `.switch()` or `.retry()` to plug it into `retries: [...]`.
    *
    * @example
@@ -158,7 +169,7 @@ export function createErrorAPI<BOUND extends AnyModel>() {
    */
   error.isTimeout = function isTimeout<
     MODEL extends BOUND = BOUND,
-  >(): Condition<MODEL> {
+  >(): Condition<MODEL, LAYER> {
     return error<MODEL>((e) => isTimeoutError(e));
   };
 
@@ -167,15 +178,16 @@ export function createErrorAPI<BOUND extends AnyModel>() {
    * `controller.abort()` produces. Distinct from `error.isTimeout()`,
    * which matches `AbortSignal.timeout()` firing.
    *
-   * **Important:** returns a `Condition`, not a `Retryable`. Call
+   * **Important:** returns a `Condition`, not a retryable. Call
    * `.switch()` or `.retry()` to plug it into `retries: [...]`.
    *
    * @example
    * error.isAbort().switch({ model: fallback })
    */
-  error.isAbort = function isAbort<
-    MODEL extends BOUND = BOUND,
-  >(): Condition<MODEL> {
+  error.isAbort = function isAbort<MODEL extends BOUND = BOUND>(): Condition<
+    MODEL,
+    LAYER
+  > {
     return error<MODEL>((e) => isAbortError(e));
   };
 
@@ -186,7 +198,7 @@ export function createErrorAPI<BOUND extends AnyModel>() {
    * message. Mix any combination in a single call; matches when any
    * pattern matches.
    *
-   * **Important:** returns a `Condition`, not a `Retryable`. Call
+   * **Important:** returns a `Condition`, not a retryable. Call
    * `.switch()` or `.retry()` to plug it into `retries: [...]`.
    *
    * @example
@@ -195,12 +207,12 @@ export function createErrorAPI<BOUND extends AnyModel>() {
    */
   function httpStatus<MODEL extends BOUND = BOUND>(
     ...patterns: Array<StatusPattern>
-  ): Condition<MODEL> {
+  ): Condition<MODEL, LAYER> {
     const numbers = patterns.filter((p): p is number => typeof p === 'number');
     const strings = patterns.filter((p): p is string => typeof p === 'string');
     const regexes = patterns.filter((p): p is RegExp => p instanceof RegExp);
 
-    const conditions: Array<Condition<MODEL>> = [];
+    const conditions: Array<Condition<MODEL, LAYER>> = [];
     if (numbers.length || regexes.length) {
       conditions.push(error.statusCode<MODEL>(...numbers, ...regexes));
     }
@@ -216,14 +228,14 @@ export function createErrorAPI<BOUND extends AnyModel>() {
    * Distinct from `aborted()`, which matches manual aborts. Convenience
    * wrapper around `error.isTimeout()`.
    *
-   * **Important:** returns a `Condition`, not a `Retryable`. Call
+   * **Important:** returns a `Condition`, not a retryable. Call
    * `.switch()` or `.retry()` to plug it into `retries: [...]`.
    *
    * @example
    * timeout().switch({ model: fallback, timeout: 60_000 })
    * timeout().retry({ delay: 1000 })
    */
-  function timeout<MODEL extends BOUND = BOUND>(): Condition<MODEL> {
+  function timeout<MODEL extends BOUND = BOUND>(): Condition<MODEL, LAYER> {
     return error.isTimeout<MODEL>();
   }
 
@@ -233,13 +245,13 @@ export function createErrorAPI<BOUND extends AnyModel>() {
    * matches `AbortSignal.timeout()` firing. Convenience wrapper around
    * `error.isAbort()`.
    *
-   * **Important:** returns a `Condition`, not a `Retryable`. Call
+   * **Important:** returns a `Condition`, not a retryable. Call
    * `.switch()` or `.retry()` to plug it into `retries: [...]`.
    *
    * @example
    * aborted().switch({ model: fallback })
    */
-  function aborted<MODEL extends BOUND = BOUND>(): Condition<MODEL> {
+  function aborted<MODEL extends BOUND = BOUND>(): Condition<MODEL, LAYER> {
     return error.isAbort<MODEL>();
   }
 

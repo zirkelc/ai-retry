@@ -5,7 +5,11 @@ import {
   MockImageModel,
   MockLanguageModel,
 } from '../internal/test-utils.js';
-import type { EmbeddingModel, LanguageModel, Retryable } from '../types.js';
+import type {
+  EmbeddingModel,
+  LanguageModel,
+  ModelRetryable,
+} from '../types.js';
 import { retryAfterDelay } from './retry-after-delay.js';
 
 describe('retryAfterDelay types', () => {
@@ -18,7 +22,7 @@ describe('retryAfterDelay types', () => {
       retries: [retryable],
     });
 
-    expectTypeOf(retryable).toEqualTypeOf<Retryable<MockLanguageModel>>();
+    expectTypeOf(retryable).toEqualTypeOf<ModelRetryable<MockLanguageModel>>();
   });
 
   it('should accept embedding model with options', () => {
@@ -30,7 +34,7 @@ describe('retryAfterDelay types', () => {
       retries: [retryable],
     });
 
-    expectTypeOf(retryable).toEqualTypeOf<Retryable<MockEmbeddingModel>>();
+    expectTypeOf(retryable).toEqualTypeOf<ModelRetryable<MockEmbeddingModel>>();
   });
 
   it('should accept model string', () => {
@@ -41,7 +45,7 @@ describe('retryAfterDelay types', () => {
       retries: [retryable],
     });
 
-    // expectTypeOf(retryable).toEqualTypeOf<Retryable<LanguageModel>>();
+    // expectTypeOf(retryable).toEqualTypeOf<ModelRetryable<LanguageModel>>();
   });
 
   it('should accept image model with options', () => {
@@ -53,6 +57,6 @@ describe('retryAfterDelay types', () => {
       retries: [retryable],
     });
 
-    expectTypeOf(retryable).toEqualTypeOf<Retryable<MockImageModel>>();
+    expectTypeOf(retryable).toEqualTypeOf<ModelRetryable<MockImageModel>>();
   });
 });

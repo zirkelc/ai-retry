@@ -4,7 +4,7 @@ import type {
   ImageModel,
   ImageModelCallOptions,
   ImageModelGenerate,
-  SuccessContext,
+  ModelSuccessContext,
 } from '../types.js';
 import { createRetryableModel } from './create-retryable-model.js';
 
@@ -29,8 +29,8 @@ describe('createRetryableModel', () => {
     expectTypeOf(retryable).toEqualTypeOf<ImageModel>();
   });
 
-  it('should type SuccessContext correctly', () => {
-    type Ctx = SuccessContext<ImageModel>;
+  it('should type ModelSuccessContext correctly', () => {
+    type Ctx = ModelSuccessContext<ImageModel>;
 
     expectTypeOf<Ctx['current']['model']>().toEqualTypeOf<ImageModel>();
     expectTypeOf<

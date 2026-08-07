@@ -1,13 +1,14 @@
 import type {
+  AnyModel,
   EmbeddingModel,
   ImageModel,
   LanguageModel,
   LanguageModelResult,
   LanguageModelStream,
   LanguageModelStreamPart,
-  RetryAttempt,
-  RetryErrorAttempt,
-  RetryResultAttempt,
+  ModelRetryAttempt,
+  ModelRetryErrorAttempt,
+  ModelRetryResultAttempt,
 } from '../types.js';
 
 export const isObject = (value: unknown): value is Record<string, unknown> =>
@@ -16,9 +17,7 @@ export const isObject = (value: unknown): value is Record<string, unknown> =>
 export const isString = (value: unknown): value is string =>
   typeof value === 'string';
 
-export const isModel = (
-  model: unknown,
-): model is LanguageModel | EmbeddingModel | ImageModel =>
+export const isModel = (model: unknown): model is AnyModel =>
   isLanguageModel(model) || isEmbeddingModel(model) || isImageModel(model);
 
 export const isLanguageModel = (model: unknown): model is LanguageModel =>
@@ -60,8 +59,8 @@ export const isGenerateResult = (
  * Type guard to check if a retry attempt is an error attempt
  */
 export function isErrorAttempt(
-  attempt: RetryAttempt<any>,
-): attempt is RetryErrorAttempt<any> {
+  attempt: ModelRetryAttempt<any>,
+): attempt is ModelRetryErrorAttempt<any> {
   return attempt.type === 'error';
 }
 
@@ -69,8 +68,8 @@ export function isErrorAttempt(
  * Type guard to check if a retry attempt is a result attempt
  */
 export function isResultAttempt(
-  attempt: RetryAttempt<any>,
-): attempt is RetryResultAttempt {
+  attempt: ModelRetryAttempt<any>,
+): attempt is ModelRetryResultAttempt {
   return attempt.type === 'result';
 }
 

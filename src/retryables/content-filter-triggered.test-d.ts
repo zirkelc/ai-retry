@@ -3,7 +3,7 @@ import {
   createRetryableModel,
   MockLanguageModel,
 } from '../internal/test-utils.js';
-import type { Retryable } from '../types.js';
+import type { ModelRetryable } from '../types.js';
 import { contentFilterTriggered } from './content-filter-triggered.js';
 
 describe('contentFilterTriggered', () => {
@@ -16,7 +16,7 @@ describe('contentFilterTriggered', () => {
       retries: [retryable],
     });
 
-    expectTypeOf(retryable).toEqualTypeOf<Retryable<MockLanguageModel>>();
+    expectTypeOf(retryable).toEqualTypeOf<ModelRetryable<MockLanguageModel>>();
   });
 
   it('should accept language model with options', () => {
@@ -28,7 +28,7 @@ describe('contentFilterTriggered', () => {
       retries: [retryable],
     });
 
-    expectTypeOf(retryable).toEqualTypeOf<Retryable<MockLanguageModel>>();
+    expectTypeOf(retryable).toEqualTypeOf<ModelRetryable<MockLanguageModel>>();
   });
 
   it('should accept model string', () => {
@@ -39,6 +39,6 @@ describe('contentFilterTriggered', () => {
       retries: [retryable],
     });
 
-    // expectTypeOf(retryable).toEqualTypeOf<Retryable<LanguageModel>>();
+    // expectTypeOf(retryable).toEqualTypeOf<ModelRetryable<LanguageModel>>();
   });
 });

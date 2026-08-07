@@ -5,7 +5,7 @@ import {
 } from '../internal/parse-retry-headers.js';
 import type {
   AnyResolvableModel,
-  Retryable,
+  ModelRetryable,
   RetryableOptions,
 } from '../types.js';
 import { isErrorAttempt } from '../internal/guards.js';
@@ -23,7 +23,7 @@ import { isErrorAttempt } from '../internal/guards.js';
  */
 export function retryAfterDelay<MODEL extends AnyResolvableModel>(
   options: RetryableOptions<MODEL>,
-): Retryable<MODEL> {
+): ModelRetryable<MODEL> {
   return (context) => {
     const { current } = context;
 

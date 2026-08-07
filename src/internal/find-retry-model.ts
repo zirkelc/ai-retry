@@ -1,35 +1,56 @@
 import { getModelKey } from './get-model-key.js';
 import { type GatewayResolver, resolveModel } from './resolve-model.js';
+import type { CallRetries } from '../call/types.js';
 import type {
-  EmbeddingModel,
-  ImageModel,
-  LanguageModel,
+  AnyModel,
   ResolvedModel,
-  Retries,
+  ModelRetries,
   Retry,
-  Retryable,
-  RetryContext,
+  ModelRetryable,
 } from '../types.js';
 import { isObject, isResultAttempt } from './guards.js';
+
+/**
+ * The parts of a retry context the shared retry internals actually read: which
+ * kind of outcome the current attempt had, and which model each attempt ran
+ * against.
+ *
+ * Written structurally so the model layer and the call layer — whose contexts
+ * are deliberately unrelated types, and must stay that way — can both be driven
+ * by one implementation.
+ */
+export type RetryContextLike = {
+  current: { type: string; model: AnyModel };
+  attempts: ReadonlyArray<{ model: AnyModel }>;
+};
+
+/**
+ * The retry handlers, from either layer.
+ *
+ * A union rather than a single loosened shape, so that inference still works
+ * from whichever of the two aliases the caller declared — and so a handler is
+ * still checked against the layer whose list it was written into.
+ */
+export type RetriesLike<MODEL extends AnyModel, INPUT> =
+  | ModelRetries<MODEL, INPUT>
+  | CallRetries<MODEL, INPUT>;
 
 /**
  * Find the next model to retry with based on the retry context.
  * `resolve` resolves gateway model-id strings for the caller's model
  * family (a bare string is ambiguous across families).
  */
-export async function findRetryModel<
-  MODEL extends LanguageModel | EmbeddingModel | ImageModel,
->(
-  retries: Retries<MODEL>,
-  context: RetryContext<MODEL>,
+export async function findRetryModel<MODEL extends AnyModel, INPUT>(
+  retries: RetriesLike<MODEL, INPUT>,
+  context: RetryContextLike,
   resolve?: GatewayResolver,
-): Promise<Retry<ResolvedModel<MODEL>> | undefined> {
+): Promise<Retry<ResolvedModel<MODEL>, INPUT> | undefined> {
   /**
    * Filter retryables based on attempt type:
    * - Result-based attempts: Only consider function retryables (skip plain models and static Retry objects)
    * - Error-based attempts: Consider all retryables (functions + plain models + static Retry objects)
    */
-  const applicableRetries = isResultAttempt(context.current)
+  const applicableRetries = isResultAttempt(context.current as any)
     ? retries.filter((retry) => typeof retry === 'function')
     : retries;
 
@@ -37,22 +58,24 @@ export async function findRetryModel<
    * Iterate through the applicable retryables to find a model to retry with
    */
   for (const retry of applicableRetries) {
-    let retryModel: Retry<MODEL> | undefined;
+    let retryModel: Retry<MODEL, INPUT> | undefined;
 
     if (typeof retry === `function`) {
       /**
        * Function retryable - call it with context
-       * The function can be either Retryable<MODEL> or Retryable<ResolvableLanguageModel>
+       * The function can be either ModelRetryable<MODEL> or ModelRetryable<ResolvableLanguageModel>
        * At runtime, both work because the context is structurally compatible
        * We use type assertion here because TypeScript can't prove the union type compatibility
        */
-      retryModel = await (retry as unknown as Retryable<MODEL>)(context);
+      retryModel = await (retry as unknown as ModelRetryable<any, INPUT>)(
+        context as never,
+      );
     } else if (isObject(retry) && `model` in retry) {
       /** Static Retry object */
-      retryModel = retry as unknown as Retry<MODEL>;
+      retryModel = retry as unknown as Retry<MODEL, INPUT>;
     } else {
       /** Plain model */
-      retryModel = { model: retry } as unknown as Retry<MODEL>;
+      retryModel = { model: retry } as unknown as Retry<MODEL, INPUT>;
     }
 
     if (retryModel) {
@@ -87,7 +110,7 @@ export async function findRetryModel<
         return {
           ...retryModel,
           model: resolvedModel,
-        } as Retry<ResolvedModel<MODEL>>;
+        } as Retry<ResolvedModel<MODEL>, INPUT>;
       }
     }
   }

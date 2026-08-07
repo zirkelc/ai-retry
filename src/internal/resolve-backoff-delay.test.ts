@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { resolveBackoffDelay } from './resolve-backoff-delay.js';
 import { MockLanguageModel } from './test-utils.js';
+import type { CallArgs, CallRetryAttempt } from '../call/types.js';
 import type {
   LanguageModel,
   LanguageModelCallOptions,
   Retry,
-  RetryAttempt,
+  ModelRetryAttempt,
 } from '../types.js';
 
 describe('resolveBackoffDelay', () => {
@@ -17,7 +18,7 @@ describe('resolveBackoffDelay', () => {
   const attemptsFor = (
     m: LanguageModel,
     count: number,
-  ): Array<RetryAttempt<LanguageModel>> =>
+  ): Array<ModelRetryAttempt<LanguageModel>> =>
     Array.from({ length: count }, () => ({
       type: 'error' as const,
       error: new Error('boom'),
@@ -75,5 +76,24 @@ describe('resolveBackoffDelay', () => {
 
     // Assert — 0 matching attempts → 100 * 2^0.
     expect(result).toBe(100);
+  });
+
+  it('should count call-layer attempts the same way', () => {
+    // Arrange
+    const retry: Retry<LanguageModel> = { model, delay: 100, backoffFactor: 2 };
+    const attempts: Array<CallRetryAttempt<LanguageModel>> = [
+      {
+        type: 'error',
+        error: new Error('boom'),
+        model,
+        options: {} as CallArgs<LanguageModel>,
+      },
+    ];
+
+    // Act
+    const result = resolveBackoffDelay(retry, attempts);
+
+    // Assert — 1 matching attempt → 100 * 2^1.
+    expect(result).toBe(200);
   });
 });

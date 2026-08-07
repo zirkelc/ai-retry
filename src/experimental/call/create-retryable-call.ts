@@ -6,21 +6,20 @@ import { resolveBackoffDelay } from '../../internal/resolve-backoff-delay.js';
 import { resolveModel } from '../../internal/resolve-model.js';
 import { createRetryTelemetry } from '../../internal/telemetry.js';
 import type {
-  CallOptions,
-  EmbeddingModel,
-  FailureContext,
-  ImageModel,
+  AnyModel,
+  ModelCallOptions,
+  ModelFailureContext,
   LanguageModel,
   OnRetryOverrides,
   ProviderOptions,
   Reset,
   ResolvableModel,
-  Retries,
+  ModelRetries,
   Retry,
   RetryableModelOptions,
-  RetryAttempt,
-  RetryCallOptions,
-  RetryContext,
+  ModelRetryAttempt,
+  ModelRetryCallOptions,
+  ModelRetryContext,
   RetryTelemetrySettings,
 } from '../../types.js';
 
@@ -30,7 +29,6 @@ import type {
  * unparametrized aliases (`RetryCallAttempt`, `RetryableCallOptions`, …) stay
  * language-model-shaped for existing callers.
  */
-type AnyModel = LanguageModel | EmbeddingModel | ImageModel;
 
 /**
  * The per-attempt inputs handed to the call function. The retryable owns the
@@ -63,7 +61,7 @@ export type RetryCallAttempt<MODEL extends AnyModel = LanguageModel> = {
    * Per-attempt call option overrides to apply on top of the call's own
    * options (from `Retry.options` and any `onRetry` return value).
    */
-  options: RetryCallOptions<MODEL>;
+  options: ModelRetryCallOptions<MODEL>;
 };
 
 /**
@@ -85,7 +83,7 @@ export type RetryCallRunOptions = {
  * The attempt that ended the retry loop: the one whose call function returned,
  * after which no further fail-over is possible.
  *
- * Deliberately distinct from the model-level `SuccessAttempt`, which carries a
+ * Deliberately distinct from the model-level `ModelSuccessAttempt`, which carries a
  * model result and full call options. Neither has an equivalent here: the
  * result is the call function's own and reaches the caller through `run`, and
  * the options are only the per-attempt overrides, since the driver has no call
@@ -95,7 +93,7 @@ export type RetryCallCompleteAttempt<MODEL extends AnyModel = LanguageModel> = {
   /** The model whose attempt ended the loop. */
   model: MODEL;
   /** The per-attempt overrides applied to that attempt. */
-  options: RetryCallOptions<MODEL>;
+  options: ModelRetryCallOptions<MODEL>;
 };
 
 /**
@@ -109,7 +107,7 @@ export type RetryCallCompleteContext<MODEL extends AnyModel = LanguageModel> = {
    * The preceding attempts that were retried, in order. Empty when the first
    * attempt returned. The final attempt is `current` and is not repeated here.
    */
-  attempts: Array<RetryAttempt<MODEL>>;
+  attempts: Array<ModelRetryAttempt<MODEL>>;
 };
 
 /**
@@ -134,7 +132,7 @@ export interface RetryableCallOptions<MODEL extends AnyModel = LanguageModel> {
   /** Base model used for the first attempt (resolved on first use). */
   model: ResolvableModel<MODEL>;
   /** Retry handlers / fallback models, evaluated on each error. */
-  retries: Retries<MODEL>;
+  retries: ModelRetries<MODEL>;
   disabled?: boolean | (() => boolean);
   /**
    * Controls when to reset back to the base model after a successful retry.
@@ -149,14 +147,14 @@ export interface RetryableCallOptions<MODEL extends AnyModel = LanguageModel> {
    * operations and attempts. Requires `@opentelemetry/api`.
    */
   experimental_telemetry?: RetryTelemetrySettings;
-  onError?: (context: RetryContext<MODEL>) => void;
+  onError?: (context: ModelRetryContext<MODEL>) => void;
   /**
    * Called after a retry has been decided and the next model selected, but
    * before the retry call is issued. May return partial overrides for the
    * upcoming attempt.
    */
   onRetry?: (
-    context: RetryContext<MODEL>,
+    context: ModelRetryContext<MODEL>,
   ) => void | OnRetryOverrides<MODEL> | Promise<void | OnRetryOverrides<MODEL>>;
   /**
    * Called once the call function returns, so the driver stops retrying.
@@ -186,7 +184,7 @@ export interface RetryableCallOptions<MODEL extends AnyModel = LanguageModel> {
    * is simply no failed attempt to hand over. Also silent when retries are
    * disabled.
    */
-  onFailure?: (context: FailureContext<MODEL>) => void;
+  onFailure?: (context: ModelFailureContext<MODEL>) => void;
 }
 
 /**
@@ -209,7 +207,7 @@ type ResolvedCallOptions<MODEL extends AnyModel> = Omit<
 function resolveRetryOptions<MODEL extends AnyModel>(
   currentRetry: Retry<MODEL> | undefined,
   onRetryOverrides: OnRetryOverrides<MODEL> | undefined,
-): RetryCallOptions<MODEL> {
+): ModelRetryCallOptions<MODEL> {
   const retryOptions = currentRetry?.options ?? {};
   const overrideOptions = onRetryOverrides?.options ?? {};
   const providerOptions =
@@ -222,7 +220,7 @@ function resolveRetryOptions<MODEL extends AnyModel>(
     ...retryOptions,
     ...overrideOptions,
     ...(providerOptions ? { providerOptions } : {}),
-  } as RetryCallOptions<MODEL>;
+  } as ModelRetryCallOptions<MODEL>;
 }
 
 /**
@@ -233,7 +231,7 @@ function resolveRetryOptions<MODEL extends AnyModel>(
  * entry point (`streamText`, `generateText`, …).
  *
  * Generic over the model kind; the resolved/conditional model types
- * (`ResolvedModel<MODEL>` from `findRetryModel`, `RetryAttempt<MODEL>`) collapse
+ * (`ResolvedModel<MODEL>` from `findRetryModel`, `ModelRetryAttempt<MODEL>`) collapse
  * to `MODEL` at runtime but TS can't prove it for a generic `MODEL`, so a few
  * casts bridge the gap — the same friction `evaluateError`/`findRetryModel`
  * already absorb internally.
@@ -261,7 +259,7 @@ class RetryableCall<MODEL extends AnyModel> extends BaseRetryableModel<MODEL> {
    */
   private emitComplete(
     current: RetryCallCompleteAttempt<MODEL>,
-    attempts: Array<RetryAttempt<MODEL>>,
+    attempts: Array<ModelRetryAttempt<MODEL>>,
   ) {
     this.callOptions.onComplete?.({ current, attempts });
   }
@@ -270,7 +268,10 @@ class RetryableCall<MODEL extends AnyModel> extends BaseRetryableModel<MODEL> {
    * Fire the `onFailure` callback for a terminally failed call. The final
    * attempt (last entry of `attempts`) is surfaced as `current`.
    */
-  private emitFailure(attempts: Array<RetryAttempt<MODEL>>, error: unknown) {
+  private emitFailure(
+    attempts: Array<ModelRetryAttempt<MODEL>>,
+    error: unknown,
+  ) {
     if (!this.callOptions.onFailure) return;
     const current = attempts.at(-1);
     if (!current || !isErrorAttempt(current)) return;
@@ -278,7 +279,7 @@ class RetryableCall<MODEL extends AnyModel> extends BaseRetryableModel<MODEL> {
       current,
       attempts,
       error,
-    } as unknown as FailureContext<MODEL>);
+    } as unknown as ModelFailureContext<MODEL>);
   }
 
   async run<RESULT>(
@@ -301,7 +302,7 @@ class RetryableCall<MODEL extends AnyModel> extends BaseRetryableModel<MODEL> {
         attempt: 1,
         timeout: runOptions?.timeout,
         abortSignal: runOptions?.abortSignal,
-        options: {} as RetryCallOptions<MODEL>,
+        options: {} as ModelRetryCallOptions<MODEL>,
       });
     }
 
@@ -319,7 +320,7 @@ class RetryableCall<MODEL extends AnyModel> extends BaseRetryableModel<MODEL> {
      * Track all attempts. The driver is purely error-based: a returned result
      * is terminal and never re-evaluated.
      */
-    const attempts: Array<RetryAttempt<MODEL>> = [];
+    const attempts: Array<ModelRetryAttempt<MODEL>> = [];
 
     /**
      * Track current retry configuration.
@@ -344,7 +345,7 @@ class RetryableCall<MODEL extends AnyModel> extends BaseRetryableModel<MODEL> {
           const context = {
             current: currentAttempt,
             attempts: [...attempts],
-          } as unknown as RetryContext<MODEL>;
+          } as unknown as ModelRetryContext<MODEL>;
 
           onRetryOverrides =
             (await this.callOptions.onRetry?.(context)) ?? undefined;
@@ -396,7 +397,7 @@ class RetryableCall<MODEL extends AnyModel> extends BaseRetryableModel<MODEL> {
             options: {
               abortSignal: runOptions?.abortSignal,
               ...options,
-            } as CallOptions<MODEL>,
+            } as ModelCallOptions<MODEL>,
             attempts,
             retries: this.options.retries,
             onError: this.callOptions.onError,
@@ -405,7 +406,7 @@ class RetryableCall<MODEL extends AnyModel> extends BaseRetryableModel<MODEL> {
           const retryModel = evaluation.retryModel as Retry<MODEL> | undefined;
           const finalError = evaluation.finalError;
 
-          attempts.push(evaluation.attempt as RetryAttempt<MODEL>);
+          attempts.push(evaluation.attempt as ModelRetryAttempt<MODEL>);
 
           /**
            * No retry matched. Surface the error, wrapped in a `RetryError`
@@ -494,6 +495,15 @@ class RetryableCall<MODEL extends AnyModel> extends BaseRetryableModel<MODEL> {
  * Defaults to `LanguageModel` — the only model kind with a call-level entry
  * point today — but is generic over the model kind for future call-level
  * retries (embeddings, images).
+ *
+ * @deprecated Use `retryableGenerateText` / `retryableStreamText` / `retryableEmbed`
+ * / `retryableEmbedMany` / `retryableGenerateImage` from `ai-retry`. They take the
+ * entry point's own arguments plus a `retry` field, so there is no call function to
+ * write and no per-attempt wiring to get right: the model, the deadline and the
+ * argument overrides are applied for you. They also handle result-based conditions,
+ * which this driver cannot — it never inspects what the call function returned.
+ *
+ * Still exported so existing code keeps working; scheduled for removal.
  */
 export function createRetryableCall<MODEL extends AnyModel = LanguageModel>(
   options: RetryableCallOptions<MODEL>,

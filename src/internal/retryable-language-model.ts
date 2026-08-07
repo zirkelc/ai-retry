@@ -15,9 +15,9 @@ import type {
   LanguageModelStreamPart,
   OnRetryOverrides,
   Retry,
-  RetryAttempt,
-  RetryContext,
-  RetryResultAttempt,
+  ModelRetryAttempt,
+  ModelRetryContext,
+  ModelRetryResultAttempt,
 } from '../types.js';
 import {
   isErrorAttempt,
@@ -51,12 +51,12 @@ export class RetryableLanguageModel
   >(input: {
     fn: (retryCallOptions: LanguageModelCallOptions) => Promise<RESULT>;
     callOptions: LanguageModelCallOptions;
-    attempts?: Array<RetryAttempt<LanguageModel>>;
+    attempts?: Array<ModelRetryAttempt<LanguageModel>>;
     currentRetry?: Retry<LanguageModel>;
     recorder?: RetryTelemetry;
   }): Promise<{
     result: RESULT;
-    attempts: Array<RetryAttempt<LanguageModel>>;
+    attempts: Array<ModelRetryAttempt<LanguageModel>>;
     callOptions: LanguageModelCallOptions;
     /**
      * For stream results: the still-open attempt span number, to be closed by
@@ -67,7 +67,8 @@ export class RetryableLanguageModel
     /**
      * Track all attempts.
      */
-    const attempts: Array<RetryAttempt<LanguageModel>> = input.attempts ?? [];
+    const attempts: Array<ModelRetryAttempt<LanguageModel>> =
+      input.attempts ?? [];
 
     /**
      * Track current retry configuration.
@@ -86,7 +87,7 @@ export class RetryableLanguageModel
        */
       let onRetryOverrides: OnRetryOverrides<LanguageModel> | undefined;
       if (previousAttempt) {
-        const currentAttempt: RetryAttempt<LanguageModel> = {
+        const currentAttempt: ModelRetryAttempt<LanguageModel> = {
           ...previousAttempt,
           model: this.currentModel,
         };
@@ -96,7 +97,7 @@ export class RetryableLanguageModel
          */
         const updatedAttempts = [...attempts];
 
-        const context: RetryContext<LanguageModel> = {
+        const context: ModelRetryContext<LanguageModel> = {
           current: currentAttempt,
           attempts: updatedAttempts,
         };
@@ -255,12 +256,13 @@ export class RetryableLanguageModel
    */
   private async handleResult(
     result: LanguageModelResult,
-    attempts: ReadonlyArray<RetryAttempt<LanguageModel>>,
+    attempts: ReadonlyArray<ModelRetryAttempt<LanguageModel>>,
     callOptions: LanguageModelCallOptions,
   ) {
-    const resultAttempt: RetryResultAttempt = {
+    const resultAttempt: ModelRetryResultAttempt = {
       type: 'result',
       result: result,
+      finishReason: result.finishReason.unified,
       model: this.currentModel,
       options: callOptions,
     };
@@ -270,7 +272,7 @@ export class RetryableLanguageModel
      */
     const updatedAttempts = [...attempts, resultAttempt];
 
-    const context: RetryContext<LanguageModel> = {
+    const context: ModelRetryContext<LanguageModel> = {
       current: resultAttempt,
       attempts: updatedAttempts,
     };
@@ -295,7 +297,7 @@ export class RetryableLanguageModel
    */
   private handleError(
     error: unknown,
-    attempts: ReadonlyArray<RetryAttempt<LanguageModel>>,
+    attempts: ReadonlyArray<ModelRetryAttempt<LanguageModel>>,
     callOptions: LanguageModelCallOptions,
   ) {
     return evaluateError({
@@ -314,7 +316,7 @@ export class RetryableLanguageModel
    * final attempt (last entry of `attempts`) is surfaced as `current`.
    */
   private emitFailure(
-    attempts: Array<RetryAttempt<LanguageModel>>,
+    attempts: Array<ModelRetryAttempt<LanguageModel>>,
     error: unknown,
   ) {
     if (!this.options.onFailure) return;
@@ -350,7 +352,7 @@ export class RetryableLanguageModel
      * Shared attempts array, threaded into `withRetry` so it stays populated
      * (including the final failed attempt) when the retry loop throws.
      */
-    const attempts: Array<RetryAttempt<LanguageModel>> = [];
+    const attempts: Array<ModelRetryAttempt<LanguageModel>> = [];
     let operationError: unknown;
     /**
      * Only the retry loop is guarded. `onSuccess` runs after it, so a throwing
@@ -429,7 +431,7 @@ export class RetryableLanguageModel
      * Shared attempts array, threaded into `withRetry` so it stays populated
      * (including the final failed attempt) when the retry loop throws.
      */
-    let attempts: Array<RetryAttempt<LanguageModel>> = [];
+    let attempts: Array<ModelRetryAttempt<LanguageModel>> = [];
     let finalCallOptions: LanguageModelCallOptions;
     /**
      * The open attempt span for the stream currently being consumed, closed

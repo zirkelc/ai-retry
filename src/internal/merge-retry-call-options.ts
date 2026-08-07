@@ -1,4 +1,5 @@
 import type {
+  AnyModel,
   EmbeddingModel,
   EmbeddingModelCallOptions,
   ImageModel,
@@ -20,23 +21,17 @@ import { isTimeoutError } from './guards.js';
  *   3. `currentRetry.providerOptions` (deprecated top-level form)
  *   4. `base` (call options' own `providerOptions`)
  */
-function resolveProviderOptions<
-  MODEL extends LanguageModel | EmbeddingModel | ImageModel,
->(
+function resolveProviderOptions<MODEL extends AnyModel>(
   base: ProviderOptions,
   currentRetry: Retry<MODEL> | undefined,
   onRetryOverrides: OnRetryOverrides<MODEL> | undefined,
 ): ProviderOptions;
-function resolveProviderOptions<
-  MODEL extends LanguageModel | EmbeddingModel | ImageModel,
->(
+function resolveProviderOptions<MODEL extends AnyModel>(
   base: ProviderOptions | undefined,
   currentRetry: Retry<MODEL> | undefined,
   onRetryOverrides: OnRetryOverrides<MODEL> | undefined,
 ): ProviderOptions | undefined;
-function resolveProviderOptions<
-  MODEL extends LanguageModel | EmbeddingModel | ImageModel,
->(
+function resolveProviderOptions<MODEL extends AnyModel>(
   base: ProviderOptions | undefined,
   currentRetry: Retry<MODEL> | undefined,
   onRetryOverrides: OnRetryOverrides<MODEL> | undefined,
@@ -61,9 +56,7 @@ function resolveProviderOptions<
  * other reason it propagates. Without a retry timeout, the base is preserved
  * unchanged.
  */
-export function resolveAbortSignal<
-  MODEL extends LanguageModel | EmbeddingModel | ImageModel,
->(
+export function resolveAbortSignal<MODEL extends AnyModel>(
   base: AbortSignal | undefined,
   currentRetry: Retry<MODEL> | undefined,
 ): AbortSignal | undefined {

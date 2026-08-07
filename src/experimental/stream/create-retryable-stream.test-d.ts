@@ -2,8 +2,8 @@ import { describe, expectTypeOf, it } from 'vitest';
 import { MockLanguageModel } from '../../internal/test-utils.js';
 import type {
   LanguageModel,
-  RetryAttempt,
-  RetryCallOptions,
+  ModelRetryAttempt,
+  ModelRetryCallOptions,
 } from '../../types.js';
 import { createRetryableStream } from './create-retryable-stream.js';
 
@@ -17,10 +17,10 @@ describe('createRetryableStream types', () => {
         // Assert
         expectTypeOf(context.current.model).toEqualTypeOf<LanguageModel>();
         expectTypeOf(context.current.options).toEqualTypeOf<
-          RetryCallOptions<LanguageModel>
+          ModelRetryCallOptions<LanguageModel>
         >();
         expectTypeOf(context.attempts).toEqualTypeOf<
-          Array<RetryAttempt<LanguageModel>>
+          Array<ModelRetryAttempt<LanguageModel>>
         >();
         expectTypeOf(context.current).not.toHaveProperty('result');
       },

@@ -3,6 +3,18 @@ import type { LanguageModelStreamPart } from '../../types.js';
 import type { RetryCallAttempt } from '../call/create-retryable-call.js';
 
 /**
+ * Frozen copy, kept only for the deprecated `createRetryableStream`.
+ *
+ * `internal/detect-stream-commit.ts` is the maintained version. It reports its
+ * outcome rather than resolving void, so a contentless finish can be judged
+ * against result conditions, and it takes the caller's signal directly instead
+ * of an attempt. Those signatures are incompatible, and this one is exported
+ * from a released subpath, so it stays as-is until that subpath is removed.
+ *
+ * Fix bugs in both.
+ */
+
+/**
  * An `abort` part as emitted by `streamText`/`streamObject` when a deadline
  * fires: the reason is serialized to a string (`getErrorMessage`, i.e.
  * `error.toString()`, so `"<name>: <message>"` for an `Error`/`DOMException`).

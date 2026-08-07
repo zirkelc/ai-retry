@@ -20,9 +20,9 @@ import { serviceUnavailable } from '../retryables/service-unavailable.js';
 import type {
   ImageModel,
   OnRetryOverrides,
-  Retryable,
+  ModelRetryable,
   RetryableModelOptions,
-  RetryContext,
+  ModelRetryContext,
 } from '../types.js';
 import { isErrorAttempt } from './guards.js';
 
@@ -62,7 +62,7 @@ describe('generateImage', () => {
         const baseModel = MockImageModel.from(retryableError);
         const fallbackModel = MockImageModel.from(mockImageResult);
 
-        const fallbackRetryable = (context: RetryContext<ImageModel>) => {
+        const fallbackRetryable = (context: ModelRetryContext<ImageModel>) => {
           if (
             isErrorAttempt(context.current) &&
             APICallError.isInstance(context.current.error)
@@ -115,7 +115,7 @@ describe('generateImage', () => {
         const fallbackModel1 = MockImageModel.from(mockImageResult);
         const fallbackModel2 = MockImageModel.from(mockImageResult);
 
-        const fallbackRetryable = (context: RetryContext<ImageModel>) => {
+        const fallbackRetryable = (context: ModelRetryContext<ImageModel>) => {
           if (
             isErrorAttempt(context.current) &&
             APICallError.isInstance(context.current.error)
@@ -149,7 +149,7 @@ describe('generateImage', () => {
       const baseModel = MockImageModel.from(retryableError);
       const fallbackModel = MockImageModel.from(mockImageResult);
 
-      const fallbackRetryable: Retryable<ImageModel> = () => {
+      const fallbackRetryable: ModelRetryable<ImageModel> = () => {
         return { model: fallbackModel, maxAttempts: 1 };
       };
 
@@ -175,7 +175,7 @@ describe('generateImage', () => {
       const baseModel = MockImageModel.from(retryableError);
       const fallbackModel = MockImageModel.from(mockImageResult);
 
-      const fallbackRetryable: Retryable<ImageModel> = () => {
+      const fallbackRetryable: ModelRetryable<ImageModel> = () => {
         return { model: fallbackModel, maxAttempts: 1 };
       };
 
@@ -205,7 +205,7 @@ describe('generateImage', () => {
 
       const onErrorSpy = vi.fn<OnError>();
 
-      const fallbackRetryable: Retryable<ImageModel> = () => {
+      const fallbackRetryable: ModelRetryable<ImageModel> = () => {
         return { model: fallbackModel, maxAttempts: 1 };
       };
 
@@ -233,7 +233,7 @@ describe('generateImage', () => {
 
       const onRetrySpy = vi.fn<OnRetry>();
 
-      const fallbackRetryable: Retryable<ImageModel> = () => {
+      const fallbackRetryable: ModelRetryable<ImageModel> = () => {
         return { model: fallbackModel, maxAttempts: 1 };
       };
 
@@ -533,7 +533,7 @@ describe('generateImage', () => {
       const baseModel = MockImageModel.from(retryableError);
       const fallbackModel = MockImageModel.from(nonRetryableError);
 
-      const fallbackRetryable = (context: RetryContext<ImageModel>) => {
+      const fallbackRetryable = (context: ModelRetryContext<ImageModel>) => {
         if (
           isErrorAttempt(context.current) &&
           APICallError.isInstance(context.current.error) &&
@@ -565,7 +565,7 @@ describe('generateImage', () => {
         const baseModel = MockImageModel.from(retryableError);
         const fallbackModel = MockImageModel.from(retryableError);
 
-        const fallbackRetryable = (context: RetryContext<ImageModel>) => {
+        const fallbackRetryable = (context: ModelRetryContext<ImageModel>) => {
           if (isErrorAttempt(context.current)) {
             return { model: fallbackModel, maxAttempts: 2 };
           }
@@ -595,7 +595,7 @@ describe('generateImage', () => {
         const baseModel = MockImageModel.from(retryableError);
         const fallbackModel = MockImageModel.from(mockImageResult);
 
-        const fallbackRetryable: Retryable<ImageModel> = () => {
+        const fallbackRetryable: ModelRetryable<ImageModel> = () => {
           return { model: fallbackModel, maxAttempts: 1, delay: 1000 };
         };
 
