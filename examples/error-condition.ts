@@ -5,7 +5,7 @@ import {
   createRetryableModel,
   error,
   timeout,
-} from '../src/language-model/index.js';
+} from '../src/model/language-model/index.js';
 
 /**
  * The `error(predicate)` condition takes an arbitrary predicate over the

@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { buildErrorContext, MockLanguageModel } from '../test-utils.js';
+import {
+  buildErrorContext,
+  falsy,
+  MockLanguageModel,
+  truthy,
+} from '../test-utils.js';
 import { Condition } from './condition.js';
 import { not } from './not.js';
 
 const ctx = buildErrorContext(new Error('boom'));
-
-const truthy = new Condition<MockLanguageModel>(() => true);
-const falsy = new Condition<MockLanguageModel>(() => false);
 
 describe('not', () => {
   it(`should invert a matching condition`, async () => {

@@ -257,10 +257,12 @@ A `Condition` is a typed predicate over a retry context. The library ships two *
 
 Conditions come in two sets, one per retry layer, and they are not interchangeable:
 
-| import from                               | for                                             |
-| ----------------------------------------- | ----------------------------------------------- |
-| `ai-retry/<family>-model/conditions`      | `createRetryableModel`                          |
-| `ai-retry/call/<family>-model/conditions` | the [call-level functions](#call-level-retries) |
+| import from                          | for                                             |
+| ------------------------------------ | ----------------------------------------------- |
+| `ai-retry/<family>-model/conditions` | `createRetryableModel`                          |
+| `ai-retry/<function>/conditions`     | the [call-level functions](#call-level-retries) |
+
+The model layer is keyed on the model family (`language-model`, `embedding-model`, `image-model`), the call layer on the entry point (`generate-text`, `stream-text`, `embed`, `embed-many`, `generate-image`), because that is the granularity at which each knows what a result looks like.
 
 The names are the same on both sides, and so are the error conditions. What differs is what a **result** condition sees: below a model it is the provider's result, around a call it is the entry point's own. Mixing them is a type error, reported at the `retries` list — this section documents the model-layer set, and [call-level conditions](#conditions-1) covers the other.
 
@@ -862,18 +864,20 @@ This is specific to `streamText`. The same timeouts on `generateText` recover no
 
 The call-level functions close that gap by re-running the **whole call** with the next model. Each one takes exactly the arguments the SDK entry point takes, plus a `retry` field. The model stays a normal argument and is swapped per attempt.
 
-| function                 | wraps           | model family |
-| ------------------------ | --------------- | ------------ |
-| `retryableGenerateText`  | `generateText`  | language     |
-| `retryableStreamText`    | `streamText`    | language     |
-| `retryableEmbed`         | `embed`         | embedding    |
-| `retryableEmbedMany`     | `embedMany`     | embedding    |
-| `retryableGenerateImage` | `generateImage` | image        |
+| function                 | wraps           | import from               | model family |
+| ------------------------ | --------------- | ------------------------- | ------------ |
+| `retryableGenerateText`  | `generateText`  | `ai-retry/generate-text`  | language     |
+| `retryableStreamText`    | `streamText`    | `ai-retry/stream-text`    | language     |
+| `retryableEmbed`         | `embed`         | `ai-retry/embed`          | embedding    |
+| `retryableEmbedMany`     | `embedMany`     | `ai-retry/embed-many`     | embedding    |
+| `retryableGenerateImage` | `generateImage` | `ai-retry/generate-image` | image        |
+
+Each is also re-exported from the package root, deprecated: the conditions live only on the per-function path, so importing the function from the same place keeps a call and the retries it is configured with in one import.
 
 ```typescript
 import { openai } from '@ai-sdk/openai';
-import { retryableStreamText } from 'ai-retry';
-import { timeout } from 'ai-retry/call/language-model/conditions';
+import { retryableStreamText } from 'ai-retry/stream-text';
+import { timeout } from 'ai-retry/stream-text/conditions';
 
 const result = await retryableStreamText({
   model: openai('gpt-4o'),
@@ -890,62 +894,52 @@ Everything else is unchanged: the same `Retry` fields (`maxAttempts`, `delay`, `
 
 #### Conditions
 
-Import them from `ai-retry/call/<family>-model/conditions`:
+Import them from `ai-retry/<function>/conditions`, the same path family as the function itself:
 
 ```typescript
-import {
-  finishReason,
-  httpStatus,
-} from 'ai-retry/call/language-model/conditions';
-import {
-  isEmbedResult,
-  result,
-} from 'ai-retry/call/embedding-model/conditions';
-import { noImage } from 'ai-retry/call/image-model/conditions';
+import { finishReason, httpStatus } from 'ai-retry/generate-text/conditions';
+import { result } from 'ai-retry/embed/conditions';
+import { noImage } from 'ai-retry/generate-image/conditions';
 ```
 
 The error conditions (`error`, `httpStatus`, `timeout`, `aborted`) behave exactly as their model-level namesakes. `result()` is where the two layers genuinely differ, and the type system keeps them apart: a model-level condition in a call-level `retry` is a type error, and the reverse too.
 
-**`result()` receives the entry point's own result** — the object you would have got back — rather than a provider result reconstructed from it. A family reachable through more than one entry point gets a union discriminated by `operation`, so fields the entry points share read directly and the rest need a guard:
+**`result()` receives the entry point's own result** — the object you would have got back — rather than a provider result reconstructed from it. There is one result type per entry point, so every field reads directly and nothing needs narrowing:
 
 ```typescript
-import {
-  isGenerateTextResult,
-  result,
-} from 'ai-retry/call/language-model/conditions';
+import { result } from 'ai-retry/generate-text/conditions';
 
 result((res) => {
-  /** Both entry points report these. */
   if (res.finishReason === 'content-filter') return true;
   if (res.usage.outputTokens === 0) return true;
-
-  /** Only a completed `generateText` has text. */
-  if (isGenerateTextResult(res)) return res.text.length < 10;
-
-  return false;
+  return res.text.length < 10;
 }).switch({ model: fallbackModel });
 ```
 
-| family    | union members                | guards                                       |
-| --------- | ---------------------------- | -------------------------------------------- |
-| language  | `generateText`, `streamText` | `isGenerateTextResult`, `isStreamTextResult` |
-| embedding | `embed`, `embedMany`         | `isEmbedResult`, `isEmbedManyResult`         |
-| image     | `generateImage`              | `isGenerateImageResult` (never needed)       |
+| import from                          | `result()` receives                                     |
+| ------------------------------------ | ------------------------------------------------------- |
+| `ai-retry/generate-text/conditions`  | the completed `generateText` result                     |
+| `ai-retry/stream-text/conditions`    | `finishReason`, `usage`, `providerMetadata` — see below |
+| `ai-retry/embed/conditions`          | the completed `embed` result (`embedding`)              |
+| `ai-retry/embed-many/conditions`     | the completed `embedMany` result (`embeddings`)         |
+| `ai-retry/generate-image/conditions` | the completed `generateImage` result                    |
 
-`result()` works for **every** family here, not just language: `retryableEmbed` can fail over on a degenerate embedding and `retryableGenerateImage` on too few images, neither of which is an error.
+Because the types differ, so does what each import is accepted for. A `result()` from `generate-text/conditions` reads `res.text`, which a stream that has not committed cannot have produced — writing it into `retryableStreamText`'s `retry` is a type error. Error conditions read no result at all and fit anywhere in their model family, which is why one `timeout()` can serve both language entry points.
+
+**`streamText` is the case where the commit result is not the result.** `StreamTextResult` exposes every field as a promise that settles only once the stream has been consumed, and consuming it is exactly what a pre-commit judgement must not do. So a condition there sees what the stream's terminal parts report instead, and no content at all — any content part would have committed the attempt and put it beyond retry.
+
+`result()` works for **every** entry point here, not just the language ones: `retryableEmbed` can fail over on a degenerate embedding and `retryableGenerateImage` on too few images, neither of which is an error.
 
 ```typescript
-import { result } from 'ai-retry/call/image-model/conditions';
+import { result } from 'ai-retry/generate-image/conditions';
 
-/** One member, so nothing needs narrowing. */
 result((res) => res.images.length < 2).switch({ model: fallbackModel });
 ```
 
-To type tool calls against a specific tool set, name it at the condition — `result<typeof tools>(...)`. It cannot be asserted at the guard, because narrowing works within the type the predicate was handed. Naming it is unchecked, and beyond that the tool calls behave exactly as they do on a direct `generateText` call: they are static or dynamic, and only a static one has a known name.
+To type tool calls against a specific tool set, name it at the condition — `result<typeof tools>(...)`. There is no call site to infer it from, since a condition is written against the entry point rather than against one call. Naming it is unchecked, and beyond that the tool calls behave exactly as they do on a direct `generateText` call: they are static or dynamic, and only a static one has a known name.
 
 ```typescript
 result<typeof tools>((res) => {
-  if (!isGenerateTextResult(res)) return false;
   const call = res.toolCalls[0];
   return call !== undefined && !call.dynamic && call.toolName === 'lookup';
 }).retry({ maxAttempts: 3 });
@@ -1165,20 +1159,22 @@ Conditions are produced by the low-level (`error`, `result`) and high-level (`ht
 
 `LAYER` decides which context the predicate sees and which retryable comes out — `ModelRetryContext` / `ModelRetryable` for `'model'`, `CallRetryContext` / `CallRetryable` for `'call'`. It defaults to `'model'`, so `Condition<MODEL>` means what it always did. The combinators follow whichever layer their arguments belong to; a combinator handed both produces something neither `retries` list accepts.
 
+A third parameter, `COMMIT`, carries the result a call-level predicate reads. It defaults to `unknown` — the permissive end, since it reaches the surface only through the predicate's parameter — so an error condition fits every entry point, and a `result()` condition fits only the one whose result it was written against.
+
 #### Naming: `Model*` and `Call*`
 
 Types that belong to one retry layer carry its prefix, so the two never read alike:
 
-| model layer (`createRetryableModel`)  | call layer (the retry functions) |
-| ------------------------------------- | -------------------------------- |
-| `ModelRetryContext`                   | `CallRetryContext`               |
-| `ModelRetryAttempt`                   | `CallRetryAttempt`               |
-| `ModelRetryable` / `ModelRetries`     | `CallRetryable` / `CallRetries`  |
-| `ModelSuccessContext`                 | `CallSuccessContext`             |
-| `ModelFailureContext`                 | `CallFailureContext`             |
-| `ModelFinishReason` (provider-shaped) | `CallFinishReason` (SDK-shaped)  |
-| `ModelCallOptions` (provider options) | `CallArgs` (entry point args)    |
-| `ModelResult`                         | `CallResult`                     |
+| model layer (`createRetryableModel`)  | call layer (the retry functions)  |
+| ------------------------------------- | --------------------------------- |
+| `ModelRetryContext`                   | `CallRetryContext`                |
+| `ModelRetryAttempt`                   | `CallRetryAttempt`                |
+| `ModelRetryable` / `ModelRetries`     | `CallRetryable` / `CallRetries`   |
+| `ModelSuccessContext`                 | `CallSuccessContext`              |
+| `ModelFailureContext`                 | `CallFailureContext`              |
+| `ModelFinishReason` (provider-shaped) | `CallFinishReason` (SDK-shaped)   |
+| `ModelCallOptions` (provider options) | `CallArgs` (entry point args)     |
+| `ModelResult` (provider result)       | `*CommitResult` (per entry point) |
 
 `Retry`, `OnRetryOverrides`, `Reset` and `RetryTelemetrySettings` are genuinely shared and carry no prefix.
 

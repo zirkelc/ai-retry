@@ -25,11 +25,22 @@ Two layers offer retries, and they differ in _where_ the retry sits relative to 
 - **`create-retryable-model.ts`**: Main factory function that creates a retryable model wrapper implementing `LanguageModelV2`
 - **`RetryableModel` class**: Wraps any AI model and handles retry logic with state tracking across attempts
 - **`src/retryables/`**: Individual retry handlers for specific error conditions
-- **`src/call/`**: The call-level API. One loop (`run-retry-loop.ts`), the shared machinery (`retryable-calls.ts` — two deadline strategies plus `defineRetryableCall`), and one module per entry point under `call/<family>-model/functions/` holding its row, its hand-written signature and its export. Each entry point owns its `.test.ts` and `.test-d.ts` beside it; behavior that belongs to the shared loop rather than to one entry point is tested once in `run-retry-loop.test.ts`. Both layers share the internals under `src/internal/`.
-- **`src/call/types.ts` + `src/call/guards.ts`**: what a call-level condition judges. The result is the entry point's own, tagged with its `operation`, so each family is a discriminated union (`generateText` | `streamText`, `embed` | `embedMany`, `generateImage`) narrowed by the `is*Result` guards. `CallRetryContext` is deliberately a **different type** from the model layer's `RetryContext` — that is the only thing stopping a condition written for one layer from typechecking against the other. The split mirrors the root: `types.ts` type-only, `guards.ts` the narrowing runtime.
-- **`src/call/conditions/` + `src/call/<family>-model/conditions/`**: the call-layer condition API, published as `ai-retry/call/<family>-model/conditions`. `Condition<MODEL, LAYER>` in `src/internal/conditions/` carries a layer tag defaulting to `'model'`, so the model-layer conditions are unchanged and both layers share one implementation of the error API and the combinators.
+- **`src/model/<family>-model/`**: the model-level API, one folder per family, each with its own `conditions/`.
+- **`src/call/<entry-point>/`**: the call-level API, one folder per entry point (`generate-text`, `stream-text`, `embed`, `embed-many`, `generate-image`), each holding its function, its `types.ts` (its commit result), its `conditions/`, and its own `.test.ts` / `.test-d.ts`. Shared beside them: one loop (`run-retry-loop.ts`), the machinery (`retryable-calls.ts` — two deadline strategies plus `defineRetryableCall`), and `conditions/result.ts`. Behavior belonging to the shared loop rather than to one entry point is tested once in `run-retry-loop.test.ts`. Both layers share the internals under `src/internal/`.
+- **`src/call/types.ts`**: the layer's types, carrying what a condition judges only as `COMMIT`. Which result that is belongs to the entry point, so each declares its own in its folder's `types.ts` — `GenerateTextCommitResult`, `StreamTextCommitResult`, and so on. `CallRetryContext` is deliberately a **different type** from the model layer's `ModelRetryContext` — that is the only thing stopping a condition written for one layer from typechecking against the other.
+- **`Condition<MODEL, LAYER, COMMIT>`** in `src/internal/conditions/`: `LAYER` defaults to `'model'`, so the model-layer conditions are unchanged and both layers share one implementation of the error API and the combinators. `COMMIT` defaults to `unknown`, and that is the **permissive** end — it surfaces only through the predicate, making `Condition` contravariant in it, so a condition that never reads the result fits every entry point while a `result()` condition fits only its own. Getting this backwards (`never`) makes error conditions assignable nowhere.
 
-`PLAN.md` is the design record for the call-level API: what was measured, what was rejected, and why. Read it before changing the signatures, the `INPUT`/`OVERRIDE` generics, or the result union — several of the obvious simplifications were tried and are documented as failures, and §14.6 records two probe findings that the implementation later contradicted.
+### Adding an entry point
+
+A new folder under `src/call/`, plus a hand-written `exports` entry in package.json. Nothing central changes — deliberately. If a change would make a new entry point edit a shared conditional type or registry, it is the wrong change; `PLAN.md` §15.3 records that design being rejected for exactly that reason.
+
+`defineRetryableCall<MODEL, ARGS, RESULT, COMMIT = RESULT>`: the default says "what the caller receives is what conditions judge", which holds for four of the five. `streamText` overrides it because its result is a set of promises that settle only on consumption, and consuming it is what a pre-commit judgement must not do. Do not assume that is the only such case.
+
+### The export map is hand-written
+
+`src/` splits at the top into the two retry layers and **neither segment appears in the published path** (`src/call/generate-text/` → `ai-retry/generate-text`, `src/model/language-model/` → `ai-retry/language-model`). So the map cannot be derived from the layout, `tsdown`'s `exports: true` is off, and package.json carries it. `publint` and `attw` check that listed entries resolve; `src/index.test.ts` checks the other direction, that every built `index.ts` is listed.
+
+`PLAN.md` is the design record for the call-level API: what was measured, what was rejected, and why. Read it before changing the signatures, the `INPUT`/`OVERRIDE`/`COMMIT` generics, or the export shape — several of the obvious simplifications were tried and are documented as failures. §14 describes a family-keyed design with a discriminated result union that §15 supersedes; where they disagree, §15 is what shipped.
 
 ### Retry System Design
 
@@ -71,20 +82,22 @@ const retryableModel = createRetryable({
 - TypeScript with strict configuration using @total-typescript/tsconfig
 - Vitest for testing with MSW for HTTP mocking
 - Model-level wrappers support `generateText`, `generateObject`, `streamText`, and `streamObject`
-- The call-level functions cover `generateText`, `streamText`, `embed`, `embedMany`, `generateImage`; the object entry points are deliberately out of scope (`streamObject`'s `fullStream` is not a fresh tee, so reading it for commit detection destroys the caller's stream)
+- The call-level functions cover `generateText`, `streamText`, `embed`, `embedMany`, `generateImage`, each published at `ai-retry/<function>` with its conditions at `ai-retry/<function>/conditions`; the object entry points are deliberately out of scope (`streamObject`'s `fullStream` is not a fresh tee, so reading it for commit detection destroys the caller's stream)
 - Streaming retry support with limitations: retries only possible before content starts flowing
 
 ## Key Implementation Details
 
 - **Retry Loop Prevention**: Uses model keys (`provider/modelId`) to track attempts per model
-- **Two Retry Types**: Error-based (API failures) and result-based (content filtering, schema mismatches). Result-based retries work for every family at the call level; at the model level they are language-only, since the embedding and image wrappers have no result branch.
-- **Tagging results**: `tagResult` in `src/call/tag-result.ts` is a `Proxy`, not a copy. The SDK's results expose most of themselves through prototype getters, so `{ operation, ...result }` silently yields `undefined` for `text` and `toolCalls`.
+- **Two Retry Types**: Error-based (API failures) and result-based (content filtering, schema mismatches). Result-based retries work for every entry point at the call level; at the model level they are language-only, since the embedding and image wrappers have no result branch.
+- **Results reach conditions by identity**: the call layer passes the SDK's own object through, never a copy. This matters because SDK results expose most of themselves through prototype getters, so anything rebuilt with a spread silently yields `undefined` for `text` and `toolCalls`. An earlier design tagged results with an `operation` discriminant via a `Proxy` to avoid exactly that; per-entry-point conditions removed the need for the tag, and the `Proxy` with it.
 - **State Management**: `RetryableModel` class maintains current model and tracks all attempts
 - **Error Handling**: Throws `RetryError` when all retries fail, original error when no retries attempted
 
 ## Type naming
 
 Types belonging to one retry layer carry its prefix: `ModelRetryContext` / `CallRetryContext`, `ModelRetryAttempt` / `CallRetryAttempt`, `ModelRetryable` / `CallRetryable`, `ModelCallOptions` (provider options) / `CallArgs` (entry point args), and so on. `Retry`, `OnRetryOverrides`, `Reset` and `RetryTelemetrySettings` are shared and carry no prefix.
+
+The call layer's results are the exception, because they belong to an entry point rather than to the layer: `GenerateTextCommitResult`, `StreamTextCommitResult`, `EmbedCommitResult`, `EmbedManyCommitResult`, `GenerateImageCommitResult`, each in its own folder's `types.ts`. `*CommitResult` reads as "what a result condition judges at the moment the attempt would commit"; for four of the five it is an alias of the SDK's own result type, and the name is the contract rather than the shape.
 
 The unprefixed names (`RetryContext`, `Retryable`, `CallOptions`, …) predate the call layer and survive as deprecated aliases in `src/types.ts`. Use the prefixed ones in new code. `src/types.test-d.ts` pins each alias to be the _same_ type as its replacement, so one cannot drift from the other while both exist.
 

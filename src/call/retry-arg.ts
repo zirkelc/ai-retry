@@ -5,11 +5,11 @@ import type {
 } from '../types.js';
 import type {
   CallFailureContext,
+  CallFinishReason,
   CallRetries,
   CallRetryAttempt,
   CallRetryContext,
 } from './types.js';
-import type { CallFinishReason } from './types.js';
 
 /**
  * The attempt that produced the returned result.
@@ -37,7 +37,11 @@ export type CallSuccessAttempt<MODEL extends AnyModel, RESULT> = {
  * The context passed to `onSuccess`, with the attempt that produced the result
  * and the attempts retried before it.
  */
-export type CallSuccessContext<MODEL extends AnyModel, RESULT> = {
+export type CallSuccessContext<
+  MODEL extends AnyModel,
+  RESULT,
+  COMMIT = RESULT,
+> = {
   /** The attempt that produced the result. */
   current: CallSuccessAttempt<MODEL, RESULT>;
   /**
@@ -45,7 +49,7 @@ export type CallSuccessContext<MODEL extends AnyModel, RESULT> = {
    * attempt succeeded. The successful attempt is `current` and is not repeated
    * here.
    */
-  attempts: Array<CallRetryAttempt<MODEL>>;
+  attempts: Array<CallRetryAttempt<MODEL, COMMIT>>;
 };
 
 /**
@@ -62,15 +66,18 @@ export type CallSuccessContext<MODEL extends AnyModel, RESULT> = {
  *   `retries` array to define `INPUT` nor has to repeat every field some
  *   listed retry happens to set.
  * - `RESULT` is what the entry point returns, which `onSuccess` receives.
+ * - `COMMIT` is what a result condition judges. It is the result for most entry
+ *   points, and defaults to it; see `CallRetryContext` for when it is not.
  */
 export type CallRetryOptions<
   MODEL extends AnyModel,
   INPUT,
   OVERRIDE,
   RESULT,
+  COMMIT = RESULT,
 > = {
   /** Retry handlers and fallback models, evaluated on each failed attempt. */
-  retries: CallRetries<MODEL, INPUT>;
+  retries: CallRetries<MODEL, INPUT, COMMIT>;
   /**
    * Bypass the retry machinery entirely, making the call behave exactly as a
    * direct call to the underlying entry point — including the SDK's own
@@ -85,7 +92,7 @@ export type CallRetryOptions<
    */
   telemetry?: RetryTelemetrySettings;
   /** Called for every failed attempt, whether or not a retry follows. */
-  onError?: (context: CallRetryContext<MODEL>) => void;
+  onError?: (context: CallRetryContext<MODEL, COMMIT>) => void;
   /**
    * Called after a retry has been decided and the next model selected, but
    * before the retry call is issued. May return overrides for the upcoming
@@ -95,13 +102,13 @@ export type CallRetryOptions<
    * `onRetry` return value → `Retry.options` → the call's own arguments.
    */
   onRetry?: (
-    context: CallRetryContext<MODEL>,
+    context: CallRetryContext<MODEL, COMMIT>,
   ) =>
     | void
     | OnRetryOverrides<MODEL, OVERRIDE>
     | Promise<void | OnRetryOverrides<MODEL, OVERRIDE>>;
   /** Called once an attempt produces the result the caller receives. */
-  onSuccess?: (context: CallSuccessContext<MODEL, RESULT>) => void;
+  onSuccess?: (context: CallSuccessContext<MODEL, RESULT, COMMIT>) => void;
   /**
    * Called once the call terminally fails: no retry matched, every candidate
    * was tried, the caller's signal was already aborted, or the caller aborted
@@ -111,7 +118,7 @@ export type CallRetryOptions<
    * attempt caused — a callback of your own throwing, for instance. Also
    * silent when retries are disabled.
    */
-  onFailure?: (context: CallFailureContext<MODEL>) => void;
+  onFailure?: (context: CallFailureContext<MODEL, COMMIT>) => void;
 };
 
 /**
@@ -125,9 +132,15 @@ export type CallRetryOptions<
  * retry: [serviceOverloaded(fallback)]
  * retry: { retries: [fallback], onRetry: (ctx) => log(ctx) }
  */
-export type CallRetryArg<MODEL extends AnyModel, INPUT, OVERRIDE, RESULT> =
-  | CallRetries<MODEL, INPUT>
-  | CallRetryOptions<MODEL, INPUT, OVERRIDE, RESULT>;
+export type CallRetryArg<
+  MODEL extends AnyModel,
+  INPUT,
+  OVERRIDE,
+  RESULT,
+  COMMIT = RESULT,
+> =
+  | CallRetries<MODEL, INPUT, COMMIT>
+  | CallRetryOptions<MODEL, INPUT, OVERRIDE, RESULT, COMMIT>;
 
 /**
  * Normalize either `retry` form (or its absence) into the full options object.
@@ -137,9 +150,10 @@ export function toCallRetryOptions<
   INPUT,
   OVERRIDE,
   RESULT,
+  COMMIT = RESULT,
 >(
-  retry: CallRetryArg<MODEL, INPUT, OVERRIDE, RESULT> | undefined,
-): CallRetryOptions<MODEL, INPUT, OVERRIDE, RESULT> {
+  retry: CallRetryArg<MODEL, INPUT, OVERRIDE, RESULT, COMMIT> | undefined,
+): CallRetryOptions<MODEL, INPUT, OVERRIDE, RESULT, COMMIT> {
   if (retry === undefined) return { retries: [] };
   return Array.isArray(retry) ? { retries: retry } : retry;
 }

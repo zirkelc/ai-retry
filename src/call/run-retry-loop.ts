@@ -21,11 +21,11 @@ import type {
 import type {
   CallArgs,
   CallFailureContext,
+  CallFinishReason,
   CallRetryAttempt,
   CallRetryContext,
   CallRetryResultAttempt,
 } from './types.js';
-import type { CallFinishReason, CallResult } from './types.js';
 import type { CallRetryOptions } from './retry-arg.js';
 
 /**
@@ -73,6 +73,7 @@ export type EntryPoint<
   MODEL extends AnyModel,
   ARGS extends RetryLoopArgs,
   RESULT,
+  COMMIT = RESULT,
 > = {
   /** Span name and `ai_retry.operation` attribute. */
   operation: string;
@@ -89,8 +90,7 @@ export type EntryPoint<
   deadline: DeadlineStrategy<ARGS>;
   /**
    * Decides whether a returned result is terminal or still judgeable against
-   * result conditions, and reports it in the shape conditions see — the entry
-   * point's own result, tagged with the operation that produced it. Omitted
+   * result conditions, and reports it in the shape conditions see. Omitted
    * where a returned result is always terminal.
    *
    * Throwing here is indistinguishable from the call throwing, which is what
@@ -100,7 +100,7 @@ export type EntryPoint<
   settle?: (
     result: RESULT,
     callerSignal: AbortSignal | undefined,
-  ) => Promise<Settled<CallResult<MODEL>>>;
+  ) => Promise<Settled<COMMIT>>;
 };
 
 /** Whether the `disabled` switch is on for this call. */
@@ -149,9 +149,9 @@ function resolveOverrides<MODEL extends AnyModel, INPUT>(
  * is surfaced as `current`; a rejection that no attempt caused has none, and
  * stays silent.
  */
-function emitFailure<MODEL extends AnyModel, INPUT, OVERRIDE, RESULT>(
-  options: CallRetryOptions<MODEL, INPUT, OVERRIDE, RESULT>,
-  attempts: Array<CallRetryAttempt<MODEL>>,
+function emitFailure<MODEL extends AnyModel, INPUT, OVERRIDE, RESULT, COMMIT>(
+  options: CallRetryOptions<MODEL, INPUT, OVERRIDE, RESULT, COMMIT>,
+  attempts: Array<CallRetryAttempt<MODEL, COMMIT>>,
   error: unknown,
 ): void {
   if (!options.onFailure) return;
@@ -161,7 +161,7 @@ function emitFailure<MODEL extends AnyModel, INPUT, OVERRIDE, RESULT>(
     current,
     attempts,
     error,
-  } as unknown as CallFailureContext<MODEL>);
+  } as unknown as CallFailureContext<MODEL, COMMIT>);
 }
 
 /**
@@ -190,10 +190,11 @@ export async function runRetryLoop<
   RESULT,
   INPUT,
   OVERRIDE,
+  COMMIT,
 >(input: {
-  entryPoint: EntryPoint<MODEL, ARGS, RESULT>;
+  entryPoint: EntryPoint<MODEL, ARGS, RESULT, COMMIT>;
   args: ARGS;
-  options: CallRetryOptions<MODEL, INPUT, OVERRIDE, RESULT>;
+  options: CallRetryOptions<MODEL, INPUT, OVERRIDE, RESULT, COMMIT>;
 }): Promise<RESULT> {
   const { entryPoint, args, options } = input;
 
@@ -222,7 +223,7 @@ export async function runRetryLoop<
     modelId: baseModel.modelId,
   });
 
-  const attempts: Array<CallRetryAttempt<MODEL>> = [];
+  const attempts: Array<CallRetryAttempt<MODEL, COMMIT>> = [];
   let currentModel = baseModel;
   let currentRetry: Retry<MODEL, INPUT> | undefined;
 
@@ -239,7 +240,7 @@ export async function runRetryLoop<
         const context = {
           current: { ...previousAttempt, model: currentModel },
           attempts: [...attempts],
-        } as unknown as CallRetryContext<MODEL>;
+        } as unknown as CallRetryContext<MODEL, COMMIT>;
 
         onRetryOverrides = (await options.onRetry?.(context)) ?? undefined;
       }
@@ -272,7 +273,7 @@ export async function runRetryLoop<
        * mistaken for a failed attempt and re-run a call that already succeeded.
        */
       let result: RESULT;
-      let settled: Settled<CallResult<MODEL>>;
+      let settled: Settled<COMMIT>;
       try {
         result = await entryPoint.call(attemptArgs);
         settled = (await entryPoint.settle?.(result, callerSignal)) ?? {
@@ -289,7 +290,7 @@ export async function runRetryLoop<
           resolve: entryPoint.resolveGatewayModel,
         });
 
-        attempts.push(evaluation.attempt as CallRetryAttempt<MODEL>);
+        attempts.push(evaluation.attempt as CallRetryAttempt<MODEL, COMMIT>);
 
         /**
          * No retry matched. Surface the error, wrapped in a `RetryError` when
@@ -347,7 +348,7 @@ export async function runRetryLoop<
       if (settled.type === 'result') {
         const finishReason = finishReasonOf(settled.result);
 
-        const resultAttempt: CallRetryResultAttempt<MODEL> = {
+        const resultAttempt: CallRetryResultAttempt<MODEL, COMMIT> = {
           type: 'result',
           result: settled.result,
           model: attemptModel,
@@ -357,9 +358,9 @@ export async function runRetryLoop<
         const context = {
           current: resultAttempt,
           attempts: [...attempts, resultAttempt],
-        } as unknown as CallRetryContext<MODEL>;
+        } as unknown as CallRetryContext<MODEL, COMMIT>;
 
-        const retryModel = (await findRetryModel<MODEL, INPUT>(
+        const retryModel = (await findRetryModel<MODEL, INPUT, COMMIT>(
           options.retries,
           context as never,
           entryPoint.resolveGatewayModel,

@@ -25,19 +25,28 @@ import { isErrorAttempt } from '../guards.js';
  */
 export type RetryLayer = 'model' | 'call';
 
-/** The context a condition of the given layer is evaluated against. */
+/**
+ * The context a condition of the given layer is evaluated against.
+ *
+ * `COMMIT` is what a call-level result condition judges, and is ignored by the
+ * model layer, which reads the provider's result off the context instead.
+ */
 export type LayerContext<
   LAYER extends RetryLayer,
   MODEL extends AnyResolvableModel,
-> = LAYER extends 'call' ? CallRetryContext<MODEL> : ModelRetryContext<MODEL>;
+  COMMIT = unknown,
+> = LAYER extends 'call'
+  ? CallRetryContext<MODEL, COMMIT>
+  : ModelRetryContext<MODEL>;
 
 /** The retryable a condition of the given layer produces. */
 export type LayerRetryable<
   MODEL extends AnyResolvableModel,
   INPUT,
   LAYER extends RetryLayer,
+  COMMIT = unknown,
 > = LAYER extends 'call'
-  ? CallRetryable<MODEL, INPUT>
+  ? CallRetryable<MODEL, INPUT, COMMIT>
   : ModelRetryable<MODEL, INPUT>;
 
 /**
@@ -46,7 +55,8 @@ export type LayerRetryable<
 export type Predicate<
   MODEL extends AnyResolvableModel,
   LAYER extends RetryLayer = 'model',
-> = (ctx: LayerContext<LAYER, MODEL>) => boolean | Promise<boolean>;
+  COMMIT = unknown,
+> = (ctx: LayerContext<LAYER, MODEL, COMMIT>) => boolean | Promise<boolean>;
 
 /**
  * Argument shape for `Condition.switch`. The target `model` is required;
@@ -76,6 +86,13 @@ export type RetryOptions<
  * unrelated types, a condition built for one is rejected by the other's
  * `retries` list rather than silently accepted.
  *
+ * `COMMIT` narrows that further within the call layer: it is the result the
+ * predicate reads, so a condition written against one entry point's result is
+ * rejected by an entry point that cannot produce it. Conditions that never touch
+ * the result leave it at `unknown` and fit anywhere. The parameter is
+ * contravariant — it reaches the surface only through `predicate` — which is
+ * what makes `unknown` the permissive end rather than the restrictive one.
+ *
  * @example
  * const cond = httpStatus(429, 503);
  * cond.switch({ model: fallback });
@@ -84,13 +101,14 @@ export type RetryOptions<
 export class Condition<
   MODEL extends AnyResolvableModel,
   LAYER extends RetryLayer = 'model',
+  COMMIT = unknown,
 > {
-  constructor(private readonly predicate: Predicate<MODEL, LAYER>) {}
+  constructor(private readonly predicate: Predicate<MODEL, LAYER, COMMIT>) {}
 
   /**
    * Run the predicate against a context and resolve to a boolean.
    */
-  async evaluate(ctx: LayerContext<LAYER, MODEL>): Promise<boolean> {
+  async evaluate(ctx: LayerContext<LAYER, MODEL, COMMIT>): Promise<boolean> {
     return this.predicate(ctx);
   }
 
@@ -110,13 +128,13 @@ export class Condition<
    */
   switch<INPUT = never>(
     target: SwitchTarget<MODEL, INPUT>,
-  ): LayerRetryable<MODEL, INPUT, LAYER> {
-    const retryable = async (ctx: LayerContext<LAYER, MODEL>) => {
+  ): LayerRetryable<MODEL, INPUT, LAYER, COMMIT> {
+    const retryable = async (ctx: LayerContext<LAYER, MODEL, COMMIT>) => {
       if (!(await this.evaluate(ctx))) return undefined;
       return { maxAttempts: 1, ...target };
     };
 
-    return retryable as LayerRetryable<MODEL, INPUT, LAYER>;
+    return retryable as LayerRetryable<MODEL, INPUT, LAYER, COMMIT>;
   }
 
   /**
@@ -135,14 +153,14 @@ export class Condition<
    */
   retry<INPUT = never>(
     options?: RetryOptions<MODEL, INPUT>,
-  ): LayerRetryable<MODEL, INPUT, LAYER> {
+  ): LayerRetryable<MODEL, INPUT, LAYER, COMMIT> {
     if (options?.maxAttempts !== undefined && options.maxAttempts < 2) {
       throw new Error(
         `Condition.retry() requires maxAttempts >= 2 (got ${options.maxAttempts}); use .switch() for a single attempt against a different model.`,
       );
     }
 
-    const retryable = async (ctx: LayerContext<LAYER, MODEL>) => {
+    const retryable = async (ctx: LayerContext<LAYER, MODEL, COMMIT>) => {
       if (!(await this.evaluate(ctx))) return undefined;
 
       /**
@@ -171,6 +189,6 @@ export class Condition<
       return { maxAttempts: 2, ...options, model };
     };
 
-    return retryable as LayerRetryable<MODEL, INPUT, LAYER>;
+    return retryable as LayerRetryable<MODEL, INPUT, LAYER, COMMIT>;
   }
 }

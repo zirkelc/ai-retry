@@ -1,19 +1,17 @@
 import { generateText, Output } from 'ai';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { MockLanguageModel, createRetryableModel } from '../test-utils.js';
+import {
+  createRetryableModel,
+  invalidJson,
+  MockLanguageModel,
+  notJson,
+  personSchema,
+  validJson,
+} from '../test-utils.js';
 import { createResultAPI } from './result.js';
 
 const { schemaInvalid } = createResultAPI<MockLanguageModel>();
-
-const personSchema = z.object({
-  name: z.string(),
-  age: z.number(),
-});
-
-const validJson = JSON.stringify({ name: 'Alice', age: 30 });
-const invalidJson = JSON.stringify({ name: 123 });
-const notJson = 'this is not json';
 
 describe('schemaInvalid', () => {
   it(`should not switch when JSON matches schema`, async () => {

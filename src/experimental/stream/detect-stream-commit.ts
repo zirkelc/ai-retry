@@ -1,5 +1,5 @@
+import type { TextStreamPart, ToolSet } from 'ai';
 import { isStreamContentPart } from '../../internal/guards.js';
-import type { LanguageModelStreamPart } from '../../types.js';
 import type { RetryCallAttempt } from '../call/create-retryable-call.js';
 
 /**
@@ -106,7 +106,7 @@ export async function detectStreamCommit(
       if (type === 'abort') {
         throw abortErrorFromPart(value as AbortPart, attempt);
       }
-      if (isStreamContentPart(value as LanguageModelStreamPart)) {
+      if (isStreamContentPart(value as TextStreamPart<ToolSet>)) {
         return;
       }
     }

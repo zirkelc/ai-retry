@@ -1092,6 +1092,131 @@ not an error and nothing else could catch it.
 
 ---
 
+## 15. Per-entry-point exports, and the union that stopped being needed
+
+§14 keyed the call-layer conditions on the **model family** and gave each family a result union
+discriminated by `operation`, narrowed by `is*Result` guards. This section supersedes that: conditions
+are keyed on the **entry point**, and the union, the discriminant, the guards and the `Proxy` that
+carried the tag are all gone.
+
+### 15.1 The export shape
+
+Published paths are one per entry point, matching how the model layer is one per family:
+
+| export                                    | source                      |
+| ----------------------------------------- | --------------------------- |
+| `ai-retry/generate-text` + `/conditions`  | `src/call/generate-text/`   |
+| `ai-retry/stream-text` + `/conditions`    | `src/call/stream-text/`     |
+| `ai-retry/embed` + `/conditions`          | `src/call/embed/`           |
+| `ai-retry/embed-many` + `/conditions`     | `src/call/embed-many/`      |
+| `ai-retry/generate-image` + `/conditions` | `src/call/generate-image/`  |
+| `ai-retry/<family>-model` + `/conditions` | `src/model/<family>-model/` |
+
+`src/` now splits at the top into the two retry layers, and **neither segment appears in the published
+path**. That is deliberate — `./call/generate-text` reads as a namespace the user has no reason to
+know about, and `./model/language-model` would break an already-published path — but it means the
+export map can no longer be derived from the source layout. `tsdown`'s `exports: true` was turned off
+and the map hand-written.
+
+The gap that opens: `publint` and `attw` check that every **listed** entry resolves, and nothing
+checks the reverse, so a new entry point would build and quietly not be published. `src/index.test.ts`
+walks `src/**/index.ts` and asserts the two sets match.
+
+### 15.2 Why the union went away
+
+A union existed because one family could be reached through two entry points (`generateText` /
+`streamText`, `embed` / `embedMany`) and a single `result()` export had to serve both. Splitting the
+conditions per entry point removes the premise: `ai-retry/embed/conditions` can only ever judge an
+`embed` result. Deleted as a consequence:
+
+- `src/call/guards.ts` — all five `is*Result`
+- `src/call/tag-result.ts` — the `Proxy` that added `operation` without copying the result. It existed
+  purely to carry the discriminant; the SDK's prototype-getter problem it worked around is now moot,
+  because the result is passed through untouched.
+- `operation` on every result type, and `CallResult<MODEL>` / `CallLanguageModelResult` /
+  `CallEmbeddingModelResult` / `CallImageModelResult`
+
+### 15.3 `COMMIT`, and why it is not a widened layer tag
+
+The result is no longer a function of `MODEL`, so something else has to carry it. The first sketch
+widened `RetryLayer` from `'model' | 'call'` to name the operation, and was rejected: `LayerContext`
+would become a conditional chain (or a central registry interface) that **every new entry point has to
+edit**. Closed by construction, and the whole point of the restructure is that a new entry point is a
+new folder.
+
+What shipped is a third parameter on `Condition`, declared locally by each entry point's conditions
+module:
+
+```ts
+Condition<MODEL, LAYER extends RetryLayer = 'model', COMMIT = unknown>
+LayerContext<LAYER, MODEL, COMMIT> =
+  LAYER extends 'call' ? CallRetryContext<MODEL, COMMIT> : ModelRetryContext<MODEL>
+```
+
+**`COMMIT` defaults to `unknown`, which is the permissive end, not the restrictive one.** It surfaces
+only through `predicate`, so `Condition` is contravariant in it: `Condition<M, 'call', unknown>` is
+assignable to `Condition<M, 'call', Anything>`. That is what lets `error`, `httpStatus`, `timeout`,
+`aborted` and `noImage` — none of which read the result — be written into any entry point's `retry`
+list, while a `result()` condition is accepted only where its result is produced. `never` would have
+inverted it and made error conditions assignable nowhere.
+
+Arity went to three on `Condition`, `Predicate`, `LayerRetryable` and `and`/`or`/`not`. All three are
+defaulted and inferred, so no call site changed.
+
+### 15.4 What safety this keeps, and what it gives up
+
+Cross-entry-point misuse is caught by contravariance rather than by a discriminant, so it is caught
+**asymmetrically**:
+
+- A `generate-text` `result()` in `retryableStreamText` — **rejected**. The predicate wants `text` and
+  `toolCalls`; `StreamTextCommitResult` has neither, so the stream context is not assignable to the
+  generate one. This is the direction that would fail at runtime.
+- A `stream-text` `result()` in `retryableGenerateText` — **accepted**. `StreamTextCommitResult` is a
+  structural subset of the `generateText` result, so every field the predicate reads is really there.
+  Harmless, and not worth a brand to prevent.
+- `embed` ↔ `embedMany` — **rejected both ways**, `embedding` and `embeddings` being disjoint.
+
+Asserted in `src/call/conditions/conditions.test-d.ts` under `the entry points are kept apart`.
+
+### 15.5 `COMMIT` on the entry point, not just the condition
+
+`defineRetryableCall<MODEL, ARGS, RESULT, COMMIT = RESULT>`. The default states the common case: what
+the caller receives is what conditions judge. `streamText` is the one entry point that overrides it
+today, and the reason generalizes — its result is a set of promises that settle only on consumption,
+and consuming it is what a pre-commit judgement must not do. Any future entry point whose result
+cannot be inspected without spending it declares its own `COMMIT`; nothing about the seam is
+`streamText`-specific.
+
+Named `COMMIT` rather than `JUDGED` to match the vocabulary already in the code (`detectStreamCommit`,
+and the commit boundary itself): it is the result as it stands at the moment the attempt would commit.
+
+### 15.6 Measured findings
+
+**15.6.1 The declaration emit cannot name `Output`.** `createFinishReasonAPI<..., GenerateTextCommitResult>()`
+destructured into an exported `const` fails the build with `TS4023: ... is using name 'Output' from
+external module ... but cannot be named`. The inferred signature expands
+`GenerateTextCommitResult` into `GenerateTextResult<ToolSet, Context, Output<...>>`, and `ai` does not
+export `Output`. Fixed by declaring `finishReason` as a function with an explicit return type, which
+keeps the alias intact. `result` was already written that way for an unrelated reason (its `TOOLS`
+parameter) and did not hit it.
+
+**15.6.2 `TOOLS` still has to be pinned at the condition.** A `result()` built with the default
+`ToolSet` is rejected by a `retryableGenerateText` call that passes `tools`, because
+`GenerateTextCommitResult<Specific>` is not assignable to `GenerateTextCommitResult<ToolSet>`. Unchanged
+from §14.6 — `result<typeof tools>(...)` remains the spelling — but it now surfaces at the `retry` list
+rather than inside the predicate.
+
+**15.6.3 The result reaches conditions by identity.** With `tagResult` gone there is nothing between
+the SDK's object and the predicate. Asserted directly (`expect(seen).toBe(produced)` in
+`src/call/conditions/result.test.ts`) and at the entry point, by comparing the prototype of a wrapped
+call's result against a direct call's — the SDK returns class instances, not plain objects, so a copy
+would be visible.
+
+**15.6.4 Coverage held.** 97.05% statements / 92.61% branches overall, `src/call` at 98.92% / 100%
+lines, against thresholds of 90/85/90/90. 946 tests across 103 files.
+
+---
+
 ## Evidence index
 
 The six standalone probes have been **replaced** by a `.test-d.ts` beside each entry point, which

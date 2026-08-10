@@ -23,12 +23,14 @@ export default defineConfig({
          */
         'src/types.ts',
         'src/call/types.ts',
+        'src/call/*/types.ts',
         'src/call/inputs.ts',
         /**
          * Re-export-only barrels. `src/index.ts` is not among them — it
          * carries a real declaration and is covered by `src/index.test.ts`.
          */
-        'src/*-model/index.ts',
+        'src/call/*/index.ts',
+        'src/model/*-model/index.ts',
         'src/retryables/index.ts',
         'src/experimental/*/index.ts',
         /** Fixtures and setup, not subjects. */
@@ -37,7 +39,7 @@ export default defineConfig({
       ],
       /**
        * Gates against a real regression without being brittle: comfortably
-       * below where the suite sits (97/93/96/98 overall, 99/96/98/100 for
+       * below where the suite sits (97/93/96/98 overall, 99/92/100/100 for
        * `src/call`), so a genuine drop fails while ordinary churn does not.
        */
       thresholds: {

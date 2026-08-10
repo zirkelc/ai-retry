@@ -10,8 +10,9 @@ import type { AnyResolvableModel } from '../../types.js';
 export function not<
   MODEL extends AnyResolvableModel,
   LAYER extends RetryLayer = 'model',
->(condition: Condition<MODEL, LAYER>): Condition<MODEL, LAYER> {
-  return new Condition<MODEL, LAYER>(
+  COMMIT = unknown,
+>(condition: Condition<MODEL, LAYER, COMMIT>): Condition<MODEL, LAYER, COMMIT> {
+  return new Condition<MODEL, LAYER, COMMIT>(
     async (ctx) => !(await condition.evaluate(ctx)),
   );
 }

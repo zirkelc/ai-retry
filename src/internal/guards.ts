@@ -1,3 +1,4 @@
+import type { TextStreamPart, ToolSet } from 'ai';
 import type {
   AnyModel,
   EmbeddingModel,
@@ -74,21 +75,50 @@ export function isResultAttempt(
 }
 
 /**
- * Check if a stream part is a content part (e.g., text delta, reasoning delta, source, tool call, tool result).
- * These types are also emitted by `onChunk` callbacks.
- * @see https://github.com/vercel/ai/blob/1fe4bd4144bff927f5319d9d206e782a73979ccb/packages/ai/src/generate-text/stream-text.ts#L686-L697
+ * Whether a stream part is generated model output, as opposed to the framing
+ * around it.
+ *
+ * This is the commit boundary: the first part it accepts is the point past
+ * which an attempt belongs to the caller and can no longer be failed over.
+ *
+ * Both stream vocabularies are accepted, because the boundary is drawn in both
+ * places: `LanguageModelStreamPart` below a model, where the provider's parts
+ * are what a retryable model sees, and `TextStreamPart` around a call, where
+ * the entry point's own stream is. The types are related but not the same, and
+ * the parts they share do not all agree on field names.
+ *
+ * It mirrors the AI SDK's own `isOutputChunk`, which is internal and not
+ * exported, so the agreement is pinned by test rather than by import — see
+ * `guards.test.ts`, which reads the classification back out of the SDK at
+ * runtime instead of restating it.
+ *
+ * Empty deltas do not count, matching the SDK. A zero-length delta is a
+ * heartbeat rather than content, and committing on one would give the boundary
+ * away before anything had been generated.
  */
-export const isStreamContentPart = (part: LanguageModelStreamPart) => {
-  return (
-    part.type === 'text-delta' ||
-    part.type === 'reasoning-delta' ||
-    part.type === 'source' ||
-    part.type === 'tool-call' ||
-    part.type === 'tool-result' ||
-    part.type === 'tool-input-start' ||
-    part.type === 'tool-input-delta' ||
-    part.type === 'raw'
-  );
+export const isStreamContentPart = (
+  part: LanguageModelStreamPart | TextStreamPart<ToolSet>,
+): boolean => {
+  switch (part.type) {
+    case 'text-delta':
+    case 'reasoning-delta':
+      /** The provider spells the payload `delta`, the SDK `text`. */
+      return ('text' in part ? part.text : part.delta).length > 0;
+    case 'tool-input-delta':
+      /** Spelled `delta` in both. */
+      return part.delta.length > 0;
+    /**
+     * `TextStreamPart` only. A provider stream expresses a tool call as
+     * `tool-input-delta`s and does not stream files at all, so these are
+     * unreachable below a model and decide nothing there.
+     */
+    case 'tool-call':
+    case 'file':
+    case 'reasoning-file':
+      return true;
+    default:
+      return false;
+  }
 };
 
 /**

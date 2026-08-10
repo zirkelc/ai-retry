@@ -20,8 +20,9 @@
  * Run:
  *   pnpm build && pnpm tsx examples/retryable-timeout-switch.ts
  */
-import { retryableGenerateText, retryableStreamText } from 'ai-retry';
-import { timeout } from 'ai-retry/call/language-model/conditions';
+import { retryableGenerateText } from 'ai-retry/generate-text';
+import { timeout } from 'ai-retry/generate-text/conditions';
+import { retryableStreamText } from 'ai-retry/stream-text';
 import { Language, MockLanguageModel } from 'ai-test-kit/language';
 import type { LanguageModelV4CallOptions } from '@ai-sdk/provider';
 
@@ -63,7 +64,14 @@ const slowModel = MockLanguageModel.from({
 
 const fastModel = MockLanguageModel.from('A fast, complete answer.');
 
-/** On a timeout, switch to the fast model under a fresh 1s deadline. */
+/**
+ * On a timeout, switch to the fast model under a fresh 1s deadline.
+ *
+ * One list, both entry points: `timeout()` reads only the error, never the
+ * result, so it is not tied to the entry point it was imported from. A `result`
+ * or `finishReason` condition would be, and `ai-retry/stream-text/conditions`
+ * would have to supply it.
+ */
 const retry = [timeout().switch({ model: fastModel, timeout: 1_000 })];
 
 const prompt = 'Invent a new holiday and describe its traditions.';

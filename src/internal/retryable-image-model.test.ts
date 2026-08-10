@@ -7,9 +7,10 @@ import {
 import { Errors } from 'ai-test-kit';
 import { describe, expect, it, vi } from 'vitest';
 import {
-  MockImageModel,
   createRetryableModel,
+  MockImageModel,
   mockImageResult,
+  noImageError,
   nonRetryableError,
   retryableError,
 } from './test-utils.js';
@@ -30,10 +31,6 @@ type OnError = Required<RetryableModelOptions<ImageModel>>['onError'];
 type OnRetry = Required<RetryableModelOptions<ImageModel>>['onRetry'];
 type OnSuccess = Required<RetryableModelOptions<ImageModel>>['onSuccess'];
 type OnFailure = Required<RetryableModelOptions<ImageModel>>['onFailure'];
-
-const noImageError = new NoImageGeneratedError({
-  message: `No image generated`,
-});
 
 describe('generateImage', () => {
   it('should generate image successfully when no errors occur', async () => {

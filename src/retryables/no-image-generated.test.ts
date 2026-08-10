@@ -2,19 +2,16 @@ import { Errors } from 'ai-test-kit';
 import { APICallError, generateImage, NoImageGeneratedError } from 'ai';
 import { describe, expect, it, vi } from 'vitest';
 import {
-  MockImageModel,
   createRetryableModel,
+  MockImageModel,
   mockImageResult,
+  noImageError,
 } from '../internal/test-utils.js';
 import type { ImageModel, RetryableModelOptions } from '../types.js';
 import { noImageGenerated } from './no-image-generated.js';
 
 type OnError = Required<RetryableModelOptions<ImageModel>>['onError'];
 type OnRetry = Required<RetryableModelOptions<ImageModel>>['onRetry'];
-
-const noImageError = new NoImageGeneratedError({
-  message: `No image generated`,
-});
 
 const otherError = Errors.badRequest();
 

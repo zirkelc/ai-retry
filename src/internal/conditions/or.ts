@@ -16,8 +16,11 @@ import type { AnyResolvableModel } from '../../types.js';
 export function or<
   MODEL extends AnyResolvableModel,
   LAYER extends RetryLayer = 'model',
->(...conditions: Array<Condition<MODEL, LAYER>>): Condition<MODEL, LAYER> {
-  return new Condition<MODEL, LAYER>(async (ctx) => {
+  COMMIT = unknown,
+>(
+  ...conditions: Array<Condition<MODEL, LAYER, COMMIT>>
+): Condition<MODEL, LAYER, COMMIT> {
+  return new Condition<MODEL, LAYER, COMMIT>(async (ctx) => {
     for (const c of conditions) {
       if (await c.evaluate(ctx)) return true;
     }

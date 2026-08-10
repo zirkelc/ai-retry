@@ -4,7 +4,6 @@ import type {
   generateImage,
   generateText,
   streamText,
-  ToolSet,
 } from 'ai';
 import type {
   AnyModel,
@@ -18,24 +17,64 @@ import type {
 
 /**
  * Every type the call-level retry layer is described in: what an attempt looks
- * like, what a retryable decides against, and what a result condition judges.
- * The runtime that goes with them lives in `guards.ts` (narrowing) and
- * `retryable-calls.ts` (tagging).
+ * like and what a retryable decides against.
+ *
+ * What a *result* condition judges is deliberately not here. It belongs to the
+ * entry point, not to the layer, so each one declares its own commit result in
+ * its own folder and this file only ever carries it as `COMMIT`.
  *
  * The model layer's equivalents are in `src/types.ts` and stay frozen.
  */
+
+/* ------------------------------------------------------------------ *
+ * The commit result
+ * ------------------------------------------------------------------ *
+ *
+ * `COMMIT`, throughout this file, is what a result condition of an entry point
+ * judges: the outcome as it stands at the moment the attempt would commit,
+ * while failing over is still possible.
+ *
+ * For most entry points that is simply the result the caller receives, which is
+ * why it defaults to it. It is a parameter rather than a fixed type because
+ * that does not always hold: `streamText` returns before anything has been
+ * generated, and every field of its result is a promise that settles only once
+ * the stream has been consumed — consuming it being precisely what a pre-commit
+ * judgement must not do. What conditions see there is read off the stream's
+ * terminal parts instead.
+ *
+ * Any entry point whose result cannot be inspected without spending it needs
+ * the same treatment, so this is the general seam rather than one function's
+ * exception. Each entry point declares its own in its own folder; nothing about
+ * which is which lives here.
+ */
+
+/**
+ * The unified finish reason as the SDK entry points report it — flat, where a
+ * provider reports it nested under `finishReason.unified`.
+ *
+ * Shared rather than per-entry-point because the retry loop reads it off
+ * whatever an attempt produced, to report on the attempt span.
+ */
+export type CallFinishReason = Awaited<
+  ReturnType<typeof generateText>
+>['finishReason'];
+
+/** Token usage as the SDK language entry points report it. */
+export type CallLanguageModelUsage = Awaited<
+  ReturnType<typeof generateText>
+>['usage'];
 
 /* ------------------------------------------------------------------ *
  * The retry context
  * ------------------------------------------------------------------ */
 
 /**
- * Deliberately a different type from the model-level `ModelRetryContext`, not merely
- * a different set of exports. The two layers see genuinely different things — a
- * call-level attempt holds the entry point's own arguments and its own result,
- * a model-level one holds the provider's — and if both produced the same context
- * type, a condition written for either would silently typecheck against the
- * other's `retries` list.
+ * Deliberately a different type from the model-level `ModelRetryContext`, not
+ * merely a different set of exports. The two layers see genuinely different
+ * things — a call-level attempt holds the entry point's own arguments and its
+ * own result, a model-level one holds the provider's — and if both produced the
+ * same context type, a condition written for either would silently typecheck
+ * against the other's `retries` list.
  */
 
 /** The arguments a language-model call can have been issued with. */
@@ -54,9 +93,10 @@ type ImageModelCallArgs = Parameters<typeof generateImage>[0];
 /**
  * Maps a model family to the arguments its call-level entry points take.
  *
- * A union across the family's entry points, so whatever they share (`headers`
- * and `providerOptions` everywhere, `prompt` for language) reads directly, and
- * anything one of them owns needs narrowing.
+ * Still keyed on the family rather than on the entry point, unlike the commit
+ * result: a union of argument objects needs no discriminant to be useful, since
+ * whatever the entry points share (`headers` and `providerOptions` everywhere,
+ * `prompt` for language) reads directly off it.
  */
 export type CallArgs<MODEL extends AnyModel> = MODEL extends LanguageModel
   ? LanguageModelCallArgs
@@ -81,11 +121,11 @@ export type CallRetryErrorAttempt<MODEL extends AnyModel> = {
  * For a stream that means it ended before emitting any content; past the first
  * content part the attempt belongs to the caller and never reaches a condition.
  */
-export type CallRetryResultAttempt<MODEL extends AnyModel> = {
+export type CallRetryResultAttempt<MODEL extends AnyModel, COMMIT = unknown> = {
   type: 'result';
   error?: undefined;
-  /** The entry point's own result, tagged with the operation that produced it. */
-  result: CallResult<MODEL>;
+  /** The outcome as it stands while failing over is still possible. */
+  result: COMMIT;
   /** The model this attempt was issued against. */
   model: MODEL;
   /** The arguments this attempt was issued with, overrides already applied. */
@@ -93,27 +133,41 @@ export type CallRetryResultAttempt<MODEL extends AnyModel> = {
 };
 
 /** A call-level attempt, with either an error or a judgeable result. */
-export type CallRetryAttempt<MODEL extends AnyModel> =
+export type CallRetryAttempt<MODEL extends AnyModel, COMMIT = unknown> =
   | CallRetryErrorAttempt<MODEL>
-  | CallRetryResultAttempt<MODEL>;
+  | CallRetryResultAttempt<MODEL, COMMIT>;
 
 /**
  * The context passed to a call-level retryable, with the attempt that triggered
  * the decision and every attempt made so far.
+ *
+ * `COMMIT` defaults to `unknown`, which is what a condition that never reads the
+ * result — every error condition — is built against. Because the context sits in
+ * a condition's parameter position, that default makes such a condition
+ * assignable to *every* entry point's `retries` list, while one built against a
+ * specific commit result is assignable only where that result is actually
+ * produced.
  */
-export type CallRetryContext<MODEL extends AnyResolvableModel> = {
+export type CallRetryContext<
+  MODEL extends AnyResolvableModel,
+  COMMIT = unknown,
+> = {
   /** The attempt that triggered this decision. */
-  current: CallRetryAttempt<ResolvedModel<MODEL>>;
+  current: CallRetryAttempt<ResolvedModel<MODEL>, COMMIT>;
   /** Every attempt made so far, including the current one. */
-  attempts: Array<CallRetryAttempt<ResolvedModel<MODEL>>>;
+  attempts: Array<CallRetryAttempt<ResolvedModel<MODEL>, COMMIT>>;
 };
 
 /**
  * A function that decides whether a call-level attempt should be retried, and
  * with which model.
  */
-export type CallRetryable<MODEL extends AnyResolvableModel, INPUT = never> = (
-  context: CallRetryContext<MODEL>,
+export type CallRetryable<
+  MODEL extends AnyResolvableModel,
+  INPUT = never,
+  COMMIT = unknown,
+> = (
+  context: CallRetryContext<MODEL, COMMIT>,
 ) => Retry<MODEL, INPUT> | Promise<Retry<MODEL, INPUT> | undefined> | undefined;
 
 /**
@@ -122,8 +176,12 @@ export type CallRetryable<MODEL extends AnyResolvableModel, INPUT = never> = (
  * `INPUT` is the shape `Retry.options` is checked against — the entry point's
  * own arguments, not provider call options.
  */
-export type CallRetries<MODEL extends AnyModel, INPUT> = Array<
-  | CallRetryable<ResolvableModel<MODEL>, INPUT>
+export type CallRetries<
+  MODEL extends AnyModel,
+  INPUT,
+  COMMIT = unknown,
+> = Array<
+  | CallRetryable<ResolvableModel<MODEL>, INPUT, COMMIT>
   | Retry<ResolvableModel<MODEL>, INPUT>
   | ResolvableModel<MODEL>
 >;
@@ -132,142 +190,17 @@ export type CallRetries<MODEL extends AnyModel, INPUT> = Array<
  * The context passed to `onFailure` when a call terminally fails: no retry
  * matched, every candidate was tried, or the caller cancelled.
  */
-export type CallFailureContext<MODEL extends AnyResolvableModel> = {
+export type CallFailureContext<
+  MODEL extends AnyResolvableModel,
+  COMMIT = unknown,
+> = {
   /** The final attempt that failed. */
   current: CallRetryErrorAttempt<ResolvedModel<MODEL>>;
   /** Every attempt made, including the final failed one. */
-  attempts: Array<CallRetryAttempt<ResolvedModel<MODEL>>>;
+  attempts: Array<CallRetryAttempt<ResolvedModel<MODEL>, COMMIT>>;
   /**
    * The error surfaced to the caller. A `RetryError` wrapping every attempt
    * error when more than one attempt was made, otherwise the raw error.
    */
   error: unknown;
 };
-
-/* ------------------------------------------------------------------ *
- * The results
- * ------------------------------------------------------------------ */
-
-/**
- * The results a call-level retry can judge, in the shape the AI SDK entry
- * points actually return.
- *
- * A retry running *below* a model sees the provider's result, so the model-level
- * conditions are written against that shape. A call-level retry never sees one:
- * it holds whatever the entry point returned. Rather than translate that back
- * into a provider result — lossy in one direction and a permanent drift surface
- * in the other — the result is passed through as-is, tagged with the operation
- * that produced it.
- *
- * One family can be reached through more than one entry point, so each family's
- * result is a **discriminated union** over `operation`. Whatever every member of
- * a family shares is readable directly — `finishReason` and `usage` for
- * language, `usage` and `response` for embedding — and anything specific to one
- * operation needs a guard:
- *
- * ```ts
- * result((res) => {
- *   if (res.finishReason === 'content-filter') return true;
- *   if (isGenerateTextResult(res)) return res.text.length < 10;
- *   return false;
- * });
- * ```
- *
- * The guards narrow within whatever result type the condition was given, so a
- * tool set has to be named at the condition — `result<typeof tools>(...)` — for
- * the tool calls to come out typed. Naming it on the guard has no effect.
- */
-
-/** What `generateText` resolves to, with its generics left at their bounds. */
-type SdkGenerateTextResult = Awaited<ReturnType<typeof generateText>>;
-
-/**
- * The finish reason as the SDK entry points report it — flat, where a provider
- * reports it nested under `finishReason.unified`.
- *
- * Derived from the SDK's own result so the two members of the language union
- * are guaranteed to agree, which is what keeps `finishReason` readable without
- * narrowing.
- */
-export type CallFinishReason = SdkGenerateTextResult['finishReason'];
-
-/** Token usage as the SDK entry points report it. */
-export type CallLanguageModelUsage = SdkGenerateTextResult['usage'];
-
-/**
- * A completed `generateText`, exactly as the caller receives it.
- *
- * `TOOLS` is not inferred from the call — a condition is written against the
- * family, not against one call site, so there is nothing to infer it from. It is
- * whatever the condition names, and nothing checks that against the tools the
- * call was actually issued with; the contract is a cast's.
- */
-export type GenerateTextResultInfo<TOOLS extends ToolSet = ToolSet> = {
-  operation: 'generateText';
-} & Awaited<ReturnType<typeof generateText<TOOLS>>>;
-
-/**
- * A `streamText` that finished without ever emitting content.
- *
- * Deliberately not the SDK's own `StreamTextResult`: every field on that is a
- * promise that settles only once the stream has been consumed, and consuming it
- * is precisely what a pre-commit judgement must not do. What is here is read
- * off the stream's terminal parts instead.
- *
- * There is no content, and that is a fact rather than an omission — any content
- * part would have committed the attempt and put it beyond retry.
- */
-export type StreamTextResultInfo = {
-  operation: 'streamText';
-  finishReason: CallFinishReason;
-  usage: CallLanguageModelUsage;
-  providerMetadata: SdkGenerateTextResult['providerMetadata'];
-};
-
-/** A completed `embed`, exactly as the caller receives it. */
-export type EmbedResultInfo = {
-  operation: 'embed';
-} & Awaited<ReturnType<typeof embed>>;
-
-/** A completed `embedMany`, exactly as the caller receives it. */
-export type EmbedManyResultInfo = {
-  operation: 'embedMany';
-} & Awaited<ReturnType<typeof embedMany>>;
-
-/** A completed `generateImage`, exactly as the caller receives it. */
-export type GenerateImageResultInfo = {
-  operation: 'generateImage';
-} & Awaited<ReturnType<typeof generateImage>>;
-
-/**
- * Everything a language-model call can produce that is still judgeable.
- * `finishReason`, `usage` and `providerMetadata` are common to both members.
- */
-export type CallLanguageModelResult<TOOLS extends ToolSet = ToolSet> =
-  | GenerateTextResultInfo<TOOLS>
-  | StreamTextResultInfo;
-
-/**
- * Everything an embedding call can produce. `usage`, `response` and
- * `providerMetadata` are common to both members; the embeddings themselves are
- * singular or plural depending on the entry point, so they need a guard.
- */
-export type CallEmbeddingModelResult = EmbedResultInfo | EmbedManyResultInfo;
-
-/**
- * Everything an image call can produce. One entry point, one member — no guard
- * is needed to read it.
- */
-export type CallImageModelResult = GenerateImageResultInfo;
-
-/**
- * Maps a model family to the results its call-level entry points produce.
- *
- * The result is a function of the model alone, which is what lets the call-level
- * retry context carry it without a generic of its own.
- */
-export type CallResult<MODEL extends AnyModel> = MODEL extends LanguageModel
-  ? CallLanguageModelResult
-  : MODEL extends EmbeddingModel
-    ? CallEmbeddingModelResult
-    : CallImageModelResult;

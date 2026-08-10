@@ -4,7 +4,6 @@ import {
   buildCallErrorContext,
   buildCallImageResultContext,
   buildCallResultContext,
-  callEmbedManyResult,
   callEmbedResult,
   callGenerateTextResult,
   callImageResult,
@@ -13,23 +12,43 @@ import {
   MockImageModel,
   MockLanguageModel,
 } from '../../internal/test-utils.js';
-import { isEmbedResult, isGenerateTextResult } from '../guards.js';
-import {
-  createCallLanguageModelResultAPI,
-  createCallResultAPI,
-} from './result.js';
+import type { EmbedCommitResult } from '../embed/types.js';
+import type { GenerateImageCommitResult } from '../generate-image/types.js';
+import type { GenerateTextCommitResult } from '../generate-text/types.js';
+import type { StreamTextCommitResult } from '../stream-text/types.js';
+import { createCallResultAPI, createFinishReasonAPI } from './result.js';
 
-const { result, finishReason } =
-  createCallLanguageModelResultAPI<MockLanguageModel>();
-const { result: embeddingResult } = createCallResultAPI<MockEmbeddingModel>();
-const { result: imageResult } = createCallResultAPI<MockImageModel>();
+/**
+ * The shared result-side factories, exercised once here. What each entry point
+ * does with them — which commit result it binds, and whether it takes
+ * `finishReason` at all — is asserted beside that entry point instead.
+ */
+
+const { result } = createCallResultAPI<
+  MockLanguageModel,
+  GenerateTextCommitResult
+>();
+const { finishReason } = createFinishReasonAPI<
+  MockLanguageModel,
+  GenerateTextCommitResult
+>();
+const { result: streamResult } = createCallResultAPI<
+  MockLanguageModel,
+  StreamTextCommitResult
+>();
+const { result: embeddingResult } = createCallResultAPI<
+  MockEmbeddingModel,
+  EmbedCommitResult
+>();
+const { result: imageResult } = createCallResultAPI<
+  MockImageModel,
+  GenerateImageCommitResult
+>();
 
 describe('result (call layer)', () => {
   it('should run the predicate against the current result', async () => {
     // Arrange
-    const cond = result<never, MockLanguageModel>(
-      (res) => isGenerateTextResult(res) && res.text === 'hi',
-    );
+    const cond = result<MockLanguageModel>((res) => res.text === 'hi');
 
     // Act
     const matched = await cond.evaluate(
@@ -46,7 +65,7 @@ describe('result (call layer)', () => {
 
   it('should return false on error attempts', async () => {
     // Arrange
-    const cond = result<never, MockLanguageModel>(() => true);
+    const cond = result<MockLanguageModel>(() => true);
 
     // Act
     const matched = await cond.evaluate(
@@ -59,9 +78,7 @@ describe('result (call layer)', () => {
 
   it('should support async predicates', async () => {
     // Arrange
-    const cond = result<never, MockLanguageModel>(async () =>
-      Promise.resolve(true),
-    );
+    const cond = result<MockLanguageModel>(async () => Promise.resolve(true));
 
     // Act
     const matched = await cond.evaluate(
@@ -75,7 +92,7 @@ describe('result (call layer)', () => {
   it('should pass the context as the second argument', async () => {
     // Arrange
     const seen: Array<unknown> = [];
-    const cond = result<never, MockLanguageModel>((_res, ctx) => {
+    const cond = result<MockLanguageModel>((_res, ctx) => {
       seen.push(ctx.current.type, ctx.attempts.length);
       return true;
     });
@@ -90,8 +107,8 @@ describe('result (call layer)', () => {
   it('should hand over the entry point result, not a provider one', async () => {
     // Arrange — `text` is the SDK's flat field; a provider result has `content`.
     const seen: Array<unknown> = [];
-    const cond = result<never, MockLanguageModel>((res) => {
-      seen.push(res.operation, isGenerateTextResult(res) ? res.text : null);
+    const cond = result<MockLanguageModel>((res) => {
+      seen.push(res.text);
       return true;
     });
 
@@ -101,13 +118,31 @@ describe('result (call layer)', () => {
     );
 
     // Assert
-    expect(seen).toEqual(['generateText', 'spoken']);
+    expect(seen).toEqual(['spoken']);
+  });
+
+  it('should hand the result over untouched, not a copy of it', async () => {
+    // Arrange — the SDK exposes most of a result through prototype getters, so
+    // anything that rebuilt it on the way through would arrive with `text`
+    // undefined.
+    const produced = await callGenerateTextResult('spoken');
+    let seen: unknown;
+    const cond = result<MockLanguageModel>((res) => {
+      seen = res;
+      return true;
+    });
+
+    // Act
+    await cond.evaluate(buildCallResultContext(produced));
+
+    // Assert
+    expect(seen).toBe(produced);
   });
 
   it('should judge a contentless stream result', async () => {
     // Arrange
-    const cond = result<never, MockLanguageModel>(
-      (res) => res.operation === 'streamText',
+    const cond = streamResult<MockLanguageModel>(
+      (res) => res.usage.outputTokens === 0,
     );
 
     // Act
@@ -172,39 +207,13 @@ describe('finishReason (call layer)', () => {
     // Assert
     expect(matched).toBe(false);
   });
-
-  it('should read the reason off a stream result too', async () => {
-    // Arrange — the field is common to both members, so no guard is needed.
-    const cond = finishReason<MockLanguageModel>('content-filter');
-
-    // Act
-    const matched = await cond.evaluate(
-      buildCallResultContext(callStreamTextResult('content-filter')),
-    );
-
-    // Assert
-    expect(matched).toBe(true);
-  });
-
-  it('should be reachable as result.finishReason', async () => {
-    // Arrange
-    const cond = result.finishReason<MockLanguageModel>('stop');
-
-    // Act
-    const matched = await cond.evaluate(
-      buildCallResultContext(await callGenerateTextResult()),
-    );
-
-    // Assert
-    expect(matched).toBe(true);
-  });
 });
 
 describe('result (other families)', () => {
   it('should judge an embed result', async () => {
     // Arrange
-    const cond = embeddingResult<MockEmbeddingModel>(
-      (res) => isEmbedResult(res) && res.embedding.every((n) => n === 0),
+    const cond = embeddingResult<MockEmbeddingModel>((res) =>
+      res.embedding.every((n) => n === 0),
     );
 
     // Act
@@ -220,36 +229,8 @@ describe('result (other families)', () => {
     expect(missed).toBe(false);
   });
 
-  it('should judge an embedMany result through the same export', async () => {
+  it('should judge an image result', async () => {
     // Arrange
-    const cond = embeddingResult<MockEmbeddingModel>(
-      (res) => res.operation === 'embedMany',
-    );
-
-    // Act
-    const matched = await cond.evaluate(
-      buildCallEmbeddingResultContext(await callEmbedManyResult()),
-    );
-
-    // Assert
-    expect(matched).toBe(true);
-  });
-
-  it('should return false on error attempts, as the language one does', async () => {
-    // Arrange — the generic factory has its own copy of the guard.
-    const cond = embeddingResult<MockEmbeddingModel>(() => true);
-
-    // Act
-    const matched = await cond.evaluate(
-      buildCallErrorContext(new Error('boom')) as never,
-    );
-
-    // Assert
-    expect(matched).toBe(false);
-  });
-
-  it('should judge an image result with no guard', async () => {
-    // Arrange — one entry point, one union member.
     const cond = imageResult<MockImageModel>((res) => res.images.length < 2);
 
     // Act

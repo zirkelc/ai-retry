@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { buildErrorContext, MockLanguageModel } from '../test-utils.js';
+import {
+  buildErrorContext,
+  falsy,
+  MockLanguageModel,
+  truthy,
+} from '../test-utils.js';
 import { Condition } from './condition.js';
 import { or } from './or.js';
 
 const ctx = buildErrorContext(new Error('boom'));
-
-const truthy = new Condition<MockLanguageModel>(() => true);
-const falsy = new Condition<MockLanguageModel>(() => false);
 
 describe('or', () => {
   it(`should return true when any condition matches`, async () => {

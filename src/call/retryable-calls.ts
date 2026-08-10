@@ -3,7 +3,6 @@ import type { GatewayResolver } from '../internal/resolve-model.js';
 import type { GenAiOperation } from '../internal/telemetry.js';
 import type { AnyModel } from '../types.js';
 import { type CallRetryArg, toCallRetryOptions } from './retry-arg.js';
-import type { CallResult } from './types.js';
 import {
   type RetryLoopArgs,
   type DeadlineStrategy,
@@ -91,6 +90,7 @@ export function defineRetryableCall<
   MODEL extends AnyModel,
   ARGS,
   RESULT,
+  COMMIT = RESULT,
 >(entry: {
   /** Span name and `ai_retry.operation` attribute. */
   operation: string;
@@ -104,7 +104,8 @@ export function defineRetryableCall<
   deadline: DeadlineStrategy<any>;
   /**
    * Decides whether a returned result is terminal or still judgeable against
-   * result conditions. Omit where a returned result is always terminal.
+   * result conditions, reporting it as the entry point's `COMMIT`. Omit where a
+   * returned result is always terminal.
    *
    * Throwing here is indistinguishable from the call throwing, which is what
    * lets a stream that fails before its first content part reuse the entire
@@ -113,17 +114,18 @@ export function defineRetryableCall<
   settle?: (
     result: RESULT,
     callerSignal: AbortSignal | undefined,
-  ) => Promise<Settled<CallResult<MODEL>>>;
+  ) => Promise<Settled<COMMIT>>;
 }) {
   const entryPoint = entry as unknown as EntryPoint<
     MODEL,
     RetryLoopArgs,
-    RESULT
+    RESULT,
+    COMMIT
   >;
 
   return (
     args: RetryLoopArgs & {
-      retry?: CallRetryArg<MODEL, unknown, unknown, RESULT>;
+      retry?: CallRetryArg<MODEL, unknown, unknown, RESULT, COMMIT>;
     },
   ): Promise<RESULT> => {
     const { retry, ...callArgs } = args;

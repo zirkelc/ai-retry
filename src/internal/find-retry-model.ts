@@ -31,17 +31,21 @@ export type RetryContextLike = {
  * from whichever of the two aliases the caller declared — and so a handler is
  * still checked against the layer whose list it was written into.
  */
-export type RetriesLike<MODEL extends AnyModel, INPUT> =
+export type RetriesLike<MODEL extends AnyModel, INPUT, COMMIT = unknown> =
   | ModelRetries<MODEL, INPUT>
-  | CallRetries<MODEL, INPUT>;
+  | CallRetries<MODEL, INPUT, COMMIT>;
 
 /**
  * Find the next model to retry with based on the retry context.
  * `resolve` resolves gateway model-id strings for the caller's model
  * family (a bare string is ambiguous across families).
  */
-export async function findRetryModel<MODEL extends AnyModel, INPUT>(
-  retries: RetriesLike<MODEL, INPUT>,
+export async function findRetryModel<
+  MODEL extends AnyModel,
+  INPUT,
+  COMMIT = unknown,
+>(
+  retries: RetriesLike<MODEL, INPUT, COMMIT>,
   context: RetryContextLike,
   resolve?: GatewayResolver,
 ): Promise<Retry<ResolvedModel<MODEL>, INPUT> | undefined> {

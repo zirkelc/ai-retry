@@ -2,20 +2,15 @@ import { generateText, Output } from 'ai';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import {
+  createRetryableModel,
+  invalidJson,
   Language,
   MockLanguageModel,
-  createRetryableModel,
+  notJson,
+  personSchema,
+  validJson,
 } from '../internal/test-utils.js';
 import { schemaMismatch } from './schema-mismatch.js';
-
-const validJson = JSON.stringify({ name: `Alice`, age: 30 });
-const invalidJson = JSON.stringify({ name: 123 });
-const notJson = `this is not json`;
-
-const personSchema = z.object({
-  name: z.string(),
-  age: z.number(),
-});
 
 describe(`schemaMismatch`, () => {
   it(`should not retry when JSON matches schema`, async () => {

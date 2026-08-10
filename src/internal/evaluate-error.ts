@@ -34,6 +34,7 @@ export async function evaluateError<
   MODEL extends AnyModel,
   INPUT,
   OPTIONS,
+  COMMIT = unknown,
 >(input: {
   error: unknown;
   model: MODEL;
@@ -43,7 +44,7 @@ export async function evaluateError<
    * either layer's attempt type serves.
    */
   attempts: ReadonlyArray<unknown>;
-  retries: RetriesLike<MODEL, INPUT>;
+  retries: RetriesLike<MODEL, INPUT, COMMIT>;
   /**
    * Called with the layer's own context. Left open here for the same reason the
    * retryables are: which context is built is the caller's business.
@@ -76,7 +77,7 @@ export async function evaluateError<
 
   input.onError?.(context as never);
 
-  const retryModel = await findRetryModel<MODEL, INPUT>(
+  const retryModel = await findRetryModel<MODEL, INPUT, COMMIT>(
     input.retries,
     context,
     input.resolve,

@@ -3,14 +3,24 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   attemptSpans,
   createSpanExporter,
+  Embedding,
   findSpan,
+  MockEmbeddingModel,
+  MockImageModel,
+  mockImageResult,
   MockLanguageModel,
   mockResultText,
+  mockStreamChunks,
   nonRetryableError,
   retryableError,
+  Streams,
 } from '../internal/test-utils.js';
-import { aborted, finishReason } from './language-model/conditions/index.js';
-import { retryableGenerateText } from './language-model/functions/generate-text.js';
+import { retryableEmbed } from './embed/embed.js';
+import { retryableEmbedMany } from './embed-many/embed-many.js';
+import { retryableGenerateImage } from './generate-image/generate-image.js';
+import { aborted, finishReason } from './generate-text/conditions/index.js';
+import { retryableGenerateText } from './generate-text/generate-text.js';
+import { retryableStreamText } from './stream-text/stream-text.js';
 
 /**
  * The retry loop is shared by every call-level entry point, so its behavior is
@@ -353,4 +363,68 @@ describe('telemetry', () => {
     expect(attempts[0]!.attributes['ai_retry.attempt.outcome']).toBe('retry');
     expect(attempts[1]!.attributes['ai_retry.attempt.outcome']).toBe('success');
   });
+
+  /**
+   * The span name and the standard `gen_ai.operation.name` are the one piece of
+   * telemetry each entry point supplies itself, so the claim is made for all
+   * five here rather than beside whichever one happened to have a test.
+   */
+  it.each([
+    {
+      operation: 'generateText',
+      genAiOperation: 'chat',
+      call: (args: any) => retryableGenerateText(args),
+      model: () => MockLanguageModel.from(mockResultText),
+      args: { prompt },
+    },
+    {
+      operation: 'streamText',
+      genAiOperation: 'chat',
+      call: async (args: any) => {
+        const out = await retryableStreamText(args);
+        await Streams.toArray(out.fullStream);
+      },
+      model: () => MockLanguageModel.from({ doStream: mockStreamChunks }),
+      args: { prompt },
+    },
+    {
+      operation: 'embed',
+      genAiOperation: 'embeddings',
+      call: (args: any) => retryableEmbed(args),
+      model: () => MockEmbeddingModel.from([Embedding.vector(3)]),
+      args: { value: 'hi' },
+    },
+    {
+      operation: 'embedMany',
+      genAiOperation: 'embeddings',
+      call: (args: any) => retryableEmbedMany(args),
+      model: () => MockEmbeddingModel.from([Embedding.vector(3)]),
+      args: { values: ['hi'] },
+    },
+    {
+      operation: 'generateImage',
+      genAiOperation: 'generate_content',
+      call: (args: any) => retryableGenerateImage(args),
+      model: () => MockImageModel.from(mockImageResult),
+      args: { prompt: 'a cat' },
+    },
+  ])(
+    'should name the operation span after $operation',
+    async ({ operation, genAiOperation, call, model, args }) => {
+      // Arrange
+      const { exporter, tracer } = createSpanExporter();
+
+      // Act
+      await call({
+        model: model(),
+        ...args,
+        retry: { retries: [], telemetry: { isEnabled: true, tracer } },
+      });
+
+      // Assert
+      const span = findSpan(exporter, `ai_retry.${operation}`);
+      expect(span.attributes['ai_retry.operation']).toBe(operation);
+      expect(span.attributes['gen_ai.operation.name']).toBe(genAiOperation);
+    },
+  );
 });
