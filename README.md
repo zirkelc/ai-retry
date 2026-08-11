@@ -551,7 +551,7 @@ const retryableModel = createRetryableModel({
 
 The same `delay` / `backoffFactor` / `maxAttempts` options are accepted by `.switch({...})` and `.retry({...})`.
 
-#### Timeouts
+#### Retry timeouts
 
 When a retry specifies a `timeout`, a fresh `AbortSignal.timeout()` is created for that attempt. If the original `abortSignal` is still alive, the fresh deadline is composed with it via `AbortSignal.any()` so user cancellation still works. If the original signal is already aborted (a request-level deadline already fired), it is dropped so the retry runs against the fresh deadline alone.
 
@@ -573,6 +573,8 @@ await generateText({
   abortSignal: AbortSignal.timeout(60_000),
 });
 ```
+
+This option is one of several places a deadline can live, and the choice decides whether a fallback can recover at all. See [Timeouts](#timeouts) for the full picture.
 
 #### Max attempts
 
@@ -852,11 +854,111 @@ Result-based conditions (`finishReason`, `schemaInvalid`, `result(...)`) apply t
 > [!IMPORTANT]
 > **Streaming limitation:** retries and fallbacks only apply before the first content chunk is emitted. Once streaming begins delivering content, the response is committed to the current model. Mid-stream errors will propagate to the caller rather than triggering a fallback. If reliable retries are critical for your use case, consider using `generateText` instead of `streamText`.
 
-#### Timeouts and abort signals under `streamText`
+Timeouts have a second limitation on top of that boundary: a deadline set on the `streamText` call itself can never fail over, whether or not content has been emitted. See [Timeouts](#timeouts).
 
-`streamText` enforces its own timeouts (`timeout.stepMs`, `timeout.chunkMs`, `timeout.totalMs`, and any caller-supplied `abortSignal`) by merging them into a single signal that its stream pipeline watches directly. When that signal aborts, `streamText` finalizes the stream as aborted and **discards any output an `ai-retry` fallback produces underneath it**, even before the first content chunk. The fallback is still attempted (you'll see `onError`/`onRetry` fire), but its result never reaches the consumer.
+### Timeouts
 
-This is specific to `streamText`. The same timeouts on `generateText` recover normally, because `generateText` has no separate stream pipeline to tear down. That means the model wrappers **cannot** recover `streamText`-level timeouts. The [call-level functions](#call-level-retries) below can, by re-issuing the whole call.
+Whether a timeout can fail over depends on two things: **who owns the clock**, and **whether any content has reached you yet**. Neither is visible from the outside, so it is worth seeing what a call actually does with your model.
+
+#### A `streamText` call, from the inside
+
+Your model does not run the call. `streamText` runs the call, and your model instance is one piece it uses along the way:
+
+1. Before it touches the model, it builds **one abort signal** out of every `timeout.*` you passed plus any `abortSignal` of your own.
+2. It calls `model.doStream()` underneath that signal, once per step.
+3. It forwards the model's chunks to you through a **gate** that re-checks the signal before every single chunk.
+
+```mermaid
+flowchart TB
+  you(["your code"])
+
+  subgraph outer["retryableStreamText: a retry replaces this entire box"]
+    subgraph call["one streamText() call"]
+      direction TB
+      sig["abort signal, owned by the call<br>totalMs · stepMs · firstChunkMs · chunkMs · your abortSignal"]
+      subgraph inner["createRetryableModel: a retry replaces only this box"]
+        ds["model.doStream()<br>request to the provider"]
+      end
+      gate["chunk gate<br>re-checks the signal before forwarding each chunk"]
+    end
+  end
+
+  you -- "prompt" --> ds
+  ds -- "chunks" --> gate
+  sig -. "once a deadline fires, the gate<br>drops everything and closes the stream" .-> gate
+  gate -- "textStream / fullStream" --> you
+```
+
+The nesting is the whole rule:
+
+- **`createRetryableModel` swaps the model**, which is the innermost box. The signal and the gate sit above it and survive the swap. The fallback really does run (`onError` and `onRetry` fire, the fallback model is called, it produces chunks), and then the gate drops every one of them, because the signal it checks latched the moment the deadline fired.
+- **`retryableStreamText` swaps the call**, so a retry throws the whole box away, signal and gate included, and builds a new one. The fallback gets a fresh signal and a fresh gate, so its output reaches you.
+
+`generateText` has the same layering minus the gate: there is no stream to forward chunk by chunk, so a fallback below the call still returns its value normally. That is why the model layer recovers `generateText` deadlines but not `streamText` ones.
+
+| Layer       | What a retry replaces                     | `generateText` deadlines | `streamText` deadlines |
+| ----------- | ----------------------------------------- | ------------------------ | ---------------------- |
+| Model layer | `doGenerate` / `doStream`, below the call | recovers                 | cannot recover         |
+| Call layer  | the whole call, above the model           | recovers                 | recovers               |
+
+- **Model layer**: [`createRetryableModel`](#usage), the wrapped model you hand to the SDK.
+- **Call layer**: the [call-level functions](#call-level-retries) (`retryableStreamText` and friends), which take the call's own arguments.
+
+A deadline the model layer sets _itself_ is a different matter: a retry's own `timeout` aborts only that attempt's signal, never the call's, so it recovers under both entry points (see [Retry timeouts](#retry-timeouts)).
+
+#### When each timer runs
+
+```mermaid
+sequenceDiagram
+  participant You as your code
+  participant Call as streamText()
+  participant Model as model.doStream()
+
+  You->>Call: streamText({ model, prompt, timeout })
+  Note over Call: totalMs starts (the whole call)<br>stepMs starts (this step)<br>firstChunkMs starts (this step)
+  Call->>Model: doStream({ abortSignal })
+  Model-->>Call: stream-start, response-metadata<br>(framing, not content)
+  Model-->>Call: first text-delta
+  Note over Call: firstChunkMs cleared<br>chunkMs armed for the first time
+  Call-->>You: first chunk, and the attempt is now committed
+  Model-->>Call: more deltas
+  Note over Call: chunkMs restarts on every content chunk
+  Model-->>Call: finish
+  Note over Call: totalMs and stepMs stop when the call ends
+```
+
+Note where the commit point falls: `chunkMs` cannot arm until the first content chunk, and that same chunk is what puts the attempt beyond retry. A timer that only starts after commit can never produce a recoverable failure.
+
+**Which deadline fires when under `generateText`**
+
+| Deadline             | Clock                           | Outcome  |
+| -------------------- | ------------------------------- | -------- |
+| `timeout.totalMs`    | the whole call, from call start | recovers |
+| `timeout.stepMs`     | one step, from step start       | recovers |
+| caller `abortSignal` | whenever the caller aborts      | recovers |
+
+**Which deadline fires when under `streamText`**
+
+| Deadline               | Clock                                                                 | Outcome                    |
+| ---------------------- | --------------------------------------------------------------------- | -------------------------- |
+| `timeout.totalMs`      | the whole call, from call start                                       | discarded                  |
+| `timeout.stepMs`       | one step, from step start                                             | discarded                  |
+| `timeout.firstChunkMs` | step start until the first content chunk                              | discarded                  |
+| `timeout.chunkMs`      | the gap between content chunks, armed only once the first one arrives | never fires before content |
+| caller `abortSignal`   | whenever the caller aborts                                            | discarded                  |
+
+"Discarded" means the fallback is attempted and runs, but its output never reaches the consumer, because it arrives at a gate that is already closed. That is a separate thing from the streaming commit boundary above, and stricter: the gate closes on the signal rather than on what has been delivered, so even a stall before the very first chunk is dropped, with no content anywhere in sight ([#50](https://github.com/zirkelc/ai-retry/issues/50)).
+
+Three sharp edges in those tables:
+
+- `firstChunkMs` and `chunkMs` are streaming-only, but all four keys share one type, so `generateText` accepts them and then never reads them. A `generateText` call configured with only those keys has no deadline at all, and a stalled model hangs indefinitely.
+- `chunkMs` measures the gap _between_ content chunks, so its timer is only armed once the first content chunk arrives. It never catches a model that stalls before producing anything, and once it can fire the attempt is already committed.
+- Where a table says "recovers", the retry must still supply its own `timeout` whenever the inbound signal has already fired, otherwise `ai-retry` re-throws instead of retrying against a dead signal (see [Retry timeouts](#retry-timeouts)).
+
+A `streamText` deadline is still useful as a hard ceiling on the call. To actually recover from one, retry at the call layer with [`retryableStreamText`](#retryablestreamtext).
+
+> [!IMPORTANT]
+> The streaming commit boundary still applies at either layer. A deadline that fires after the first content chunk cannot fail over, because the response is already committed to the current model.
 
 ### Call-level retries
 
@@ -874,15 +976,48 @@ The call-level functions close that gap by re-running the **whole call** with th
 
 Each is also re-exported from the package root, deprecated: the conditions live only on the per-function path, so importing the function from the same place keeps a call and the retries it is configured with in one import.
 
+Everything else is the same as at the model layer: the same `Retry` fields (`maxAttempts`, `delay`, `backoffFactor`, `timeout`, `options`) and the same `RetryError` when every attempt fails. The conditions carry the same names from a different subpath, and only `result()` behaves differently, as described below.
+
+#### `retryableGenerateText`
+
+The plainest case. Everything is recoverable right up to the moment the call resolves, errors and results alike.
+
+```typescript
+import { anthropic } from '@ai-sdk/anthropic';
+import { openai } from '@ai-sdk/openai';
+import { retryableGenerateText } from 'ai-retry/generate-text';
+import { finishReason, httpStatus } from 'ai-retry/generate-text/conditions';
+
+const result = await retryableGenerateText({
+  model: anthropic('claude-sonnet-4-5'),
+  prompt: 'Invent a new holiday.',
+  /** A whole-call deadline, recoverable here because the retry re-issues the call. */
+  timeout: { totalMs: 20_000 },
+  retry: [
+    /** Overloaded upstream: same prompt, different provider. */
+    httpStatus(529).switch({ model: openai('gpt-4o') }),
+    /** A refusal is a successful response, so only a result condition sees it. */
+    finishReason('content-filter').switch({ model: openai('gpt-4o-mini') }),
+  ],
+});
+
+console.log(result.text);
+```
+
+#### `retryableStreamText`
+
+The reason this layer exists. A `timeout` on a `streamText` call cannot be recovered from below it (see [Timeouts](#timeouts)), so the retry has to sit here.
+
 ```typescript
 import { openai } from '@ai-sdk/openai';
 import { retryableStreamText } from 'ai-retry/stream-text';
 import { timeout } from 'ai-retry/stream-text/conditions';
 
+/** Note the `await`: unlike `streamText`, this resolves once an attempt commits. */
 const result = await retryableStreamText({
   model: openai('gpt-4o'),
   prompt: 'Invent a new holiday.',
-  /** A deadline no model-level retry could recover. */
+  /** No model-level retry could recover this one. */
   timeout: { firstChunkMs: 2_000 },
   retry: [timeout().switch({ model: openai('gpt-4o-mini') })],
 });
@@ -890,7 +1025,75 @@ const result = await retryableStreamText({
 for await (const chunk of result.textStream) process.stdout.write(chunk);
 ```
 
-Everything else is unchanged: the same `Retry` fields (`maxAttempts`, `delay`, `backoffFactor`, `timeout`, `options`) and the same `RetryError` when every attempt fails. The conditions are the same names from a different subpath — see below.
+`retryableStreamText` returns a promise where `streamText` returns its result synchronously. The loop has to know which attempt won before it can hand you a stream, and that is the only place a signature differs from the SDK's.
+
+#### `retryableEmbed`
+
+Embedding models have no `timeout` argument, so a retry's own deadline is composed into `abortSignal` for you.
+
+```typescript
+import { openai } from '@ai-sdk/openai';
+import { retryableEmbed } from 'ai-retry/embed';
+import { httpStatus } from 'ai-retry/embed/conditions';
+
+const result = await retryableEmbed({
+  model: openai.textEmbedding('text-embedding-3-small'),
+  value: 'sunny day at the beach',
+  retry: [
+    /** Rate limited: wait it out on the same model before moving on. */
+    httpStatus(429).retry({ maxAttempts: 3, delay: 1_000, backoffFactor: 2 }),
+    /** Still failing, so switch. A bare model is shorthand for "always try this next". */
+    openai.textEmbedding('text-embedding-3-large'),
+  ],
+});
+
+console.log(result.embedding.length);
+```
+
+#### `retryableEmbedMany`
+
+Same shape, for the batch entry point. A retry re-runs the whole call, so the fallback re-embeds every value rather than resuming a partial batch.
+
+```typescript
+import { openai } from '@ai-sdk/openai';
+import { retryableEmbedMany } from 'ai-retry/embed-many';
+import { result } from 'ai-retry/embed-many/conditions';
+
+const embeddings = await retryableEmbedMany({
+  model: openai.textEmbedding('text-embedding-3-small'),
+  values: ['sunny day at the beach', 'rainy afternoon in the city'],
+  retry: [
+    /** A degenerate embedding is not an error, so nothing throws to catch. */
+    result((res) => res.embeddings.some((e) => e.every((v) => v === 0))).switch({
+      model: openai.textEmbedding('text-embedding-3-large'),
+    }),
+  ],
+});
+```
+
+#### `retryableGenerateImage`
+
+Image models fail in ways that are not errors at all: the call succeeds and returns nothing usable.
+
+```typescript
+import { openai } from '@ai-sdk/openai';
+import { retryableGenerateImage } from 'ai-retry/generate-image';
+import { noImage, result } from 'ai-retry/generate-image/conditions';
+
+const { images } = await retryableGenerateImage({
+  model: openai.image('dall-e-3'),
+  prompt: 'a cat wearing a hat',
+  n: 2,
+  retry: [
+    /** Returned no image at all. */
+    noImage().switch({ model: openai.image('gpt-image-1') }),
+    /** Returned fewer than asked for. */
+    result((res) => res.images.length < 2).switch({
+      model: openai.image('gpt-image-1'),
+    }),
+  ],
+});
+```
 
 #### Conditions
 
@@ -1004,7 +1207,7 @@ For `generateText`, `embed`, `embedMany` and `generateImage`, an attempt is reco
 
 For `retryableStreamText` the boundary is the **first content part**. Before it, an error, a deadline, or even a finish with no content at all can fail over. Once a content part reaches the stream the attempt is committed and belongs to you; an error during consumption propagates to the stream rather than triggering a fallback. That ceiling is inherent to streaming, and the same one the model wrappers have.
 
-Because a pre-commit stream has emitted no text and no tool calls _by definition_, result-based conditions on a stream are effectively finish-reason-shaped. The type says so: the `streamText` member of the result union declares `finishReason`, `usage` and `providerMetadata` and nothing else, so `finishReason('content-filter')` on an otherwise empty response works and there is no content field to reach for in the first place.
+Because a pre-commit stream has emitted no text and no tool calls _by definition_, result-based conditions on a stream are effectively finish-reason-shaped. The type says so: `StreamTextCommitResult` declares `finishReason`, `usage` and `providerMetadata` and nothing else, so `finishReason('content-filter')` on an otherwise empty response works and there is no content field to reach for in the first place.
 
 #### `onSuccess` fires at the boundary that can still fail over
 
@@ -1018,33 +1221,7 @@ Use the call-level functions when a deadline or cancellation on the call itself 
 
 ### Deprecated: experimental call-level drivers
 
-`createRetryableCall` (`ai-retry/experimental/call`) and `createRetryableStream` (`ai-retry/experimental/stream`) were the first pass at call-level retries. They still work and are still exported, but the [call-level functions](#call-level-retries) above supersede them and they will be removed in a future release.
-
-The drivers ask you to supply the call function and wire each attempt yourself:
-
-```typescript
-/** Before */
-const run = createRetryableCall({ model: primaryModel, retries });
-const result = await run(
-  (attempt) =>
-    generateText({
-      model: attempt.model,
-      timeout: attempt.timeout,
-      abortSignal: attempt.abortSignal,
-      prompt: 'Invent a new holiday.',
-      maxRetries: 0,
-    }),
-  { timeout: 2_000 },
-);
-
-/** After */
-const result = await retryableGenerateText({
-  model: primaryModel,
-  prompt: 'Invent a new holiday.',
-  timeout: { totalMs: 2_000 },
-  retry: retries,
-});
-```
+`createRetryableCall` (`ai-retry/experimental/call`) and `createRetryableStream` (`ai-retry/experimental/stream`) were the first pass at call-level retries. They still work and are still exported, but the [call-level functions](#call-level-retries) supersede them entirely and they will be removed in a future release. The drivers ask you to supply the call function and wire each attempt yourself; the functions above take the call's own arguments and do it for you.
 
 | driver                                                          | replacement                                                        | notes                                                          |
 | --------------------------------------------------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------- |
@@ -1053,10 +1230,10 @@ const result = await retryableGenerateText({
 | `createRetryableStream`                                         | `retryableStreamText`                                              | same commit boundary                                           |
 | `onComplete` / `onCommit`                                       | `onSuccess`                                                        | one name, documented per entry point; now carries the result   |
 
-Two behaviours improve on the way across:
+Two reasons to move rather than wait:
 
-- The new functions handle **result-based** conditions. The drivers are error-based only, so `finishReason('content-filter')` on an otherwise empty response streams through instead of failing over.
-- `createRetryableStream` documents support for `streamObject` results. That is **wrong**: `streamObject`'s `fullStream` is the base stream rather than a fresh tee, so reading it for commit detection locks it and the caller's `partialObjectStream` yields nothing. `retryableStreamText` does not accept object results at all.
+- The drivers are **error-based only**, so `finishReason('content-filter')` on an otherwise empty response streams through instead of failing over.
+- `createRetryableStream` documents support for `streamObject` results. That is **wrong**: `streamObject`'s `fullStream` is the base stream rather than a fresh tee, so reading it for commit detection locks it and the caller's `partialObjectStream` yields nothing.
 
 Full documentation for the drivers lives in the [v2.3.0 README](https://github.com/zirkelc/ai-retry/blob/v2.3.0/README.md#experimental-call-level-retries).
 
