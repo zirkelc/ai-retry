@@ -20,7 +20,6 @@ import {
   mockResultText,
   mockStreamChunks,
   type LanguageModelGenerateFn,
-  type LanguageModelStreamFn,
 } from '../internal/test-utils.js';
 import type { LanguageModelCallOptions } from '../types.js';
 import { requestTimeout } from './request-timeout.js';
