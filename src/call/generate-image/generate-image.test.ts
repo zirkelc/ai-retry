@@ -6,7 +6,6 @@ import {
   mockImageResults,
   nonRetryableError,
   retryableError,
-  slowCall,
 } from '../../internal/test-utils.js';
 import type { ImageModel } from '../../types.js';
 import { result as imageResult } from './conditions/index.js';
@@ -99,7 +98,10 @@ describe('retryableGenerateImage', () => {
       it('should compose a retry timeout into the abort signal', async () => {
         // Arrange — `generateImage` has no `timeout` argument of its own.
         const primary = MockImageModel.from(retryableError);
-        const slow = MockImageModel.from(slowCall(5_000, mockImageResult));
+        const slow = MockImageModel.from({
+          ...mockImageResult,
+          delayInMs: 5_000,
+        });
         const rescue = MockImageModel.from(mockImageResult);
 
         // Act

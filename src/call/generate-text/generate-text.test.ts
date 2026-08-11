@@ -7,7 +7,6 @@ import {
   mockResultText,
   nonRetryableError,
   retryableError,
-  slowCall,
 } from '../../internal/test-utils.js';
 import type { LanguageModel } from '../../types.js';
 import { finishReason, result as resultCondition } from './conditions/index.js';
@@ -106,7 +105,7 @@ describe('retryableGenerateText', () => {
         // a model that needs 5s.
         const primary = MockLanguageModel.from(retryableError);
         const slow = MockLanguageModel.from({
-          doGenerate: slowCall(5_000, mockResult),
+          doGenerate: { content: [], delayInMs: 5_000 },
         });
         const rescue = MockLanguageModel.from(mockResultText);
 

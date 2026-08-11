@@ -5,7 +5,6 @@ import {
   MockEmbeddingModel,
   nonRetryableError,
   retryableError,
-  slowCall,
 } from '../../internal/test-utils.js';
 import type { EmbeddingModel } from '../../types.js';
 import { result as embeddingResult } from './conditions/index.js';
@@ -97,9 +96,10 @@ describe('retryableEmbedMany', () => {
       it('should compose a retry timeout into the abort signal', async () => {
         // Arrange — like `embed`, there is no `timeout` argument to use.
         const primary = MockEmbeddingModel.from(retryableError);
-        const slow = MockEmbeddingModel.from(
-          slowCall(5_000, Embedding.result([Embedding.vector(3)])),
-        );
+        const slow = MockEmbeddingModel.from({
+          embeddings: [Embedding.vector(3)],
+          delayInMs: 5_000,
+        });
         const rescue = MockEmbeddingModel.from([Embedding.vector(3)]);
 
         // Act

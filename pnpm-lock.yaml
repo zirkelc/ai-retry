@@ -75,8 +75,8 @@ importers:
         specifier: 7.0.35
         version: 7.0.35(zod@4.3.6)
       ai-test-kit:
-        specifier: 3.0.1
-        version: 3.0.1(@ai-sdk/provider-utils@5.0.12(zod@4.3.6))(@ai-sdk/provider@4.0.3)(ai@7.0.35(zod@4.3.6))
+        specifier: 3.3.0
+        version: 3.3.0(@ai-sdk/provider-utils@5.0.12(zod@4.3.6))(@ai-sdk/provider@4.0.3)(ai@7.0.35(zod@4.3.6))
       husky:
         specifier: ^9.1.7
         version: 9.1.7
@@ -1380,8 +1380,8 @@ packages:
     engines: {node: '>=0.4.0'}
     hasBin: true
 
-  ai-test-kit@3.0.1:
-    resolution: {integrity: sha512-S134cseyn1axVwnPNHXG/rpbTgm7IfGJqUODA5ZMrUQtU5GAZatvVwwcnf2EDcCihGIUUcNDaHyA2DodhTM0qA==}
+  ai-test-kit@3.3.0:
+    resolution: {integrity: sha512-l2nhUXH2bnccxymWJPw2GRB1p01stfn2+ttbxBOxEpfKtU0T2Ci0PbL7etGxd3QiGCJuzwXX9gHP7Ha6oSoAUQ==}
     engines: {node: '>=22'}
     peerDependencies:
       '@ai-sdk/provider': ^4.0.0
@@ -3467,7 +3467,7 @@ snapshots:
 
   acorn@8.15.0: {}
 
-  ai-test-kit@3.0.1(@ai-sdk/provider-utils@5.0.12(zod@4.3.6))(@ai-sdk/provider@4.0.3)(ai@7.0.35(zod@4.3.6)):
+  ai-test-kit@3.3.0(@ai-sdk/provider-utils@5.0.12(zod@4.3.6))(@ai-sdk/provider@4.0.3)(ai@7.0.35(zod@4.3.6)):
     dependencies:
       '@ai-sdk/provider': 4.0.3
       '@ai-sdk/provider-utils': 5.0.12(zod@4.3.6)

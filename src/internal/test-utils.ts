@@ -320,28 +320,6 @@ export const mockImageResult: ImageModelGenerate = Image.result([Image.png()]);
 export const mockImageResults = (count: number): ImageModelGenerate =>
   Image.result(Array.from({ length: count }, () => Image.png()));
 
-/**
- * A model call that takes `ms` to answer and rejects with the abort reason if
- * cancelled first — the shape every deadline test needs, whichever entry point
- * it is written against.
- *
- * Deliberately typed by its own arguments rather than as one family's
- * `doGenerate`/`doEmbed`: every provider method takes an object carrying an
- * optional `abortSignal`, so one helper satisfies all of them.
- */
-export const slowCall =
-  <RESULT>(ms: number, result: RESULT) =>
-  async ({ abortSignal }: { abortSignal?: AbortSignal }): Promise<RESULT> => {
-    await new Promise<void>((resolve, reject) => {
-      const handle = setTimeout(resolve, ms);
-      abortSignal?.addEventListener('abort', () => {
-        clearTimeout(handle);
-        reject(abortSignal.reason);
-      });
-    });
-    return result;
-  };
-
 /** Stream parts for a successful stream: content then a `stop` finish. */
 export const successStreamChunks = (
   text: string,
