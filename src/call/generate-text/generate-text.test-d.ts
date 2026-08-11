@@ -5,6 +5,7 @@ import {
   MockEmbeddingModel,
   MockLanguageModel,
 } from '../../internal/test-utils.js';
+import { timeout } from './conditions/index.js';
 import { retryableGenerateText } from './generate-text.js';
 
 /**
@@ -192,6 +193,28 @@ describe('retryableGenerateText', () => {
       prompt: 'Hello!',
       // @ts-expect-error nor does `chunkMs` mean anything here
       retry: [{ model, timeout: { chunkMs: 100 } }],
+    });
+  });
+
+  it('should reject a streaming window even alongside one that applies', () => {
+    // Arrange — the interesting case. A window that means something here is
+    // enough to make the object look plausible, so the one that means nothing
+    // has to be rejected on its own terms rather than by the object as a whole
+    // sharing no keys with the target.
+    retryableGenerateText({
+      model,
+      prompt: 'Hello!',
+      // @ts-expect-error `chunkMs` is still not measurable here
+      retry: [{ model, timeout: { totalMs: 5_000, chunkMs: 100 } }],
+    });
+
+    retryableGenerateText({
+      model,
+      prompt: 'Hello!',
+      retry: [
+        // @ts-expect-error same, from a condition
+        timeout().switch({ model, timeout: { totalMs: 5_000, chunkMs: 100 } }),
+      ],
     });
   });
 });
