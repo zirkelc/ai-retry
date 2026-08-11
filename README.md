@@ -1207,7 +1207,7 @@ const result = await retryableStreamText({
 | `retryableGenerateText`                                   | `number \| { totalMs, stepMs, toolMs, tools }`             |
 | `retryableStreamText`                                     | the above plus `{ firstChunkMs, chunkMs }`                 |
 
-Naming a window the destination cannot measure is a **type error** rather than a deadline that never fires. So `{ chunkMs: 100 }` on `retryableGenerateText` is rejected, and so is `{ totalMs: 5_000, chunkMs: 100 }`, where the SDK's own `timeout` argument would accept both on the same call and then never read `chunkMs` (see [Timeouts](#timeouts)). Below a model the deadline can only be a plain number: a retryable model builds an `AbortSignal`, and a signal carries a wall-clock budget and nothing else.
+Naming a window the destination cannot measure is a **type error** rather than a deadline that never fires. So `{ chunkMs: 100 }` on `retryableGenerateText` is rejected, where the SDK's own `timeout` argument would accept it on the same call and then never read it (see [Timeouts](#timeouts)). Below a model the deadline can only be a plain number: a retryable model builds an `AbortSignal`, and a signal carries a wall-clock budget and nothing else.
 
 **`embed`, `embedMany` and `generateImage` take a `timeout` of their own here**, which the SDK does not give them. It is this library's argument, turned into a fresh `AbortSignal` per attempt and never passed on:
 

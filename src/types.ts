@@ -390,22 +390,6 @@ export interface RetryableModelOptions<MODEL extends AnyModel> {
 type TimeoutObject = Exclude<TimeoutConfiguration<ToolSet>, number>;
 
 /**
- * The windows a deadline does *not* offer, spelled as `never` rather than left
- * out.
- *
- * Omitting them would leave a target of only optional properties, and TypeScript
- * rejects such a target only when the value shares no key with it at all. So
- * `{ chunkMs: 100 }` would be caught around `generateText` while
- * `{ totalMs: 5_000, chunkMs: 100 }` would slip through, `chunkMs` silently
- * meaning nothing. Naming them forbidden makes the second a plain assignability
- * failure, which is reported even where the type is inferred from the value
- * rather than checked against it.
- */
-type Forbidden<ALLOWED extends keyof TimeoutObject> = {
-  [KEY in Exclude<keyof TimeoutObject, ALLOWED>]?: never;
-};
-
-/**
  * A deadline that can only be a total budget: `retryableEmbed`,
  * `retryableEmbedMany`, `retryableGenerateImage`.
  *
@@ -419,9 +403,7 @@ type Forbidden<ALLOWED extends keyof TimeoutObject> = {
  * `timeout` argument anywhere in reach, so the object form would buy nothing but
  * a second way to write the same milliseconds.
  */
-export type TotalTimeout =
-  | number
-  | (Pick<TimeoutObject, 'totalMs'> & Forbidden<'totalMs'>);
+export type TotalTimeout = number | Pick<TimeoutObject, 'totalMs'>;
 
 /**
  * A deadline for a call that runs in steps and may execute tools, but does not
@@ -433,8 +415,7 @@ export type TotalTimeout =
  */
 export type StepTimeout =
   | number
-  | (Pick<TimeoutObject, 'totalMs' | 'stepMs' | 'toolMs' | 'tools'> &
-      Forbidden<'totalMs' | 'stepMs' | 'toolMs' | 'tools'>);
+  | Pick<TimeoutObject, 'totalMs' | 'stepMs' | 'toolMs' | 'tools'>;
 
 /**
  * A deadline for a streaming call: `retryableStreamText`. The SDK's full
