@@ -7,6 +7,7 @@ import type {
   LanguageModelStream,
   ModelSuccessContext,
 } from '../../types.js';
+import { timeout } from './conditions/index.js';
 import { createRetryableModel } from './create-retryable-model.js';
 
 describe('createRetryableModel', () => {
@@ -44,5 +45,50 @@ describe('createRetryableModel', () => {
       Ctx['current']['options']
     >().toEqualTypeOf<LanguageModelCallOptions>();
     expectTypeOf<Ctx['current']['type']>().toEqualTypeOf<'success'>();
+  });
+
+  it('should take a retry deadline only as a number', () => {
+    // Arrange — a retryable model applies its deadline by building an
+    // `AbortSignal`, which can carry a wall-clock budget and nothing else. The
+    // SDK's structured windows belong to the call layer, which has a real
+    // `timeout` argument to put them in.
+    createRetryableModel({
+      model: MockLanguageModel.from(),
+      retries: [{ model: MockLanguageModel.from(), timeout: 5_000 }],
+    });
+
+    createRetryableModel({
+      model: MockLanguageModel.from(),
+      retries: [
+        // @ts-expect-error a structured deadline cannot be expressed as a signal
+        { model: MockLanguageModel.from(), timeout: { totalMs: 5_000 } },
+      ],
+    });
+  });
+
+  it('should reject a structured deadline from a condition too', () => {
+    // Arrange — hoisted, so the deadline is inferred from the target rather
+    // than from the list it is about to land in. That is what makes the next
+    // assertion about the list rather than about the `switch` call.
+    const numeric = timeout().switch({
+      model: MockLanguageModel.from(),
+      timeout: 5_000,
+    });
+    const structured = timeout().switch({
+      model: MockLanguageModel.from(),
+      timeout: { totalMs: 5_000 },
+    });
+
+    // Assert
+    createRetryableModel({
+      model: MockLanguageModel.from(),
+      retries: [numeric],
+    });
+
+    createRetryableModel({
+      model: MockLanguageModel.from(),
+      // @ts-expect-error same rule, reported where the retryable lands
+      retries: [structured],
+    });
   });
 });

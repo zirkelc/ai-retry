@@ -115,6 +115,91 @@ describe('retryableEmbed', () => {
         expect(rescue.doEmbed.mock.calls.length).toBe(1);
       });
 
+      it("should fail over when the call's own deadline fires", async () => {
+        // Arrange — the deadline is this library's, not the SDK's, so unlike a
+        // signal the caller composed itself it is recoverable.
+        const slow = MockEmbeddingModel.from({
+          embeddings: [Embedding.vector(3)],
+          delayInMs: 5_000,
+        });
+        const fallback = MockEmbeddingModel.from([Embedding.vector(3)]);
+
+        // Act
+        const result = await retryableEmbed({
+          model: slow,
+          value,
+          timeout: 50,
+          retry: [fallback],
+        });
+
+        // Assert
+        expect(result.embedding.length).toBe(3);
+        expect(fallback.doEmbed.mock.calls.length).toBe(1);
+      });
+
+      it('should give every attempt a fresh deadline, not one shared budget', async () => {
+        // Arrange — two models that each outrun the deadline, then one that
+        // does not. A single shared signal would have fired during attempt 1
+        // and killed the rest instantly.
+        const slow = () =>
+          MockEmbeddingModel.from({
+            embeddings: [Embedding.vector(3)],
+            delayInMs: 5_000,
+          });
+        const first = slow();
+        const second = slow();
+        const rescue = MockEmbeddingModel.from([Embedding.vector(3)]);
+
+        // Act
+        const result = await retryableEmbed({
+          model: first,
+          value,
+          timeout: 50,
+          retry: [second, rescue],
+        });
+
+        // Assert — the third attempt ran, so attempts 2 and 3 each got 50ms of
+        // their own rather than inheriting a spent one.
+        expect(result.embedding.length).toBe(3);
+        expect(second.doEmbed.mock.calls.length).toBe(1);
+        expect(rescue.doEmbed.mock.calls.length).toBe(1);
+      });
+
+      it("should let a retry's own deadline win over the call's", async () => {
+        // Arrange — the call allows 50ms, the retry asks for more.
+        const primary = MockEmbeddingModel.from(retryableError);
+        const slowish = MockEmbeddingModel.from({
+          embeddings: [Embedding.vector(3)],
+          delayInMs: 300,
+        });
+
+        // Act
+        const result = await retryableEmbed({
+          model: primary,
+          value,
+          timeout: 50,
+          retry: [{ model: slowish, timeout: 5_000 }],
+        });
+
+        // Assert — a model far slower than the call's own deadline still
+        // answered, so the retry's budget replaced it.
+        expect(result.embedding.length).toBe(3);
+      });
+
+      it('should never pass the borrowed deadline to the SDK', async () => {
+        // Arrange — `timeout` is ours; `embed` has no such argument and must
+        // receive a signal instead.
+        const model = MockEmbeddingModel.from([Embedding.vector(3)]);
+
+        // Act
+        await retryableEmbed({ model, value, timeout: 5_000 });
+
+        // Assert
+        const options = model.doEmbed.mock.calls[0]![0];
+        expect(options.abortSignal).toBeDefined();
+        expect('timeout' in options).toBe(false);
+      });
+
       it("should compose the caller's own signal in alongside the deadline", async () => {
         // Arrange — a genuine cancel still has to propagate mid-attempt.
         const controller = new AbortController();

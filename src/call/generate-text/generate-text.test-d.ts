@@ -160,4 +160,38 @@ describe('retryableGenerateText', () => {
       },
     });
   });
+
+  it('should take every deadline a stepped, non-streaming call can measure', () => {
+    // Assert
+    retryableGenerateText({ model, prompt: 'Hello!', timeout: 5_000 });
+    retryableGenerateText({
+      model,
+      prompt: 'Hello!',
+      timeout: { totalMs: 5_000, stepMs: 2_000, toolMs: 1_000 },
+    });
+    retryableGenerateText({
+      model,
+      prompt: 'Hello!',
+      retry: [{ model, timeout: { totalMs: 5_000, stepMs: 2_000 } }],
+    });
+  });
+
+  it('should reject a streaming-only deadline on a retry', () => {
+    // Arrange — the SDK's `timeout` argument accepts these two on
+    // `generateText` and then never reads them. A retry deadline of ours does
+    // not repeat that.
+    retryableGenerateText({
+      model,
+      prompt: 'Hello!',
+      // @ts-expect-error `firstChunkMs` needs a stream to measure against
+      retry: [{ model, timeout: { firstChunkMs: 2_000 } }],
+    });
+
+    retryableGenerateText({
+      model,
+      prompt: 'Hello!',
+      // @ts-expect-error nor does `chunkMs` mean anything here
+      retry: [{ model, timeout: { chunkMs: 100 } }],
+    });
+  });
 });

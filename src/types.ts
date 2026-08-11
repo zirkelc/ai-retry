@@ -10,7 +10,7 @@ import type {
   SharedV4ProviderOptions,
 } from '@ai-sdk/provider';
 import type { AttributeValue, Tracer } from '@opentelemetry/api';
-import type { gateway } from 'ai';
+import type { gateway, TimeoutConfiguration, ToolSet } from 'ai';
 
 type Literals<T> = T extends string
   ? string extends T
@@ -380,9 +380,67 @@ export interface RetryableModelOptions<MODEL extends AnyModel> {
  * This flexible approach allows retryable functions to return the exact model type
  * they received without type assertions, while still supporting string-based gateway models.
  */
+/**
+ * The object form of the SDK's timeout configuration, number shorthand aside.
+ *
+ * The narrower deadlines below are `Pick`ed from it rather than written out, so
+ * a key the SDK renames or drops fails to compile here instead of quietly
+ * meaning nothing.
+ */
+type TimeoutObject = Exclude<TimeoutConfiguration<ToolSet>, number>;
+
+/**
+ * A deadline that can only be a total budget: `retryableEmbed`,
+ * `retryableEmbedMany`, `retryableGenerateImage`.
+ *
+ * Those entry points have no `timeout` argument of their own, so a deadline
+ * around them can only be an `AbortSignal`, which expresses a wall-clock budget
+ * and nothing else. The SDK's finer windows describe stages of a call that only
+ * its own pipeline can see, so they are not offered rather than being accepted
+ * and ignored.
+ *
+ * Beneath a model the deadline is narrower still, a plain `number`: there is no
+ * `timeout` argument anywhere in reach, so the object form would buy nothing but
+ * a second way to write the same milliseconds.
+ */
+export type TotalTimeout = number | Pick<TimeoutObject, 'totalMs'>;
+
+/**
+ * A deadline for a call that runs in steps and may execute tools, but does not
+ * stream: `retryableGenerateText`.
+ *
+ * `firstChunkMs` and `chunkMs` are deliberately absent. The SDK's own `timeout`
+ * argument accepts them on `generateText` and then never reads them, which is a
+ * silent no-op this narrower type turns into a compile error.
+ */
+export type StepTimeout =
+  | number
+  | Pick<TimeoutObject, 'totalMs' | 'stepMs' | 'toolMs' | 'tools'>;
+
+/**
+ * A deadline for a streaming call: `retryableStreamText`. The SDK's full
+ * configuration, since every window it defines is measurable there.
+ */
+export type StreamTimeout = TimeoutConfiguration<ToolSet>;
+
+/**
+ * The widest deadline any retry can state, and what the machinery accepts
+ * before narrowing it to whatever the destination can enforce.
+ *
+ * A number is a total budget in milliseconds. An object is merged key by key
+ * into whatever deadline the call already carried, so a retry can narrow one
+ * window without discarding the others.
+ *
+ * The budget is per attempt rather than a ceiling on the retry loop: each
+ * attempt starts a fresh clock, which is the point, since attempt 1's is
+ * already spent by the time it fails.
+ */
+export type RetryTimeout = StreamTimeout;
+
 export type Retry<
   MODEL extends AnyResolvableModel,
   INPUT = ModelRetryCallOptions<ResolvedModel<MODEL>>,
+  TIMEOUT extends RetryTimeout = number,
 > = {
   model: MODEL;
   /**
@@ -398,10 +456,17 @@ export type Retry<
    */
   backoffFactor?: number;
   /**
-   * Timeout in milliseconds for the retry request.
-   * Creates a new AbortSignal with this timeout.
+   * Deadline for this retry's attempt, replacing whatever the previous attempt
+   * ran under.
+   *
+   * What it may say depends on where the retryable ends up: a plain number of
+   * milliseconds beneath a model, {@link TotalTimeout} around the entry points
+   * with no `timeout` argument, {@link StepTimeout} around `generateText`,
+   * {@link StreamTimeout} around `streamText`. Naming a window the destination
+   * cannot measure is a type error there rather than a deadline that never
+   * fires.
    */
-  timeout?: number;
+  timeout?: TIMEOUT;
   /**
    * Call options to override for this retry.
    *
@@ -431,9 +496,13 @@ export type Retry<
 export type ModelRetryable<
   MODEL extends AnyResolvableModel,
   INPUT = ModelRetryCallOptions<ResolvedModel<MODEL>>,
+  TIMEOUT extends RetryTimeout = number,
 > = (
   context: ModelRetryContext<MODEL>,
-) => Retry<MODEL, INPUT> | Promise<Retry<MODEL, INPUT> | undefined> | undefined;
+) =>
+  | Retry<MODEL, INPUT, TIMEOUT>
+  | Promise<Retry<MODEL, INPUT, TIMEOUT> | undefined>
+  | undefined;
 
 /**
  * The configured retry handlers. `INPUT` is the shape `Retry.options` is

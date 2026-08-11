@@ -3,6 +3,7 @@ import { evaluateError } from '../internal/evaluate-error.js';
 import { findRetryModel } from '../internal/find-retry-model.js';
 import { isErrorAttempt } from '../internal/guards.js';
 import { resolveBackoffDelay } from '../internal/resolve-backoff-delay.js';
+import { totalTimeoutMs } from '../internal/retry-timeout.js';
 import {
   type GatewayResolver,
   resolveModel,
@@ -17,6 +18,7 @@ import type {
   OnRetryOverrides,
   ProviderOptions,
   Retry,
+  RetryTimeout,
 } from '../types.js';
 import type {
   CallArgs,
@@ -61,7 +63,7 @@ export type Settled<INFO> =
  */
 export type DeadlineStrategy<ARGS> = (
   args: ARGS,
-  timeoutMs: number | undefined,
+  timeout: RetryTimeout | undefined,
   callerSignal: AbortSignal | undefined,
 ) => ARGS;
 
@@ -211,9 +213,20 @@ export async function runRetryLoop<
   /**
    * Disabled: issue the call exactly as the caller wrote it, so the behavior
    * is indistinguishable from calling the entry point directly.
+   *
+   * The deadline strategy still runs, with no retry deadline to apply. For an
+   * entry point with a real `timeout` argument that changes nothing, and for
+   * one whose `timeout` this library lends it, it is what keeps the argument
+   * meaning the same thing either side of the switch.
    */
   if (isDisabled(options.disabled)) {
-    return entryPoint.call({ ...args, model: baseModel });
+    return entryPoint.call(
+      entryPoint.deadline(
+        { ...args, model: baseModel },
+        undefined,
+        callerSignal,
+      ),
+    );
   }
 
   const recorder = await createRetryTelemetry(options.telemetry, {
@@ -264,7 +277,7 @@ export async function runRetryLoop<
         attempt: attemptNumber,
         provider: attemptModel.provider,
         modelId: attemptModel.modelId,
-        timeoutMs: attemptTimeout,
+        timeoutMs: totalTimeoutMs(attemptTimeout),
       });
 
       /**

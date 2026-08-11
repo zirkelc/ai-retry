@@ -2,6 +2,8 @@ import type {
   AnyModel,
   OnRetryOverrides,
   RetryTelemetrySettings,
+  RetryTimeout,
+  TotalTimeout,
 } from '../types.js';
 import type {
   CallFailureContext,
@@ -75,9 +77,10 @@ export type CallRetryOptions<
   OVERRIDE,
   RESULT,
   COMMIT = RESULT,
+  TIMEOUT extends RetryTimeout = number,
 > = {
   /** Retry handlers and fallback models, evaluated on each failed attempt. */
-  retries: CallRetries<MODEL, INPUT, COMMIT>;
+  retries: CallRetries<MODEL, INPUT, COMMIT, TIMEOUT>;
   /**
    * Bypass the retry machinery entirely, making the call behave exactly as a
    * direct call to the underlying entry point — including the SDK's own
@@ -138,9 +141,10 @@ export type CallRetryArg<
   OVERRIDE,
   RESULT,
   COMMIT = RESULT,
+  TIMEOUT extends RetryTimeout = number,
 > =
-  | CallRetries<MODEL, INPUT, COMMIT>
-  | CallRetryOptions<MODEL, INPUT, OVERRIDE, RESULT, COMMIT>;
+  | CallRetries<MODEL, INPUT, COMMIT, TIMEOUT>
+  | CallRetryOptions<MODEL, INPUT, OVERRIDE, RESULT, COMMIT, TIMEOUT>;
 
 /**
  * Normalize either `retry` form (or its absence) into the full options object.
@@ -151,9 +155,12 @@ export function toCallRetryOptions<
   OVERRIDE,
   RESULT,
   COMMIT = RESULT,
+  TIMEOUT extends RetryTimeout = number,
 >(
-  retry: CallRetryArg<MODEL, INPUT, OVERRIDE, RESULT, COMMIT> | undefined,
-): CallRetryOptions<MODEL, INPUT, OVERRIDE, RESULT, COMMIT> {
+  retry:
+    | CallRetryArg<MODEL, INPUT, OVERRIDE, RESULT, COMMIT, TIMEOUT>
+    | undefined,
+): CallRetryOptions<MODEL, INPUT, OVERRIDE, RESULT, COMMIT, TIMEOUT> {
   if (retry === undefined) return { retries: [] };
   return Array.isArray(retry) ? { retries: retry } : retry;
 }

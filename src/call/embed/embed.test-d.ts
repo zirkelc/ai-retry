@@ -88,6 +88,56 @@ describe('retryableEmbed', () => {
     });
   });
 
+  it('should take a deadline as a number or a total budget', () => {
+    // Assert
+    retryableEmbed({ model: embeddingModel, value: 'hi', timeout: 5_000 });
+    retryableEmbed({
+      model: embeddingModel,
+      value: 'hi',
+      timeout: { totalMs: 5_000 },
+    });
+  });
+
+  it('should reject a deadline it could never enforce', () => {
+    // Arrange — an embedding call has no steps and no stream, so these windows
+    // describe stages that do not exist here.
+    retryableEmbed({
+      model: embeddingModel,
+      value: 'hi',
+      // @ts-expect-error `stepMs` is not measurable around an embed call
+      timeout: { stepMs: 5_000 },
+    });
+
+    retryableEmbed({
+      model: embeddingModel,
+      value: 'hi',
+      // @ts-expect-error nor is `chunkMs`
+      timeout: { chunkMs: 100 },
+    });
+  });
+
+  it('should reject a retry deadline it could never enforce', () => {
+    // Assert — same rule for the retry's own deadline.
+    retryableEmbed({
+      model: embeddingModel,
+      value: 'hi',
+      retry: [{ model: embeddingModel, timeout: 5_000 }],
+    });
+
+    retryableEmbed({
+      model: embeddingModel,
+      value: 'hi',
+      retry: [{ model: embeddingModel, timeout: { totalMs: 5_000 } }],
+    });
+
+    retryableEmbed({
+      model: embeddingModel,
+      value: 'hi',
+      // @ts-expect-error a stream window cannot bound an embed retry
+      retry: [{ model: embeddingModel, timeout: { chunkMs: 100 } }],
+    });
+  });
+
   it('should type onSuccess with the entry point result', async () => {
     // Act
     const direct = await embed({ model: embeddingModel, value: 'hi' });

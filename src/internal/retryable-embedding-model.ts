@@ -5,6 +5,7 @@ import { resolveEmbeddingModel } from './resolve-model.js';
 import { mergeEmbeddingModelCallOptions } from './merge-retry-call-options.js';
 import { resolveBackoffDelay } from './resolve-backoff-delay.js';
 import { retryDiesOnAbortedSignal } from './retry-dies-on-aborted-signal.js';
+import { totalTimeoutMs } from './retry-timeout.js';
 import { createRetryTelemetry, type RetryTelemetry } from './telemetry.js';
 import type {
   EmbeddingModel,
@@ -112,7 +113,7 @@ export class RetryableEmbeddingModel
         attempt: attemptNumber,
         provider: attemptModel.provider,
         modelId: attemptModel.modelId,
-        timeoutMs: currentRetry?.timeout,
+        timeoutMs: totalTimeoutMs(currentRetry?.timeout),
       });
 
       try {

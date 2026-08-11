@@ -4,6 +4,7 @@ import { evaluateError } from '../../internal/evaluate-error.js';
 import { isErrorAttempt } from '../../internal/guards.js';
 import { resolveBackoffDelay } from '../../internal/resolve-backoff-delay.js';
 import { resolveModel } from '../../internal/resolve-model.js';
+import { totalTimeoutMs } from '../../internal/retry-timeout.js';
 import { createRetryTelemetry } from '../../internal/telemetry.js';
 import type {
   AnyModel,
@@ -359,8 +360,13 @@ class RetryableCall<MODEL extends AnyModel> extends BaseRetryableModel<MODEL> {
          * first-attempt timeout from the run options. Surfaced as a number for
          * the call function to apply; the caller's signal is passed through
          * separately, so a re-run is not killed by an already-spent deadline.
+         *
+         * A retry may state its deadline as a configuration object, but this
+         * driver hands the call function a plain number and cannot know what
+         * the function does with it, so only the total budget carries over.
          */
-        const attemptTimeout = currentRetry?.timeout ?? runOptions?.timeout;
+        const attemptTimeout =
+          totalTimeoutMs(currentRetry?.timeout) ?? runOptions?.timeout;
         const options = resolveRetryOptions(currentRetry, onRetryOverrides);
 
         recorder?.startAttempt({

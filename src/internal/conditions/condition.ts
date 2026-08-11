@@ -7,6 +7,8 @@ import type { CallRetryable, CallRetryContext } from '../../call/types.js';
 import type {
   AnyResolvableModel,
   Retry,
+  RetryTimeout,
+  TotalTimeout,
   ModelRetryAttempt,
   ModelRetryable,
   ModelRetryContext,
@@ -45,9 +47,10 @@ export type LayerRetryable<
   INPUT,
   LAYER extends RetryLayer,
   COMMIT = unknown,
+  TIMEOUT extends RetryTimeout = number,
 > = LAYER extends 'call'
-  ? CallRetryable<MODEL, INPUT, COMMIT>
-  : ModelRetryable<MODEL, INPUT>;
+  ? CallRetryable<MODEL, INPUT, COMMIT, TIMEOUT>
+  : ModelRetryable<MODEL, INPUT, TIMEOUT>;
 
 /**
  * Predicate over a retry context. May be sync or async.
@@ -62,9 +65,13 @@ export type Predicate<
  * Argument shape for `Condition.switch`. The target `model` is required;
  * all other `Retry` fields are optional.
  */
-export type SwitchTarget<MODEL extends AnyResolvableModel, INPUT = never> = {
+export type SwitchTarget<
+  MODEL extends AnyResolvableModel,
+  INPUT = never,
+  TIMEOUT extends RetryTimeout = number,
+> = {
   model: MODEL;
-} & Omit<Retry<MODEL, INPUT>, 'model'>;
+} & Omit<Retry<MODEL, INPUT, TIMEOUT>, 'model'>;
 
 /**
  * Argument shape for `Condition.retry`. Same as `Retry` without `model`,
@@ -73,7 +80,8 @@ export type SwitchTarget<MODEL extends AnyResolvableModel, INPUT = never> = {
 export type RetryOptions<
   MODEL extends AnyResolvableModel,
   INPUT = never,
-> = Omit<Retry<MODEL, INPUT>, 'model'>;
+  TIMEOUT extends RetryTimeout = number,
+> = Omit<Retry<MODEL, INPUT, TIMEOUT>, 'model'>;
 
 /**
  * A predicate over a retry context paired with two terminal actions
@@ -126,15 +134,15 @@ export class Condition<
    * @example
    * httpStatus(529).switch({ model: fallback })
    */
-  switch<INPUT = never>(
-    target: SwitchTarget<MODEL, INPUT>,
-  ): LayerRetryable<MODEL, INPUT, LAYER, COMMIT> {
+  switch<INPUT = never, TIMEOUT extends RetryTimeout = number>(
+    target: SwitchTarget<MODEL, INPUT, TIMEOUT>,
+  ): LayerRetryable<MODEL, INPUT, LAYER, COMMIT, TIMEOUT> {
     const retryable = async (ctx: LayerContext<LAYER, MODEL, COMMIT>) => {
       if (!(await this.evaluate(ctx))) return undefined;
       return { maxAttempts: 1, ...target };
     };
 
-    return retryable as LayerRetryable<MODEL, INPUT, LAYER, COMMIT>;
+    return retryable as LayerRetryable<MODEL, INPUT, LAYER, COMMIT, TIMEOUT>;
   }
 
   /**
@@ -151,9 +159,9 @@ export class Condition<
    * @example
    * error.isRetryable(true).retry({ delay: 1000, backoffFactor: 2 })
    */
-  retry<INPUT = never>(
-    options?: RetryOptions<MODEL, INPUT>,
-  ): LayerRetryable<MODEL, INPUT, LAYER, COMMIT> {
+  retry<INPUT = never, TIMEOUT extends RetryTimeout = number>(
+    options?: RetryOptions<MODEL, INPUT, TIMEOUT>,
+  ): LayerRetryable<MODEL, INPUT, LAYER, COMMIT, TIMEOUT> {
     if (options?.maxAttempts !== undefined && options.maxAttempts < 2) {
       throw new Error(
         `Condition.retry() requires maxAttempts >= 2 (got ${options.maxAttempts}); use .switch() for a single attempt against a different model.`,
@@ -189,6 +197,6 @@ export class Condition<
       return { maxAttempts: 2, ...options, model };
     };
 
-    return retryable as LayerRetryable<MODEL, INPUT, LAYER, COMMIT>;
+    return retryable as LayerRetryable<MODEL, INPUT, LAYER, COMMIT, TIMEOUT>;
   }
 }

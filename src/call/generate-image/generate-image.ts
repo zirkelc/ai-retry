@@ -1,6 +1,6 @@
 import { generateImage } from 'ai';
 import { resolveImageModel } from '../../internal/resolve-model.js';
-import type { ImageModel } from '../../types.js';
+import type { ImageModel, TotalTimeout } from '../../types.js';
 import type { GenerateImageInput } from '../inputs.js';
 import type { CallRetryArg } from '../retry-arg.js';
 import { defineRetryableCall, viaAbortSignal } from '../retryable-calls.js';
@@ -16,11 +16,23 @@ export type RetryableGenerateImage = <
   INPUT extends GenerateImageInput = GenerateImageInput,
 >(
   args: Parameters<typeof generateImage>[0] & {
+    /**
+     * Deadline for each attempt, in milliseconds.
+     *
+     * `generateImage` has no timeout of its own; this one is this library's,
+     * turned into a fresh `AbortSignal` per attempt and never passed on.
+     * That freshness is the point: a deadline of your own, composed into
+     * `abortSignal`, reads as a cancellation and stops the retry loop dead
+     * rather than failing over.
+     */
+    timeout?: TotalTimeout;
     retry?: CallRetryArg<
       ImageModel,
       INPUT,
       GenerateImageInput,
-      Awaited<ReturnType<typeof generateImage>>
+      Awaited<ReturnType<typeof generateImage>>,
+      Awaited<ReturnType<typeof generateImage>>,
+      TotalTimeout
     >;
   },
 ) => ReturnType<typeof generateImage>;

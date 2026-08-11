@@ -1,6 +1,6 @@
 import { generateText, type ToolSet } from 'ai';
 import { resolveLanguageModel } from '../../internal/resolve-model.js';
-import type { LanguageModel } from '../../types.js';
+import type { LanguageModel, StepTimeout } from '../../types.js';
 import type { GenerateTextInput } from '../inputs.js';
 import type { CallRetryArg } from '../retry-arg.js';
 import { defineRetryableCall, viaTimeoutArg } from '../retryable-calls.js';
@@ -34,7 +34,9 @@ export type RetryableGenerateText = <
       LanguageModel,
       INPUT,
       GenerateTextInput,
-      Awaited<ReturnType<typeof generateText<TOOLS>>>
+      Awaited<ReturnType<typeof generateText<TOOLS>>>,
+      Awaited<ReturnType<typeof generateText<TOOLS>>>,
+      StepTimeout
     >;
   },
 ) => ReturnType<typeof generateText<TOOLS>>;

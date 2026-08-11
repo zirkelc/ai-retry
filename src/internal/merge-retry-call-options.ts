@@ -11,6 +11,7 @@ import type {
   Retry,
 } from '../types.js';
 import { isTimeoutError } from './guards.js';
+import { totalTimeoutMs } from './retry-timeout.js';
 
 /**
  * Resolve `providerOptions` for the upcoming attempt.
@@ -47,24 +48,30 @@ function resolveProviderOptions<MODEL extends AnyModel>(
 /**
  * Resolve `abortSignal` for the upcoming attempt.
  *
- * If `currentRetry.timeout` is set, a fresh `AbortSignal.timeout(...)` is
- * created. When the base signal is still alive, the fresh deadline is
- * composed with the base so user cancellation still propagates mid-retry,
- * but a base `TimeoutError` (`AbortSignal.timeout` used as a wall-clock
- * budget) is ignored so it cannot truncate the retry's own deadline. When
- * the base is already aborted with a `TimeoutError`, it is dropped; with any
- * other reason it propagates. Without a retry timeout, the base is preserved
- * unchanged.
+ * If `currentRetry.timeout` names a total budget, a fresh
+ * `AbortSignal.timeout(...)` is created for it. When the base signal is still
+ * alive, the fresh deadline is composed with the base so user cancellation
+ * still propagates mid-retry, but a base `TimeoutError` (`AbortSignal.timeout`
+ * used as a wall-clock budget) is ignored so it cannot truncate the retry's own
+ * deadline. When the base is already aborted with a `TimeoutError`, it is
+ * dropped; with any other reason it propagates. Without a retry deadline, the
+ * base is preserved unchanged.
+ *
+ * A retry beneath a model states its deadline as a plain number, since a signal
+ * is the only thing there is to enforce it with. The total is read through a
+ * helper anyway, so an untyped caller handing over the call layer's object form
+ * gets the sane reading rather than an `AbortSignal.timeout({...})`.
  */
 export function resolveAbortSignal<MODEL extends AnyModel>(
   base: AbortSignal | undefined,
   currentRetry: Retry<MODEL> | undefined,
 ): AbortSignal | undefined {
-  if (currentRetry?.timeout === undefined) {
+  const totalMs = totalTimeoutMs(currentRetry?.timeout);
+  if (totalMs === undefined) {
     return base;
   }
 
-  const fresh = AbortSignal.timeout(currentRetry.timeout);
+  const fresh = AbortSignal.timeout(totalMs);
   if (base === undefined) {
     return fresh;
   }

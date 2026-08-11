@@ -1,7 +1,7 @@
 import { streamText, type ToolSet } from 'ai';
 import { detectStreamCommit } from './detect-stream-commit.js';
 import { resolveLanguageModel } from '../../internal/resolve-model.js';
-import type { LanguageModel } from '../../types.js';
+import type { LanguageModel, StreamTimeout } from '../../types.js';
 import type { StreamTextInput } from '../inputs.js';
 import type { CallRetryArg } from '../retry-arg.js';
 import { defineRetryableCall, viaTimeoutArg } from '../retryable-calls.js';
@@ -48,7 +48,8 @@ export type RetryableStreamText = <
       INPUT,
       StreamTextInput,
       ReturnType<typeof streamText<TOOLS>>,
-      StreamTextCommitResult
+      StreamTextCommitResult,
+      StreamTimeout
     >;
   },
 ) => Promise<ReturnType<typeof streamText<TOOLS>>>;

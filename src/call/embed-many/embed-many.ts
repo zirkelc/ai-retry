@@ -1,6 +1,6 @@
 import { embedMany } from 'ai';
 import { resolveEmbeddingModel } from '../../internal/resolve-model.js';
-import type { EmbeddingModel } from '../../types.js';
+import type { EmbeddingModel, TotalTimeout } from '../../types.js';
 import type { EmbedManyInput } from '../inputs.js';
 import type { CallRetryArg } from '../retry-arg.js';
 import { defineRetryableCall, viaAbortSignal } from '../retryable-calls.js';
@@ -19,11 +19,23 @@ export type RetryableEmbedMany = <
   INPUT extends EmbedManyInput = EmbedManyInput,
 >(
   args: Parameters<typeof embedMany>[0] & {
+    /**
+     * Deadline for each attempt, in milliseconds.
+     *
+     * `embedMany` has no timeout of its own; this one is this library's,
+     * turned into a fresh `AbortSignal` per attempt and never passed on.
+     * That freshness is the point: a deadline of your own, composed into
+     * `abortSignal`, reads as a cancellation and stops the retry loop dead
+     * rather than failing over.
+     */
+    timeout?: TotalTimeout;
     retry?: CallRetryArg<
       EmbeddingModel,
       INPUT,
       EmbedManyInput,
-      Awaited<ReturnType<typeof embedMany>>
+      Awaited<ReturnType<typeof embedMany>>,
+      Awaited<ReturnType<typeof embedMany>>,
+      TotalTimeout
     >;
   },
 ) => ReturnType<typeof embedMany>;

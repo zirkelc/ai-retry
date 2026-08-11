@@ -13,6 +13,8 @@ import type {
   ResolvableModel,
   ResolvedModel,
   Retry,
+  RetryTimeout,
+  TotalTimeout,
 } from '../types.js';
 
 /**
@@ -166,9 +168,13 @@ export type CallRetryable<
   MODEL extends AnyResolvableModel,
   INPUT = never,
   COMMIT = unknown,
+  TIMEOUT extends RetryTimeout = number,
 > = (
   context: CallRetryContext<MODEL, COMMIT>,
-) => Retry<MODEL, INPUT> | Promise<Retry<MODEL, INPUT> | undefined> | undefined;
+) =>
+  | Retry<MODEL, INPUT, TIMEOUT>
+  | Promise<Retry<MODEL, INPUT, TIMEOUT> | undefined>
+  | undefined;
 
 /**
  * The configured call-level retry handlers.
@@ -180,9 +186,10 @@ export type CallRetries<
   MODEL extends AnyModel,
   INPUT,
   COMMIT = unknown,
+  TIMEOUT extends RetryTimeout = number,
 > = Array<
-  | CallRetryable<ResolvableModel<MODEL>, INPUT, COMMIT>
-  | Retry<ResolvableModel<MODEL>, INPUT>
+  | CallRetryable<ResolvableModel<MODEL>, INPUT, COMMIT, TIMEOUT>
+  | Retry<ResolvableModel<MODEL>, INPUT, TIMEOUT>
   | ResolvableModel<MODEL>
 >;
 

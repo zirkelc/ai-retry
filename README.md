@@ -561,6 +561,8 @@ await generateText({
 });
 ```
 
+Here `timeout` is a plain number of milliseconds. A retryable model applies its deadline by building an `AbortSignal`, which carries a wall-clock budget and nothing else, so there is nothing finer to express. The [call-level functions](#call-level-retries) do have somewhere to put the SDK's structured windows, and accept them.
+
 This option is one of several places a deadline can live, and the choice decides whether a fallback can recover at all. See [Timeouts](#timeouts) for the full picture.
 
 #### Max attempts
@@ -843,6 +845,13 @@ Result-based conditions (`finishReason`, `schemaInvalid`, `result(...)`) apply t
 
 Timeouts have a second limitation on top of that boundary: a deadline set on the `streamText` call itself can never fail over, whether or not content has been emitted. See [Timeouts](#timeouts).
 
+#### Preamble buffering
+
+Every stream begins with a non-content preamble (`stream-start`, then optionally `response-metadata` and `text-start` / `reasoning-start`) that providers emit as soon as the response headers arrive, before any content flows. Because a retry can still happen during this window, `ai-retry` does not forward the preamble immediately. It buffers the leading non-content parts and flushes them only when the first content chunk arrives (or when the stream finishes with no content). If a retry fires before any content, the buffered preamble is discarded and replaced by the fallback's, so the consumer always sees exactly one preamble — the one belonging to the model that actually produced the output, with its own `warnings` and `response-metadata`. Without this, a fallback's `stream-start` would be emitted a second time after the primary's, which some consumers (e.g. `streamText`) reject.
+
+> [!NOTE]
+> One side effect: the consumer's "stream started" signal now arrives at first-content time rather than when the response headers arrive (typically a sub-second difference). For UIs that show a typing indicator off `stream-start` this is negligible.
+
 ### Timeouts
 
 A `timeout` you pass to `generateText` or `streamText` belongs to **the call**, not to the model. `createRetryableModel` wraps the model and retries underneath the call, so it cannot undo something the call has already done to itself. Whether that matters depends on the entry point:
@@ -889,7 +898,9 @@ A `streamText` deadline is still useful as a hard ceiling on the call. Recoverin
 
 `createRetryableModel` retries _below_ `generateText` / `streamText`. That is what makes it blind to a call-level timeout (`timeout.firstChunkMs`, `stepMs`, `totalMs`) or an inbound `abortSignal`: those live _on_ the call, and once one fires the SDK tears the call down and discards whatever a lower retry produced ([#50](https://github.com/zirkelc/ai-retry/issues/50)).
 
-The call-level functions close that gap by re-running the **whole call** with the next model. Each one takes exactly the arguments the SDK entry point takes, plus a `retry` field. The model stays a normal argument and is swapped per attempt.
+The call-level functions close that gap by re-running the **whole call** with the next model. Each one takes the arguments the SDK entry point takes, plus a `retry` field. The model stays a normal argument and is swapped per attempt.
+
+Two additions beyond the SDK's arguments, both covered under [Deadlines](#deadlines): `retryableEmbed`, `retryableEmbedMany` and `retryableGenerateImage` also take a `timeout`, which those SDK functions do not have, and `retryableStreamText` returns a promise where `streamText` does not.
 
 | function                 | wraps           | import from               | model family |
 | ------------------------ | --------------- | ------------------------- | ------------ |
@@ -954,7 +965,7 @@ for await (const chunk of result.textStream) process.stdout.write(chunk);
 
 #### `retryableEmbed`
 
-Embedding models have no `timeout` argument, so a retry's own deadline is composed into `abortSignal` for you.
+`embed` has no `timeout` argument, so this library lends it one and turns it into a fresh `AbortSignal` per attempt.
 
 ```typescript
 import { openai } from '@ai-sdk/openai';
@@ -964,6 +975,8 @@ import { httpStatus } from 'ai-retry/embed/conditions';
 const result = await retryableEmbed({
   model: openai.textEmbedding('text-embedding-3-small'),
   value: 'sunny day at the beach',
+  /** Not an `embed` argument. Each attempt gets its own 5s. */
+  timeout: 5_000,
   retry: [
     /** Rate limited: wait it out on the same model before moving on. */
     httpStatus(429).retry({ maxAttempts: 3, delay: 1_000, backoffFactor: 2 }),
@@ -1171,8 +1184,44 @@ Two things differ from calling the SDK directly.
 
 `Retry.timeout` gives each attempt a fresh deadline, which is the point: attempt 1's clock is already spent by the time it fails.
 
-- `generateText` and `streamText` have their own `timeout` argument, so the deadline is set there. It replaces `totalMs` and leaves any finer-grained windows you configured (`firstChunkMs`, `chunkMs`, `stepMs`) intact.
-- `embed`, `embedMany` and `generateImage` have no `timeout` argument at all, so the deadline is composed into `abortSignal` alongside your own signal.
+A number is a total budget in milliseconds. An object is the SDK's own timeout configuration, and is **merged** into whatever the call already carried, key by key, so narrowing one window leaves the others standing:
+
+```typescript
+const result = await retryableStreamText({
+  model: primaryModel,
+  prompt: 'Invent a new holiday.',
+  timeout: { totalMs: 30_000, firstChunkMs: 5_000 },
+  retry: [
+    /** This attempt gets firstChunkMs 2s, and keeps totalMs 30s. */
+    timeout().switch({ model: fallbackModel, timeout: { firstChunkMs: 2_000 } }),
+  ],
+});
+```
+
+**What you may write depends on where the retryable ends up**, because a deadline is only worth stating if something can measure it:
+
+| Retry lands in                                            | `timeout` accepts                                          |
+| --------------------------------------------------------- | ---------------------------------------------------------- |
+| `createRetryableModel`                                    | `number`                                                   |
+| `retryableEmbed`, `retryableEmbedMany`, `retryableGenerateImage` | `number \| { totalMs }`                             |
+| `retryableGenerateText`                                   | `number \| { totalMs, stepMs, toolMs, tools }`             |
+| `retryableStreamText`                                     | the above plus `{ firstChunkMs, chunkMs }`                 |
+
+Naming a window the destination cannot measure is a **type error** rather than a deadline that never fires. So `{ chunkMs: 100 }` on `retryableGenerateText` is rejected, where the SDK's own `timeout` argument would accept it on the same call and then never read it (see [Timeouts](#timeouts)). Below a model the deadline can only be a plain number: a retryable model builds an `AbortSignal`, and a signal carries a wall-clock budget and nothing else.
+
+**`embed`, `embedMany` and `generateImage` take a `timeout` of their own here**, which the SDK does not give them. It is this library's argument, turned into a fresh `AbortSignal` per attempt and never passed on:
+
+```typescript
+const result = await retryableEmbed({
+  model: primaryModel,
+  value: 'sunny day at the beach',
+  /** Not an `embed` argument. Each attempt gets its own 5s. */
+  timeout: 5_000,
+  retry: [fallbackModel],
+});
+```
+
+That is worth having because the alternative does not work: a deadline you compose into `abortSignal` yourself reads as a cancellation, so it kills the first attempt and every retry with it. A retry's own `timeout` wins over the call's where both are set.
 
 Your own `abortSignal` is never treated as a deadline. If it aborts, the call is cancelled and no fail-over is attempted — a genuine cancel is not a failure to recover from.
 
@@ -1227,13 +1276,6 @@ Each function-style retryable has a one-line equivalent in the new shape (import
 | `serviceUnavailable(m)`                     | `httpStatus(503).switch({ model: m })`                         |
 | `noImageGenerated(m)`                       | `noImage().switch({ model: m })` (from `ai-retry/image-model`) |
 | `retryAfterDelay({ delay, backoffFactor })` | `error.isRetryable(true).retry({ delay, backoffFactor })`      |
-
-#### Preamble buffering
-
-Every stream begins with a non-content preamble (`stream-start`, then optionally `response-metadata` and `text-start` / `reasoning-start`) that providers emit as soon as the response headers arrive, before any content flows. Because a retry can still happen during this window, `ai-retry` does not forward the preamble immediately. It buffers the leading non-content parts and flushes them only when the first content chunk arrives (or when the stream finishes with no content). If a retry fires before any content, the buffered preamble is discarded and replaced by the fallback's, so the consumer always sees exactly one preamble — the one belonging to the model that actually produced the output, with its own `warnings` and `response-metadata`. Without this, a fallback's `stream-start` would be emitted a second time after the primary's, which some consumers (e.g. `streamText`) reject.
-
-> [!NOTE]
-> One side effect: the consumer's "stream started" signal now arrives at first-content time rather than when the response headers arrive (typically a sub-second difference). For UIs that show a typing indicator off `stream-start` this is negligible.
 
 ### API Reference
 

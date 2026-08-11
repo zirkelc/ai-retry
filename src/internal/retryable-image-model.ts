@@ -5,6 +5,7 @@ import { resolveImageModel } from './resolve-model.js';
 import { mergeImageModelCallOptions } from './merge-retry-call-options.js';
 import { resolveBackoffDelay } from './resolve-backoff-delay.js';
 import { retryDiesOnAbortedSignal } from './retry-dies-on-aborted-signal.js';
+import { totalTimeoutMs } from './retry-timeout.js';
 import { createRetryTelemetry, type RetryTelemetry } from './telemetry.js';
 import type {
   ImageModel,
@@ -108,7 +109,7 @@ export class RetryableImageModel
         attempt: attemptNumber,
         provider: attemptModel.provider,
         modelId: attemptModel.modelId,
-        timeoutMs: currentRetry?.timeout,
+        timeoutMs: totalTimeoutMs(currentRetry?.timeout),
       });
 
       try {

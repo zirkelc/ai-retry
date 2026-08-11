@@ -109,4 +109,24 @@ describe('retryableStreamText', () => {
       },
     });
   });
+
+  it('should take every deadline, streaming windows included', () => {
+    // Assert — the counterpart to `generateText` rejecting these two.
+    retryableStreamText({ model, prompt: 'Hello!', timeout: 5_000 });
+    retryableStreamText({
+      model,
+      prompt: 'Hello!',
+      timeout: { totalMs: 30_000, firstChunkMs: 2_000, chunkMs: 500 },
+    });
+    retryableStreamText({
+      model,
+      prompt: 'Hello!',
+      retry: [{ model, timeout: { firstChunkMs: 2_000, chunkMs: 500 } }],
+    });
+    retryableStreamText({
+      model,
+      prompt: 'Hello!',
+      retry: [{ model, timeout: { totalMs: 5_000, stepMs: 2_000 } }],
+    });
+  });
 });
