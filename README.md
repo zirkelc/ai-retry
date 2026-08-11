@@ -42,8 +42,6 @@ npm install ai-retry@2 # for AI SDK v7
 > **The condition API is the recommended way to configure retries.** Existing code keeps working:
 >
 > - The root `createRetryable` export and the function-style retryables (`contentFilterTriggered`, `requestTimeout`, …) are **deprecated but still functional**. Prefer `createRetryableModel` from `ai-retry/<family>-model` — it is typed for that family and resolves gateway strings for it.
-> - The experimental `ai-retry/experimental/<family>-model` paths were removed; the same API ships at `ai-retry/<family>-model`.
-> - `createRetryableCall` and `createRetryableStream` (`ai-retry/experimental/call`, `ai-retry/experimental/stream`) are **deprecated but still functional**. Prefer the [call-level functions](#call-level-retries), which take the entry point's own arguments plus `retry`.
 >
 > See the [migration guide](./MIGRATION.md) to move existing code to the condition API.
 
@@ -255,17 +253,6 @@ Fallbacks are tried in order. Once all of them are exhausted, a `RetryError` is 
 
 A `Condition` is a typed predicate over a retry context. The library ships two **low-level** builders (`error()` and `result()`) plus **high-level** helpers built on top of them. Every condition is finalized with one of two terminal actions, `.switch()` or `.retry()`, which turn it into a retryable.
 
-Conditions come in two sets, one per retry layer, and they are not interchangeable:
-
-| import from                          | for                                             |
-| ------------------------------------ | ----------------------------------------------- |
-| `ai-retry/<family>-model/conditions` | `createRetryableModel`                          |
-| `ai-retry/<function>/conditions`     | the [call-level functions](#call-level-retries) |
-
-The model layer is keyed on the model family (`language-model`, `embedding-model`, `image-model`), the call layer on the entry point (`generate-text`, `stream-text`, `embed`, `embed-many`, `generate-image`), because that is the granularity at which each knows what a result looks like.
-
-The names are the same on both sides, and so are the error conditions. What differs is what a **result** condition sees: below a model it is the provider's result, around a call it is the entry point's own. Mixing them is a type error, reported at the `retries` list — this section documents the model-layer set, and [call-level conditions](#conditions-1) covers the other.
-
 ##### Universal conditions
 
 These are available from all three entry points (`language-model`, `embedding-model`, `image-model`).
@@ -400,7 +387,7 @@ noImage().switch({ model: fallback });
 ##### Embedding model conditions
 
 > [!NOTE]
-> The `embedding-model` entry point exposes only the universal conditions. A retryable **model** never sees an embedding result it could judge; the call-level `retryableEmbed` / `retryableEmbedMany` do, and their [own conditions](#conditions-1) include `result()`.
+> The `embedding-model` entry point exposes only the universal conditions — there are no embedding-specific result conditions.
 
 #### Actions
 
@@ -858,76 +845,14 @@ Timeouts have a second limitation on top of that boundary: a deadline set on the
 
 ### Timeouts
 
-Whether a timeout can fail over depends on two things: **who owns the clock**, and **whether any content has reached you yet**. Neither is visible from the outside, so it is worth seeing what a call actually does with your model.
+A `timeout` you pass to `generateText` or `streamText` belongs to **the call**, not to the model. `createRetryableModel` wraps the model and retries underneath the call, so it cannot undo something the call has already done to itself. Whether that matters depends on the entry point:
 
-#### A `streamText` call, from the inside
+- **`generateText`** just rejects, and a fallback below it still returns its value normally, so the deadline recovers.
+- **`streamText`** has already finalized its stream as aborted by the time a fallback produces anything, so everything the fallback emits is discarded.
 
-Your model does not run the call. `streamText` runs the call, and your model instance is one piece it uses along the way:
+A deadline a retry sets _itself_ is a different matter: a retry's own `timeout` aborts only that attempt's signal, never the call's, so it recovers under both entry points (see [Retry timeouts](#retry-timeouts)).
 
-1. Before it touches the model, it builds **one abort signal** out of every `timeout.*` you passed plus any `abortSignal` of your own.
-2. It calls `model.doStream()` underneath that signal, once per step.
-3. It forwards the model's chunks to you through a **gate** that re-checks the signal before every single chunk.
-
-```mermaid
-flowchart TB
-  you(["your code"])
-
-  subgraph outer["retryableStreamText: a retry replaces this entire box"]
-    subgraph call["one streamText() call"]
-      direction TB
-      sig["abort signal, owned by the call<br>totalMs · stepMs · firstChunkMs · chunkMs · your abortSignal"]
-      subgraph inner["createRetryableModel: a retry replaces only this box"]
-        ds["model.doStream()<br>request to the provider"]
-      end
-      gate["chunk gate<br>re-checks the signal before forwarding each chunk"]
-    end
-  end
-
-  you -- "prompt" --> ds
-  ds -- "chunks" --> gate
-  sig -. "once a deadline fires, the gate<br>drops everything and closes the stream" .-> gate
-  gate -- "textStream / fullStream" --> you
-```
-
-The nesting is the whole rule:
-
-- **`createRetryableModel` swaps the model**, which is the innermost box. The signal and the gate sit above it and survive the swap. The fallback really does run (`onError` and `onRetry` fire, the fallback model is called, it produces chunks), and then the gate drops every one of them, because the signal it checks latched the moment the deadline fired.
-- **`retryableStreamText` swaps the call**, so a retry throws the whole box away, signal and gate included, and builds a new one. The fallback gets a fresh signal and a fresh gate, so its output reaches you.
-
-`generateText` has the same layering minus the gate: there is no stream to forward chunk by chunk, so a fallback below the call still returns its value normally. That is why the model layer recovers `generateText` deadlines but not `streamText` ones.
-
-| Layer       | What a retry replaces                     | `generateText` deadlines | `streamText` deadlines |
-| ----------- | ----------------------------------------- | ------------------------ | ---------------------- |
-| Model layer | `doGenerate` / `doStream`, below the call | recovers                 | cannot recover         |
-| Call layer  | the whole call, above the model           | recovers                 | recovers               |
-
-- **Model layer**: [`createRetryableModel`](#usage), the wrapped model you hand to the SDK.
-- **Call layer**: the [call-level functions](#call-level-retries) (`retryableStreamText` and friends), which take the call's own arguments.
-
-A deadline the model layer sets _itself_ is a different matter: a retry's own `timeout` aborts only that attempt's signal, never the call's, so it recovers under both entry points (see [Retry timeouts](#retry-timeouts)).
-
-#### When each timer runs
-
-```mermaid
-sequenceDiagram
-  participant You as your code
-  participant Call as streamText()
-  participant Model as model.doStream()
-
-  You->>Call: streamText({ model, prompt, timeout })
-  Note over Call: totalMs starts (the whole call)<br>stepMs starts (this step)<br>firstChunkMs starts (this step)
-  Call->>Model: doStream({ abortSignal })
-  Model-->>Call: stream-start, response-metadata<br>(framing, not content)
-  Model-->>Call: first text-delta
-  Note over Call: firstChunkMs cleared<br>chunkMs armed for the first time
-  Call-->>You: first chunk, and the attempt is now committed
-  Model-->>Call: more deltas
-  Note over Call: chunkMs restarts on every content chunk
-  Model-->>Call: finish
-  Note over Call: totalMs and stepMs stop when the call ends
-```
-
-Note where the commit point falls: `chunkMs` cannot arm until the first content chunk, and that same chunk is what puts the attempt beyond retry. A timer that only starts after commit can never produce a recoverable failure.
+In both tables below, "Outcome" is what a retryable model can do about that deadline.
 
 **Which deadline fires when under `generateText`**
 
@@ -947,7 +872,7 @@ Note where the commit point falls: `chunkMs` cannot arm until the first content 
 | `timeout.chunkMs`      | the gap between content chunks, armed only once the first one arrives | never fires before content |
 | caller `abortSignal`   | whenever the caller aborts                                            | discarded                  |
 
-"Discarded" means the fallback is attempted and runs, but its output never reaches the consumer, because it arrives at a gate that is already closed. That is a separate thing from the streaming commit boundary above, and stricter: the gate closes on the signal rather than on what has been delivered, so even a stall before the very first chunk is dropped, with no content anywhere in sight ([#50](https://github.com/zirkelc/ai-retry/issues/50)).
+"Discarded" means the fallback is attempted and really does run (`onError` and `onRetry` fire, the fallback model is called), but its output never reaches the consumer. That is a separate thing from the streaming commit boundary above, and stricter: it applies even when no content was ever emitted, so a stall before the very first chunk is dropped just the same ([#50](https://github.com/zirkelc/ai-retry/issues/50)).
 
 Three sharp edges in those tables:
 
@@ -955,10 +880,10 @@ Three sharp edges in those tables:
 - `chunkMs` measures the gap _between_ content chunks, so its timer is only armed once the first content chunk arrives. It never catches a model that stalls before producing anything, and once it can fire the attempt is already committed.
 - Where a table says "recovers", the retry must still supply its own `timeout` whenever the inbound signal has already fired, otherwise `ai-retry` re-throws instead of retrying against a dead signal (see [Retry timeouts](#retry-timeouts)).
 
-A `streamText` deadline is still useful as a hard ceiling on the call. To actually recover from one, retry at the call layer with [`retryableStreamText`](#retryablestreamtext).
+A `streamText` deadline is still useful as a hard ceiling on the call. Recovering from one needs a retry that sits **around** the call rather than below the model, which is what the [call-level functions](#call-level-retries) do.
 
 > [!IMPORTANT]
-> The streaming commit boundary still applies at either layer. A deadline that fires after the first content chunk cannot fail over, because the response is already committed to the current model.
+> The streaming commit boundary applies wherever the retry sits. A deadline that fires after the first content chunk cannot fail over, because the response is already committed to the current model.
 
 ### Call-level retries
 
@@ -1095,6 +1020,70 @@ const { images } = await retryableGenerateImage({
 });
 ```
 
+#### Why this recovers what a retryable model cannot
+
+Your model does not run the call. `streamText` runs the call, and your model instance is one piece it uses along the way:
+
+1. Before it touches the model, it builds **one abort signal** out of every `timeout.*` you passed plus any `abortSignal` of your own.
+2. It calls `model.doStream()` underneath that signal, once per step.
+3. It forwards the model's chunks to you through a **gate** that re-checks the signal before every single chunk.
+
+```mermaid
+flowchart TB
+  you(["your code"])
+
+  subgraph outer["retryableStreamText: a retry replaces this entire box"]
+    subgraph call["one streamText() call"]
+      direction TB
+      sig["abort signal, owned by the call<br>totalMs · stepMs · firstChunkMs · chunkMs · your abortSignal"]
+      subgraph inner["createRetryableModel: a retry replaces only this box"]
+        ds["model.doStream()<br>request to the provider"]
+      end
+      gate["chunk gate<br>re-checks the signal before forwarding each chunk"]
+    end
+  end
+
+  you -- "prompt" --> ds
+  ds -- "chunks" --> gate
+  sig -. "once a deadline fires, the gate<br>drops everything and closes the stream" .-> gate
+  gate -- "textStream / fullStream" --> you
+```
+
+The nesting is the whole rule:
+
+- **`createRetryableModel` swaps the model**, which is the innermost box. The signal and the gate sit above it and survive the swap. The fallback really does run and produce chunks, and then the gate drops every one of them, because the signal it checks latched the moment the deadline fired.
+- **`retryableStreamText` swaps the call**, so a retry throws the whole box away, signal and gate included, and builds a new one. The fallback gets a fresh signal and a fresh gate, so its output reaches you.
+
+`generateText` has the same layering minus the gate: there is no stream to forward chunk by chunk, so a fallback below the call still returns its value normally. That is why a retryable model recovers `generateText` deadlines but not `streamText` ones (see [Timeouts](#timeouts)).
+
+| Layer       | What a retry replaces                     | `generateText` deadlines | `streamText` deadlines |
+| ----------- | ----------------------------------------- | ------------------------ | ---------------------- |
+| Model layer | `doGenerate` / `doStream`, below the call | recovers                 | cannot recover         |
+| Call layer  | the whole call, above the model           | recovers                 | recovers               |
+
+#### When each timer runs
+
+```mermaid
+sequenceDiagram
+  participant You as your code
+  participant Call as streamText()
+  participant Model as model.doStream()
+
+  You->>Call: streamText({ model, prompt, timeout })
+  Note over Call: totalMs starts (the whole call)<br>stepMs starts (this step)<br>firstChunkMs starts (this step)
+  Call->>Model: doStream({ abortSignal })
+  Model-->>Call: stream-start, response-metadata<br>(framing, not content)
+  Model-->>Call: first text-delta
+  Note over Call: firstChunkMs cleared<br>chunkMs armed for the first time
+  Call-->>You: first chunk, and the attempt is now committed
+  Model-->>Call: more deltas
+  Note over Call: chunkMs restarts on every content chunk
+  Model-->>Call: finish
+  Note over Call: totalMs and stepMs stop when the call ends
+```
+
+Note where the commit point falls: `chunkMs` cannot arm until the first content chunk, and that same chunk is what puts the attempt beyond retry. A timer that only starts after commit can never produce a recoverable failure, at either layer.
+
 #### Conditions
 
 Import them from `ai-retry/<function>/conditions`, the same path family as the function itself:
@@ -1218,24 +1207,6 @@ For `generateText`, `embed`, `embedMany` and `generateImage` that is the complet
 #### Which one should I use?
 
 Use the call-level functions when a deadline or cancellation on the call itself has to be recoverable, or when you want retry configuration to sit next to the call. Use `createRetryableModel` when you need one configured model to hand to code that does not know about retries at all — an agent, a `Provider`, a library that takes a `LanguageModel`.
-
-### Deprecated: experimental call-level drivers
-
-`createRetryableCall` (`ai-retry/experimental/call`) and `createRetryableStream` (`ai-retry/experimental/stream`) were the first pass at call-level retries. They still work and are still exported, but the [call-level functions](#call-level-retries) supersede them entirely and they will be removed in a future release. The drivers ask you to supply the call function and wire each attempt yourself; the functions above take the call's own arguments and do it for you.
-
-| driver                                                          | replacement                                                        | notes                                                          |
-| --------------------------------------------------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------- |
-| `createRetryableCall` + `generateText`                          | `retryableGenerateText`                                            | `retry` replaces `retries`; `maxRetries: 0` is now the default |
-| `createRetryableCall` + `embed` / `embedMany` / `generateImage` | `retryableEmbed` / `retryableEmbedMany` / `retryableGenerateImage` | the deadline is composed into `abortSignal` for you            |
-| `createRetryableStream`                                         | `retryableStreamText`                                              | same commit boundary                                           |
-| `onComplete` / `onCommit`                                       | `onSuccess`                                                        | one name, documented per entry point; now carries the result   |
-
-Two reasons to move rather than wait:
-
-- The drivers are **error-based only**, so `finishReason('content-filter')` on an otherwise empty response streams through instead of failing over.
-- `createRetryableStream` documents support for `streamObject` results. That is **wrong**: `streamObject`'s `fullStream` is the base stream rather than a fresh tee, so reading it for commit detection locks it and the caller's `partialObjectStream` yields nothing.
-
-Full documentation for the drivers lives in the [v2.3.0 README](https://github.com/zirkelc/ai-retry/blob/v2.3.0/README.md#experimental-call-level-retries).
 
 ### Deprecated: function-style retryables
 
