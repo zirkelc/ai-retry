@@ -71,12 +71,11 @@ export type CallSuccessContext<
  * - `COMMIT` is what a result condition judges. It is the result for most entry
  *   points, and defaults to it; see `CallRetryContext` for when it is not.
  */
-export type CallRetryOptions<
+export type CallRetryOptionsBase<
   MODEL extends AnyModel,
   INPUT,
   OVERRIDE,
-  RESULT,
-  COMMIT = RESULT,
+  COMMIT,
   TIMEOUT extends RetryTimeout = number,
 > = {
   /** Retry handlers and fallback models, evaluated on each failed attempt. */
@@ -110,8 +109,6 @@ export type CallRetryOptions<
     | void
     | OnRetryOverrides<MODEL, OVERRIDE>
     | Promise<void | OnRetryOverrides<MODEL, OVERRIDE>>;
-  /** Called once an attempt produces the result the caller receives. */
-  onSuccess?: (context: CallSuccessContext<MODEL, RESULT, COMMIT>) => void;
   /**
    * Called once the call terminally fails: no retry matched, every candidate
    * was tried, the caller's signal was already aborted, or the caller aborted
@@ -122,6 +119,49 @@ export type CallRetryOptions<
    * silent when retries are disabled.
    */
   onFailure?: (context: CallFailureContext<MODEL, COMMIT>) => void;
+};
+
+/**
+ * Retry configuration for an entry point whose result is complete by the time
+ * the caller receives it, which reports its outcome through `onSuccess`.
+ *
+ * `streamText` is the exception and declares its own, because what it hands
+ * over is a stream that has barely started: see its `onCommit`.
+ */
+export type CallRetryOptions<
+  MODEL extends AnyModel,
+  INPUT,
+  OVERRIDE,
+  RESULT,
+  COMMIT = RESULT,
+  TIMEOUT extends RetryTimeout = number,
+> = CallRetryOptionsBase<MODEL, INPUT, OVERRIDE, COMMIT, TIMEOUT> & {
+  /** Called once an attempt produces the result the caller receives. */
+  onSuccess?: (context: CallSuccessContext<MODEL, RESULT, COMMIT>) => void;
+};
+
+/**
+ * What the retry loop reads: whichever terminal hook the entry point declares.
+ *
+ * The loop reports one thing — an attempt produced the result the caller
+ * receives — and each entry point names it for what that means there. Four call
+ * it `onSuccess`, because their result is complete when it arrives.
+ * `streamText` calls it `onCommit`, because its result is a stream that has
+ * barely started and may still fail in the consumer's hands.
+ *
+ * Both are optional here and exactly one is ever exposed, by the entry point's
+ * own public signature.
+ */
+export type CallRetryLoopOptions<
+  MODEL extends AnyModel,
+  INPUT,
+  OVERRIDE,
+  RESULT,
+  COMMIT = RESULT,
+  TIMEOUT extends RetryTimeout = number,
+> = CallRetryOptionsBase<MODEL, INPUT, OVERRIDE, COMMIT, TIMEOUT> & {
+  onSuccess?: (context: CallSuccessContext<MODEL, RESULT, COMMIT>) => void;
+  onCommit?: (context: CallSuccessContext<MODEL, RESULT, COMMIT>) => void;
 };
 
 /**
@@ -160,7 +200,7 @@ export function toCallRetryOptions<
   retry:
     | CallRetryArg<MODEL, INPUT, OVERRIDE, RESULT, COMMIT, TIMEOUT>
     | undefined,
-): CallRetryOptions<MODEL, INPUT, OVERRIDE, RESULT, COMMIT, TIMEOUT> {
+): CallRetryLoopOptions<MODEL, INPUT, OVERRIDE, RESULT, COMMIT, TIMEOUT> {
   if (retry === undefined) return { retries: [] };
   return Array.isArray(retry) ? { retries: retry } : retry;
 }

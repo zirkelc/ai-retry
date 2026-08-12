@@ -94,6 +94,96 @@ describe('retryableStreamText', () => {
       });
     });
 
+    describe('onCommit', () => {
+      it('should fire before the stream is consumed, not after it ends', async () => {
+        // Arrange — the boundary the hook is named for. If it fired at the end
+        // of the stream instead, it could not have run before the first read.
+        const model = MockLanguageModel.from({ doStream: mockStreamChunks });
+        const onCommit = vi.fn();
+
+        // Act
+        const result = await retryableStreamText({
+          model,
+          prompt,
+          retry: { retries: [], onCommit },
+        });
+        const firedBeforeConsuming = onCommit.mock.calls.length;
+        await Streams.toArray(result.fullStream);
+
+        // Assert
+        expect(firedBeforeConsuming).toBe(1);
+        expect(onCommit.mock.calls.length).toBe(1);
+      });
+
+      it('should report the attempt that committed and the ones retried before it', async () => {
+        // Arrange
+        const primary = MockLanguageModel.from({
+          doStream: errorStreamChunks(retryableError),
+        });
+        const fallback = MockLanguageModel.from({ doStream: mockStreamChunks });
+        const onCommit = vi.fn();
+
+        // Act
+        const result = await retryableStreamText({
+          model: primary,
+          prompt,
+          retry: { retries: [fallback], onCommit },
+        });
+        await Streams.toArray(result.fullStream);
+
+        // Assert
+        const context = onCommit.mock.calls[0]![0];
+        expect(context.current.model).toBe(fallback);
+        expect(context.attempts.length).toBe(1);
+        expect(context.current.type).toBe('success');
+      });
+
+      it('should fire even though the stream goes on to fail', async () => {
+        // Arrange — the reason this is not called `onSuccess`. The attempt
+        // commits at its first delta and the error arrives afterwards, in the
+        // caller's stream, where no hook of ours can retract anything.
+        const model = MockLanguageModel.from({
+          doStream: [
+            Language.streamStart(),
+            ...Language.streamText('Par', { id: '1' }),
+            Language.streamError(retryableError),
+          ],
+        });
+        const onCommit = vi.fn();
+
+        // Act
+        const result = await retryableStreamText({
+          model,
+          prompt,
+          retry: { retries: [], onCommit },
+        });
+        const chunks = await Streams.toArray(result.fullStream);
+
+        // Assert
+        expect(onCommit.mock.calls.length).toBe(1);
+        expect(chunks.some((chunk) => chunk.type === 'error')).toBe(true);
+      });
+
+      it('should stay silent when no attempt ever commits', async () => {
+        // Arrange
+        const model = MockLanguageModel.from({
+          doStream: errorStreamChunks(retryableError),
+        });
+        const onCommit = vi.fn();
+
+        // Act
+        const result = retryableStreamText({
+          model,
+          prompt,
+          retry: { retries: [], onCommit },
+        });
+
+        // Assert
+        await expect(result).rejects.toThrow();
+        expect(onCommit.mock.calls.length).toBe(0);
+      });
+    });
+
     describe('deadlines', () => {
       it('should fall over on a call-level timeout, which no model-level retry can see', async () => {
         // Arrange — this is the failure mode the call layer exists for: once the

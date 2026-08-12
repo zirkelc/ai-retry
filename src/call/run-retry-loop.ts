@@ -28,7 +28,7 @@ import type {
   CallRetryContext,
   CallRetryResultAttempt,
 } from './types.js';
-import type { CallRetryOptions } from './retry-arg.js';
+import type { CallRetryLoopOptions, CallSuccessContext } from './retry-arg.js';
 
 /**
  * The subset of an entry point's arguments the loop itself reads. Everything
@@ -147,12 +147,24 @@ function resolveOverrides<MODEL extends AnyModel, INPUT>(
 }
 
 /**
+ * Report the attempt that produced the result, through whichever terminal hook
+ * the entry point declares. Exactly one is ever exposed, so at most one fires.
+ */
+function reportOutcome<MODEL extends AnyModel, INPUT, OVERRIDE, RESULT, COMMIT>(
+  options: CallRetryLoopOptions<MODEL, INPUT, OVERRIDE, RESULT, COMMIT>,
+  context: CallSuccessContext<MODEL, RESULT, COMMIT>,
+): void {
+  options.onSuccess?.(context);
+  options.onCommit?.(context);
+}
+
+/**
  * Report a terminally failed call. The final attempt (last entry of `attempts`)
  * is surfaced as `current`; a rejection that no attempt caused has none, and
  * stays silent.
  */
 function emitFailure<MODEL extends AnyModel, INPUT, OVERRIDE, RESULT, COMMIT>(
-  options: CallRetryOptions<MODEL, INPUT, OVERRIDE, RESULT, COMMIT>,
+  options: CallRetryLoopOptions<MODEL, INPUT, OVERRIDE, RESULT, COMMIT>,
   attempts: Array<CallRetryAttempt<MODEL, COMMIT>>,
   error: unknown,
 ): void {
@@ -196,7 +208,7 @@ export async function runRetryLoop<
 >(input: {
   entryPoint: EntryPoint<MODEL, ARGS, RESULT, COMMIT>;
   args: ARGS;
-  options: CallRetryOptions<MODEL, INPUT, OVERRIDE, RESULT, COMMIT>;
+  options: CallRetryLoopOptions<MODEL, INPUT, OVERRIDE, RESULT, COMMIT>;
 }): Promise<RESULT> {
   const { entryPoint, args, options } = input;
 
@@ -282,8 +294,8 @@ export async function runRetryLoop<
 
       /**
        * Only the attempt itself is guarded. Everything that runs once the
-       * outcome is known stays outside, so a throwing `onSuccess` cannot be
-       * mistaken for a failed attempt and re-run a call that already succeeded.
+       * outcome is known stays outside, so a throwing hook cannot be mistaken
+       * for a failed attempt and re-run a call that already succeeded.
        */
       let result: RESULT;
       let settled: Settled<COMMIT>;
@@ -405,7 +417,7 @@ export async function runRetryLoop<
           outcome: 'success',
           finishReason,
         });
-        options.onSuccess?.({
+        reportOutcome(options, {
           current: {
             type: 'success',
             model: attemptModel,
@@ -418,7 +430,7 @@ export async function runRetryLoop<
       }
 
       recorder?.endAttempt({ attempt: attemptNumber, outcome: 'success' });
-      options.onSuccess?.({
+      reportOutcome(options, {
         current: { type: 'success', model: attemptModel, result },
         attempts: [...attempts],
       });

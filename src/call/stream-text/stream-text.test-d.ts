@@ -93,7 +93,7 @@ describe('retryableStreamText', () => {
     const direct = streamText({ model, prompt: 'hi', tools: { weather } });
 
     // Assert — the hook sees the same result the caller does, and for a stream
-    // that means the *unsettled* one: `onSuccess` fires at the commit point,
+    // that means the *unsettled* one: `onCommit` fires at the commit point,
     // so every field is still the promise a direct call hands back.
     await retryableStreamText({
       model,
@@ -101,7 +101,7 @@ describe('retryableStreamText', () => {
       tools: { weather },
       retry: {
         retries: [],
-        onSuccess: (context) => {
+        onCommit: (context) => {
           expectTypeOf(context.current.result.toolResults).toEqualTypeOf<
             typeof direct.toolResults
           >();
@@ -127,6 +127,21 @@ describe('retryableStreamText', () => {
       model,
       prompt: 'Hello!',
       retry: [{ model, timeout: { totalMs: 5_000, stepMs: 2_000 } }],
+    });
+  });
+
+  it('should not offer onSuccess, which a stream cannot honour', () => {
+    // Arrange — the loop can only report the commit point, and a stream that
+    // commits may still fail in the consumer's hands. Naming that `onSuccess`
+    // would promise something never checked.
+    retryableStreamText({
+      model,
+      prompt: 'hi',
+      retry: {
+        retries: [],
+        // @ts-expect-error `onCommit` is the hook here
+        onSuccess: () => {},
+      },
     });
   });
 });

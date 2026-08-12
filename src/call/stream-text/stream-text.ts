@@ -3,9 +3,8 @@ import { detectStreamCommit } from './detect-stream-commit.js';
 import { resolveLanguageModel } from '../../internal/resolve-model.js';
 import type { LanguageModel, StreamTimeout } from '../../types.js';
 import type { StreamTextInput } from '../inputs.js';
-import type { CallRetryArg } from '../retry-arg.js';
 import { defineRetryableCall, viaTimeoutArg } from '../retryable-calls.js';
-import type { StreamTextCommitResult } from './types.js';
+import type { StreamTextCommitResult, StreamTextRetryArg } from './types.js';
 
 /**
  * `streamText` reports stream failures to `onError` rather than throwing, and
@@ -43,12 +42,11 @@ export type RetryableStreamText = <
   args: Omit<Parameters<typeof streamText>[0], 'tools' | 'activeTools'> & {
     tools?: TOOLS;
     activeTools?: Array<keyof TOOLS & string>;
-    retry?: CallRetryArg<
+    retry?: StreamTextRetryArg<
       LanguageModel,
       INPUT,
       StreamTextInput,
       ReturnType<typeof streamText<TOOLS>>,
-      StreamTextCommitResult,
       StreamTimeout
     >;
   },

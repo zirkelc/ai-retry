@@ -1247,9 +1247,27 @@ For `retryableStreamText` the boundary is the **first content part**. Before it,
 
 Because a pre-commit stream has emitted no text and no tool calls _by definition_, result-based conditions on a stream are effectively finish-reason-shaped. The type says so: `StreamTextCommitResult` declares `finishReason`, `usage` and `providerMetadata` and nothing else, so `finishReason('content-filter')` on an otherwise empty response works and there is no content field to reach for in the first place.
 
-#### `onSuccess` fires at the boundary that can still fail over
+#### Reporting the outcome: `onSuccess`, or `onCommit` for a stream
 
-For `generateText`, `embed`, `embedMany` and `generateImage` that is the completed call, and `context.current.result` is the result you receive. For `streamText` it is the commit point: bytes have started, not that the stream finished well. For a hook that waits for a stream to actually finish, use `streamText`'s own `onFinish`.
+Each entry point names its terminal hook for what the loop can actually observe there.
+
+**`onSuccess`** — `generateText`, `embed`, `embedMany`, `generateImage`. Fires once an attempt produced the result you receive, which for these is a completed call. `context.current.result` is that result, and `context.attempts` holds the attempts retried before it, empty when the first one won.
+
+**`onCommit`** — `retryableStreamText` only, and a weaker claim. The loop can report the moment an attempt stopped being recoverable, and for a stream that is the **first content part**: bytes have started, not that the stream ended well. A stream that commits and then fails in your hands still fires it, which is exactly why it is not called `onSuccess`.
+
+```typescript
+const result = await retryableStreamText({
+  model: primaryModel,
+  prompt: 'Invent a new holiday.',
+  retry: {
+    retries: [fallbackModel],
+    onCommit: (context) =>
+      console.log(`committed to ${context.current.model.modelId}`),
+  },
+});
+```
+
+There is deliberately **no end-of-stream hook**. `streamText` already gives you `onFinish` and `onError` on the same call, so use those — but note the distinction they draw, because it is easy to get wrong: a stream can carry its own failure as an `error` or `abort` part and still complete normally, and `onFinish` fires in that case too. "Ended" is not "ended well" unless you also watch `onError`.
 
 `onFailure` fires when the attempts are exhausted without producing a result: no condition matched, every candidate was tried, your signal was already aborted, or you aborted during a backoff delay. Neither fires when retries are disabled, and `onFailure` reports _attempt_ failures — a rejection no attempt caused (one of your own callbacks throwing) still rejects the call, but there is no failed attempt to hand over.
 
