@@ -130,17 +130,24 @@ describe('retryableStreamText', () => {
     });
   });
 
-  it('should not offer onSuccess, which a stream cannot honour', () => {
-    // Arrange — the loop can only report the commit point, and a stream that
-    // commits may still fail in the consumer's hands. Naming that `onSuccess`
-    // would promise something never checked.
+  it('should offer both ends of the stream, typed alike', () => {
+    // Assert — `onCommit` when the attempt becomes the caller's, `onSuccess`
+    // when it ends well. Same context either time.
     retryableStreamText({
       model,
       prompt: 'hi',
       retry: {
         retries: [],
-        // @ts-expect-error `onCommit` is the hook here
-        onSuccess: () => {},
+        onCommit: (context) => {
+          expectTypeOf(context.attempts).toEqualTypeOf<
+            typeof context.attempts
+          >();
+        },
+        onSuccess: (context) => {
+          expectTypeOf(context.current.result).toEqualTypeOf<
+            typeof context.current.result
+          >();
+        },
       },
     });
   });

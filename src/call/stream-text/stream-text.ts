@@ -14,6 +14,45 @@ import type { StreamTextCommitResult, StreamTextRetryArg } from './types.js';
 const IGNORE_STREAM_ERROR = () => {};
 
 /**
+ * What one attempt's stream has done so far, as far as reporting a clean end
+ * is concerned.
+ *
+ * Three facts about `streamText` shape this, and each would report success for
+ * a stream that had none:
+ *
+ * - `onFinish` fires after `onError` too. A stream carrying an `error` part
+ *   still finishes, so `errored` is what separates ending from ending well.
+ * - A stream can finish before the loop has decided, which is exactly what a
+ *   contentless finish matching no condition does. `finished` outlives that
+ *   race, so the order of the two stops mattering.
+ * - Every attempt gets these handlers, and a losing one still finishes: the
+ *   loop drains a contentless stream to judge it. Nothing marks the winner,
+ *   because `report` already does — it is handed over only to the attempt the
+ *   loop settled on, so a discarded one has nothing to call.
+ *
+ * A deadline needs no field at all: an aborted stream fires neither handler.
+ */
+type StreamOutcome = {
+  errored: boolean;
+  finished: boolean;
+  report?: () => void;
+};
+
+/**
+ * Attempts, by the result they produced. Weak because a losing attempt's
+ * result is dropped by the loop and nothing here should keep it alive.
+ */
+const outcomes = new WeakMap<object, StreamOutcome>();
+
+/** Report a clean end exactly once, whichever fact arrives last. */
+function reportIfClean(outcome: StreamOutcome): void {
+  if (!outcome.finished || outcome.errored) return;
+  const report = outcome.report;
+  outcome.report = undefined;
+  report?.();
+}
+
+/**
  * `streamText` with call-level retries.
  *
  * Takes exactly the arguments `streamText` takes, plus `retry`. Fails over
@@ -61,8 +100,28 @@ export const retryableStreamText = defineRetryableCall<
   operation: 'streamText',
   genAiOperation: 'chat',
   resolveGatewayModel: resolveLanguageModel,
-  call: async (args) =>
-    streamText({ ...args, onError: args.onError ?? IGNORE_STREAM_ERROR }),
+  call: async (args) => {
+    const outcome: StreamOutcome = { errored: false, finished: false };
+    const callerOnError = args.onError ?? IGNORE_STREAM_ERROR;
+    const callerOnFinish = args.onFinish;
+
+    const result = streamText({
+      ...args,
+      /** Composed, never replaced: the caller's handlers still run. */
+      onError: (event) => {
+        outcome.errored = true;
+        callerOnError(event);
+      },
+      onFinish: (event) => {
+        outcome.finished = true;
+        callerOnFinish?.(event);
+        reportIfClean(outcome);
+      },
+    });
+
+    outcomes.set(result, outcome);
+    return result;
+  },
   deadline: viaTimeoutArg,
   /**
    * `streamText` returns before anything has been generated, so the outcome
@@ -71,4 +130,15 @@ export const retryableStreamText = defineRetryableCall<
    */
   settle: (result, callerSignal) =>
     detectStreamCommit(result.stream, callerSignal),
+  /**
+   * The loop has settled on this attempt, so its stream may now report a clean
+   * end — which may already have happened, for a stream that finished without
+   * content and matched no condition.
+   */
+  deferSuccess: (result, report) => {
+    const outcome = outcomes.get(result);
+    if (outcome === undefined) return;
+    outcome.report = report;
+    reportIfClean(outcome);
+  },
 }) as RetryableStreamText;

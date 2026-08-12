@@ -132,6 +132,11 @@ export function defineRetryableCall<
     result: RESULT,
     callerSignal: AbortSignal | undefined,
   ) => Promise<Settled<COMMIT>>;
+  /**
+   * Hold the success report until the outcome is final. Only streaming needs
+   * it; omit it and the loop reports as soon as it has a result.
+   */
+  deferSuccess?: (result: RESULT, report: () => void) => void;
 }) {
   const entryPoint = entry as unknown as EntryPoint<
     MODEL,

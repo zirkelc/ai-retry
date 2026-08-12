@@ -103,6 +103,18 @@ export type EntryPoint<
     result: RESULT,
     callerSignal: AbortSignal | undefined,
   ) => Promise<Settled<COMMIT>>;
+  /**
+   * Hold the success report back until the entry point can say the outcome is
+   * final, instead of firing it as soon as the loop has a result.
+   *
+   * Only streaming needs this. Everywhere else the result is complete when it
+   * arrives, so the loop reporting immediately is exactly right. A stream is
+   * handed over having barely started, and whether it ends well is decided
+   * later, in the consumer's hands, where only the entry point is watching.
+   *
+   * Given the winning result and a `report` to call once, or never.
+   */
+  deferSuccess?: (result: RESULT, report: () => void) => void;
 };
 
 /** Whether the `disabled` switch is on for this call. */
@@ -151,11 +163,23 @@ function resolveOverrides<MODEL extends AnyModel, INPUT>(
  * the entry point declares. Exactly one is ever exposed, so at most one fires.
  */
 function reportOutcome<MODEL extends AnyModel, INPUT, OVERRIDE, RESULT, COMMIT>(
+  entryPoint: { deferSuccess?: (result: RESULT, report: () => void) => void },
   options: CallRetryLoopOptions<MODEL, INPUT, OVERRIDE, RESULT, COMMIT>,
+  result: RESULT,
   context: CallSuccessContext<MODEL, RESULT, COMMIT>,
 ): void {
-  options.onSuccess?.(context);
+  /** The commit point is now, by definition, so this never waits. */
   options.onCommit?.(context);
+
+  const onSuccess = options.onSuccess;
+  if (onSuccess === undefined) return;
+
+  const report = () => onSuccess(context);
+  if (entryPoint.deferSuccess) {
+    entryPoint.deferSuccess(result, report);
+    return;
+  }
+  report();
 }
 
 /**
@@ -417,7 +441,7 @@ export async function runRetryLoop<
           outcome: 'success',
           finishReason,
         });
-        reportOutcome(options, {
+        reportOutcome(entryPoint, options, result, {
           current: {
             type: 'success',
             model: attemptModel,
@@ -430,7 +454,7 @@ export async function runRetryLoop<
       }
 
       recorder?.endAttempt({ attempt: attemptNumber, outcome: 'success' });
-      reportOutcome(options, {
+      reportOutcome(entryPoint, options, result, {
         current: { type: 'success', model: attemptModel, result },
         attempts: [...attempts],
       });

@@ -38,11 +38,10 @@ export type StreamTextCommitResult = {
  * commits and then fails in the consumer's hands would have been reported as a
  * success.
  *
- * There is deliberately no end-of-stream hook here. `streamText` already gives
- * the caller `onFinish` and `onError` on the same call, and a stream can carry
- * its own failure as an `error` or `abort` part while completing perfectly
- * normally — so anything this library added would either duplicate those or
- * quietly disagree with them.
+ * `onSuccess` is here too, reporting the other end of the same stream. It is
+ * not a rename of `streamText`'s own `onFinish`: that fires after `onError` as
+ * well, and for losing attempts the loop drained itself, so reporting a clean
+ * end means holding all three facts at once.
  */
 export type StreamTextRetryOptions<
   MODEL extends AnyModel,
@@ -65,6 +64,26 @@ export type StreamTextRetryOptions<
    * use `streamText`'s own `onFinish`.
    */
   onCommit?: (
+    context: CallSuccessContext<MODEL, RESULT, StreamTextCommitResult>,
+  ) => void;
+  /**
+   * Called once the stream has reached its end without carrying a failure.
+   *
+   * The counterpart to `onCommit`, and the stronger claim: `onCommit` says the
+   * attempt is yours, this says it worked out. Both fire for one call, in that
+   * order, and `context` is the same either time — by the time this runs the
+   * result's promises have settled, so `await result.finishReason` and the
+   * rest read without waiting.
+   *
+   * Three cases stay silent, all of them deliberate:
+   *
+   * - the stream carried an `error` part, or was aborted by a deadline;
+   * - the attempt lost and the loop failed over, even though its own stream
+   *   ran to completion;
+   * - the stream was never consumed. It only advances when read, so there is
+   *   no ending to report. Nothing is buffered on your behalf to change that.
+   */
+  onSuccess?: (
     context: CallSuccessContext<MODEL, RESULT, StreamTextCommitResult>,
   ) => void;
 };

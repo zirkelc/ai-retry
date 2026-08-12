@@ -1267,7 +1267,25 @@ const result = await retryableStreamText({
 });
 ```
 
-There is deliberately **no end-of-stream hook**. `streamText` already gives you `onFinish` and `onError` on the same call, so use those — but note the distinction they draw, because it is easy to get wrong: a stream can carry its own failure as an `error` or `abort` part and still complete normally, and `onFinish` fires in that case too. "Ended" is not "ended well" unless you also watch `onError`.
+**`onSuccess`** — `retryableStreamText` has this too, reporting the other end of the same stream: consumed to the end, carrying no failure. Both fire for one call, in that order, and the context is the same either time. By then the result's promises have settled, so `await result.finishReason` reads without waiting.
+
+```typescript
+retry: {
+  retries: [fallbackModel],
+  onCommit: (context) => metrics.committed(context.current.model.modelId),
+  onSuccess: (context) => metrics.completed(context.attempts.length),
+}
+```
+
+Three cases keep it silent, all deliberate:
+
+| case                                                       | why                                                                                              |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| the stream carried an `error` part, or a deadline aborted it | it did not end well                                                                              |
+| the attempt lost and the loop failed over                  | its own stream ran to completion, but you never saw it                                           |
+| the stream was never consumed                              | a stream only advances when read, so there is no ending to report, and nothing is buffered to force one |
+
+It is not a rename of `streamText`'s own `onFinish`, which fires after `onError` too — on that callback alone, "ended" is not "ended well".
 
 `onFailure` fires when the attempts are exhausted without producing a result: no condition matched, every candidate was tried, your signal was already aborted, or you aborted during a backoff delay. Neither fires when retries are disabled, and `onFailure` reports _attempt_ failures — a rejection no attempt caused (one of your own callbacks throwing) still rejects the call, but there is no failed attempt to hand over.
 

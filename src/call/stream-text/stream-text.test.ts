@@ -184,6 +184,143 @@ describe('retryableStreamText', () => {
       });
     });
 
+    describe('onSuccess', () => {
+      it('should fire once the stream has been consumed to the end', async () => {
+        // Arrange
+        const model = MockLanguageModel.from({ doStream: mockStreamChunks });
+        const onCommit = vi.fn();
+        const onSuccess = vi.fn();
+
+        // Act
+        const result = await retryableStreamText({
+          model,
+          prompt,
+          retry: { retries: [], onCommit, onSuccess },
+        });
+        const beforeConsuming = onSuccess.mock.calls.length;
+        await Streams.toArray(result.fullStream);
+
+        // Assert — the two ends of the same stream, in order.
+        expect(beforeConsuming).toBe(0);
+        expect(onCommit.mock.calls.length).toBe(1);
+        expect(onSuccess.mock.calls.length).toBe(1);
+      });
+
+      it('should stay silent when the stream carries an error', async () => {
+        // Arrange — the case `onFinish` alone gets wrong: this stream errors
+        // and finishes.
+        const model = MockLanguageModel.from({
+          doStream: [
+            Language.streamStart(),
+            ...Language.streamText('Par', { id: '1' }),
+            Language.streamError(retryableError),
+          ],
+        });
+        const onCommit = vi.fn();
+        const onSuccess = vi.fn();
+
+        // Act
+        const result = await retryableStreamText({
+          model,
+          prompt,
+          retry: { retries: [], onCommit, onSuccess },
+        });
+        await Streams.toArray(result.fullStream);
+
+        // Assert
+        expect(onCommit.mock.calls.length).toBe(1);
+        expect(onSuccess.mock.calls.length).toBe(0);
+      });
+
+      it('should stay silent for an attempt the loop discarded', async () => {
+        // Arrange — the primary finishes with no content, so the loop drains
+        // its stream to judge it and then fails over. That losing stream
+        // finished perfectly well, and must report nothing.
+        const primary = MockLanguageModel.from({
+          doStream: contentFilterStreamChunks,
+        });
+        const fallback = MockLanguageModel.from({ doStream: mockStreamChunks });
+        const onSuccess = vi.fn();
+
+        // Act
+        const result = await retryableStreamText({
+          model: primary,
+          prompt,
+          retry: {
+            retries: [
+              finishReason('content-filter').switch({ model: fallback }),
+            ],
+            onSuccess,
+          },
+        });
+        await Streams.toArray(result.fullStream);
+
+        // Assert — once, for the winner.
+        expect(onSuccess.mock.calls.length).toBe(1);
+        expect(onSuccess.mock.calls[0]![0].current.model).toBe(fallback);
+      });
+
+      it('should fire for a contentless finish that matched no condition', async () => {
+        // Arrange — the ordering case: this stream is drained to the end
+        // before the loop has decided anything, so its finish arrives first.
+        const model = MockLanguageModel.from({
+          doStream: contentFilterStreamChunks,
+        });
+        const onSuccess = vi.fn();
+
+        // Act
+        const result = await retryableStreamText({
+          model,
+          prompt,
+          retry: { retries: [], onSuccess },
+        });
+        await Streams.toArray(result.fullStream);
+
+        // Assert
+        expect(onSuccess.mock.calls.length).toBe(1);
+      });
+
+      it('should stay silent for a stream that is never consumed', async () => {
+        // Arrange — a stream only advances when read, so there is no ending
+        // to report and nothing is buffered on the caller's behalf.
+        const model = MockLanguageModel.from({ doStream: mockStreamChunks });
+        const onCommit = vi.fn();
+        const onSuccess = vi.fn();
+
+        // Act
+        await retryableStreamText({
+          model,
+          prompt,
+          retry: { retries: [], onCommit, onSuccess },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        // Assert
+        expect(onCommit.mock.calls.length).toBe(1);
+        expect(onSuccess.mock.calls.length).toBe(0);
+      });
+
+      it("should still run the caller's own onFinish and onError", async () => {
+        // Arrange — ours are composed onto the caller's, never replacing them.
+        const model = MockLanguageModel.from({ doStream: mockStreamChunks });
+        const onFinish = vi.fn();
+        const onSuccess = vi.fn();
+
+        // Act
+        const result = await retryableStreamText({
+          model,
+          prompt,
+          onFinish,
+          retry: { retries: [], onSuccess },
+        });
+        await Streams.toArray(result.fullStream);
+
+        // Assert
+        expect(onFinish.mock.calls.length).toBe(1);
+        expect(onSuccess.mock.calls.length).toBe(1);
+      });
+    });
+
     describe('deadlines', () => {
       it('should fall over on a call-level timeout, which no model-level retry can see', async () => {
         // Arrange — this is the failure mode the call layer exists for: once the
