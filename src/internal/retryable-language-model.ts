@@ -482,6 +482,15 @@ export class RetryableLanguageModel
           | ReadableStreamDefaultReader<LanguageModelStreamPart>
           | undefined;
         let isStreaming = false;
+        /**
+         * Whether a failure was forwarded to the consumer as a stream part.
+         *
+         * A stream that carries an `error` part still closes normally, so
+         * completing the loop says nothing about whether the generation
+         * succeeded. Without this the consumer sees a failure while
+         * `onSuccess` reports a success.
+         */
+        let forwardedError = false;
 
         /** Set when the operation ends in failure, for the operation span. */
         let operationError: unknown;
@@ -534,6 +543,12 @@ export class RetryableLanguageModel
                     // If no data has been streamed yet, we can retry
                     throw value.error;
                   }
+                  /**
+                   * Past the commit boundary the error belongs to the
+                   * consumer's stream and cannot be retried, but it is still a
+                   * failure and must not be reported as a success.
+                   */
+                  forwardedError = true;
                 }
 
                 /**
@@ -855,12 +870,22 @@ export class RetryableLanguageModel
           }
 
           /**
-           * Stream completed successfully — finalize sticky model and fire
-           * onSuccess. Deferred to here (rather than after the initial
-           * withRetry resolves) so the final model and full attempts list
-           * are observed, including any mid-stream retries.
+           * Stream finished — finalize sticky model and, if it finished
+           * *well*, fire onSuccess. Deferred to here (rather than after the
+           * initial withRetry resolves) so the final model and full attempts
+           * list are observed, including any mid-stream retries.
+           *
+           * A stream that forwarded an error part reached this point too: it
+           * closed normally, carrying the failure as cargo. That is not a
+           * success, and neither is it an attempt failure the retry loop can
+           * report — the consumer already has it, through `streamText`'s own
+           * `onError`. So nothing fires.
            */
           this.updateStickyModel(startModel);
+
+          if (forwardedError) {
+            return;
+          }
 
           this.options.onSuccess?.({
             current: {

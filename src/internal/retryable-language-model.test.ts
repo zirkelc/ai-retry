@@ -5124,3 +5124,60 @@ describe('streamText', () => {
     });
   });
 });
+
+/**
+ * Kept out of the blocks above on purpose: every `MockLanguageModel.from()`
+ * consumes a shared model-id counter that snapshots elsewhere in this file
+ * assert on, so a test added in the middle renumbers them.
+ */
+describe('streamText onSuccess and the commit boundary', () => {
+  it('should not call onSuccess when the stream carries an error part', async () => {
+    // Arrange — the error arrives after content, so the attempt is committed
+    // and the error is forwarded to the consumer rather than retried. The
+    // stream still closes normally, which is what made this look successful.
+    const baseModel = MockLanguageModel.from({
+      doStream: [
+        Language.streamStart(),
+        ...Language.streamText('Par', { id: '1' }),
+        Language.streamError(retryableError),
+      ],
+    });
+    const onSuccessSpy = vi.fn<OnSuccess>();
+
+    // Act
+    const result = streamText({
+      model: createRetryableModel({
+        model: baseModel,
+        retries: [],
+        onSuccess: onSuccessSpy,
+      }),
+      prompt,
+      onError: () => {},
+    });
+    const chunks = await Streams.toArray(result.fullStream);
+
+    // Assert — the consumer saw the failure, so this was not a success.
+    expect(chunks.some((chunk) => chunk.type === 'error')).toBe(true);
+    expect(onSuccessSpy).not.toHaveBeenCalled();
+  });
+
+  it('should still call onSuccess when the stream ends cleanly', async () => {
+    // Arrange — the counterpart, so the guard cannot simply silence it.
+    const baseModel = MockLanguageModel.from({ doStream: mockStreamChunks });
+    const onSuccessSpy = vi.fn<OnSuccess>();
+
+    // Act
+    const result = streamText({
+      model: createRetryableModel({
+        model: baseModel,
+        retries: [],
+        onSuccess: onSuccessSpy,
+      }),
+      prompt,
+    });
+    await Streams.toArray(result.fullStream);
+
+    // Assert
+    expect(onSuccessSpy).toHaveBeenCalledTimes(1);
+  });
+});
