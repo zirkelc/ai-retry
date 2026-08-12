@@ -1478,7 +1478,7 @@ interface ModelSuccessContext<MODEL> {
 
 Passed to the `onSuccess` callback. `attempts` holds the preceding attempts that were retried, in order, and is empty when the first attempt succeeded. The successful attempt itself is `current` and is not repeated in `attempts`.
 
-The call-level functions have their own [`CallSuccessContext`](#onsuccess-fires-at-the-boundary-that-can-still-fail-over) instead, which carries the entry point's own result.
+The call-level functions have their own [`CallSuccessContext`](#reporting-the-outcome-onsuccess-or-oncommit-for-a-stream) instead, which carries the entry point's own result.
 
 ### License
 
