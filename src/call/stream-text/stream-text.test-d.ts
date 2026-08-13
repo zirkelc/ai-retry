@@ -2,6 +2,7 @@ import { streamText, tool } from 'ai';
 import { describe, expectTypeOf, it } from 'vitest';
 import { z } from 'zod';
 import { MockLanguageModel } from '../../internal/test-utils.js';
+import type { CallFinishReason } from '../types.js';
 import { retryableStreamText } from './stream-text.js';
 
 const model = MockLanguageModel.from();
@@ -130,22 +131,23 @@ describe('retryableStreamText', () => {
     });
   });
 
-  it('should offer both ends of the stream, typed alike', () => {
+  it('should offer both ends of the stream, told apart by their contexts', () => {
     // Assert — `onCommit` when the attempt becomes the caller's, `onSuccess`
-    // when it ends well. Same context either time.
+    // when it ends well. The contexts differ because the knowledge does.
     retryableStreamText({
       model,
       prompt: 'hi',
       retry: {
         retries: [],
         onCommit: (context) => {
-          expectTypeOf(context.attempts).toEqualTypeOf<
-            typeof context.attempts
-          >();
+          expectTypeOf(context.current.type).toEqualTypeOf<'commit'>();
+          // @ts-expect-error nothing has finished yet, so there is no reason
+          context.current.finishReason;
         },
         onSuccess: (context) => {
-          expectTypeOf(context.current.result).toEqualTypeOf<
-            typeof context.current.result
+          expectTypeOf(context.current.type).toEqualTypeOf<'success'>();
+          expectTypeOf(context.current.finishReason).toEqualTypeOf<
+            CallFinishReason | undefined
           >();
         },
       },

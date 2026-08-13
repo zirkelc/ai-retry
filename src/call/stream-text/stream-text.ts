@@ -7,13 +7,6 @@ import { defineRetryableCall, viaTimeoutArg } from '../retryable-calls.js';
 import type { StreamTextCommitResult, StreamTextRetryArg } from './types.js';
 
 /**
- * `streamText` reports stream failures to `onError` rather than throwing, and
- * defaults it to `console.error` — which would log every attempt the loop went
- * on to recover from. A caller-supplied handler still wins.
- */
-const IGNORE_STREAM_ERROR = () => {};
-
-/**
  * What one attempt's stream has done so far, as far as reporting a clean end
  * is concerned.
  *
@@ -102,15 +95,21 @@ export const retryableStreamText = defineRetryableCall<
   resolveGatewayModel: resolveLanguageModel,
   call: async (args) => {
     const outcome: StreamOutcome = { errored: false, finished: false };
-    const callerOnError = args.onError ?? IGNORE_STREAM_ERROR;
+    const callerOnError = args.onError;
     const callerOnFinish = args.onFinish;
 
     const result = streamText({
       ...args,
-      /** Composed, never replaced: the caller's handlers still run. */
+      /**
+       * Composed onto the caller's, never replacing them, and always passed:
+       * `streamText` reports stream failures to `onError` rather than throwing
+       * and defaults it to `console.error`, which would log every attempt the
+       * loop went on to recover from. Handing it a handler unconditionally is
+       * what keeps that default out of reach.
+       */
       onError: (event) => {
         outcome.errored = true;
-        callerOnError(event);
+        callerOnError?.(event);
       },
       onFinish: (event) => {
         outcome.finished = true;

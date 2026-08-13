@@ -4,7 +4,11 @@ import type {
   CallLanguageModelUsage,
   CallRetries,
 } from '../types.js';
-import type { CallRetryOptionsBase, CallSuccessContext } from '../retry-arg.js';
+import type {
+  CallCommitContext,
+  CallRetryOptionsBase,
+  CallSuccessContext,
+} from '../retry-arg.js';
 import type { AnyModel, RetryTimeout } from '../../types.js';
 
 /**
@@ -64,7 +68,7 @@ export type StreamTextRetryOptions<
    * use `streamText`'s own `onFinish`.
    */
   onCommit?: (
-    context: CallSuccessContext<MODEL, RESULT, StreamTextCommitResult>,
+    context: CallCommitContext<MODEL, RESULT, StreamTextCommitResult>,
   ) => void;
   /**
    * Called once the stream has reached its end without carrying a failure.

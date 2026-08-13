@@ -168,8 +168,15 @@ function reportOutcome<MODEL extends AnyModel, INPUT, OVERRIDE, RESULT, COMMIT>(
   result: RESULT,
   context: CallSuccessContext<MODEL, RESULT, COMMIT>,
 ): void {
-  /** The commit point is now, by definition, so this never waits. */
-  options.onCommit?.(context);
+  /**
+   * The commit point is now, by definition, so this never waits. It is given
+   * its own narrower view: at this moment the caller owns the result and
+   * nothing more is known, least of all how it ends.
+   */
+  options.onCommit?.({
+    current: { type: 'commit', model: context.current.model, result },
+    attempts: context.attempts,
+  });
 
   const onSuccess = options.onSuccess;
   if (onSuccess === undefined) return;

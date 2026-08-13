@@ -1267,7 +1267,7 @@ const result = await retryableStreamText({
 });
 ```
 
-**`onSuccess`** — `retryableStreamText` has this too, reporting the other end of the same stream: consumed to the end, carrying no failure. Both fire for one call, in that order, and the context is the same either time. By then the result's promises have settled, so `await result.finishReason` reads without waiting.
+**`onSuccess`** — `retryableStreamText` has this too, reporting the other end of the same stream: consumed to the end, carrying no failure. Both fire for one call, in that order, and each gets a context matching what is known at the time. `onCommit` reports `current.type: 'commit'` and no finish reason, because nothing has finished; `onSuccess` reports `'success'`. By then the result's promises have settled, so `await result.finishReason` reads without waiting.
 
 ```typescript
 retry: {

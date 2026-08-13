@@ -36,6 +36,42 @@ export type CallSuccessAttempt<MODEL extends AnyModel, RESULT> = {
 };
 
 /**
+ * The attempt whose result the caller now owns, where owning it is all that
+ * can be said.
+ *
+ * Distinct from {@link CallSuccessAttempt} because the difference is real: at
+ * the commit point a stream has emitted one content part and nothing more is
+ * known about it. There is no finish reason to report — the generation has not
+ * finished — and calling this `success` would be the same overclaim the
+ * `onCommit` name exists to avoid.
+ */
+export type CallCommitAttempt<MODEL extends AnyModel, RESULT> = {
+  type: 'commit';
+  /** The model whose attempt the caller now owns. */
+  model: MODEL;
+  /** The entry point's own result, exactly as the caller receives it. */
+  result: RESULT;
+};
+
+/**
+ * The context passed to `onCommit`, with the attempt that committed and the
+ * attempts retried before it.
+ */
+export type CallCommitContext<
+  MODEL extends AnyModel,
+  RESULT,
+  COMMIT = RESULT,
+> = {
+  /** The attempt that committed. */
+  current: CallCommitAttempt<MODEL, RESULT>;
+  /**
+   * The preceding attempts that were retried, in order. Empty when the first
+   * attempt committed.
+   */
+  attempts: Array<CallRetryAttempt<MODEL, COMMIT>>;
+};
+
+/**
  * The context passed to `onSuccess`, with the attempt that produced the result
  * and the attempts retried before it.
  */
@@ -161,7 +197,7 @@ export type CallRetryLoopOptions<
   TIMEOUT extends RetryTimeout = number,
 > = CallRetryOptionsBase<MODEL, INPUT, OVERRIDE, COMMIT, TIMEOUT> & {
   onSuccess?: (context: CallSuccessContext<MODEL, RESULT, COMMIT>) => void;
-  onCommit?: (context: CallSuccessContext<MODEL, RESULT, COMMIT>) => void;
+  onCommit?: (context: CallCommitContext<MODEL, RESULT, COMMIT>) => void;
 };
 
 /**

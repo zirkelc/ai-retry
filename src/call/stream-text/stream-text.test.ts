@@ -135,7 +135,27 @@ describe('retryableStreamText', () => {
         const context = onCommit.mock.calls[0]![0];
         expect(context.current.model).toBe(fallback);
         expect(context.attempts.length).toBe(1);
-        expect(context.current.type).toBe('success');
+        expect(context.current.type).toBe('commit');
+      });
+
+      it('should report no finish reason, which is not known yet', async () => {
+        // Arrange — the attempt commits at its first content part, long before
+        // the generation has finished. Reporting a finish reason here would be
+        // the overclaim the hook is named to avoid.
+        const model = MockLanguageModel.from({ doStream: mockStreamChunks });
+        const onCommit = vi.fn();
+
+        // Act
+        const result = await retryableStreamText({
+          model,
+          prompt,
+          retry: { retries: [], onCommit },
+        });
+        await Streams.toArray(result.fullStream);
+
+        // Assert
+        const context = onCommit.mock.calls[0]![0];
+        expect('finishReason' in context.current).toBe(false);
       });
 
       it('should fire even though the stream goes on to fail', async () => {
