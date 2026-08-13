@@ -27,9 +27,7 @@ export type RetryableGenerateText = <
   TOOLS extends ToolSet,
   INPUT extends GenerateTextInput = GenerateTextInput,
 >(
-  args: Omit<Parameters<typeof generateText>[0], 'tools' | 'activeTools'> & {
-    tools?: TOOLS;
-    activeTools?: Array<keyof TOOLS & string>;
+  args: Parameters<typeof generateText<TOOLS>>[0] & {
     retry?: CallRetryArg<
       LanguageModel,
       INPUT,

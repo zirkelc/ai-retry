@@ -105,6 +105,16 @@ export type EntryPoint<
     result: RESULT,
     callerSignal: AbortSignal | undefined,
   ) => Promise<Settled<COMMIT>>;
+  /**
+   * Tells the entry point which attempt the caller ends up with, success or
+   * failure, once no further fail-over can change it.
+   *
+   * Every attempt is issued with the caller's own arguments, so an entry point
+   * that hands those to something which calls back — a stream's `onFinish` —
+   * can hold that back until this says the attempt is the caller's. Attempts
+   * the loop discards are never named here, and stay silent.
+   */
+  release?: (result: RESULT) => void;
 };
 
 /** Whether the `disabled` switch is on for this call. */
@@ -239,6 +249,12 @@ export async function runRetryLoop<
   let currentRetry: Retry<MODEL, INPUT> | undefined;
 
   let operationError: unknown;
+  /**
+   * The most recent attempt's result, kept so a terminal failure can still
+   * release what that attempt held back. Undefined when the failing call never
+   * returned one.
+   */
+  let lastResult: RESULT | undefined;
   try {
     while (true) {
       /**
@@ -287,6 +303,7 @@ export async function runRetryLoop<
       let settled: Settled<COMMIT>;
       try {
         result = await entryPoint.call(attemptArgs);
+        lastResult = result;
         settled = (await entryPoint.settle?.(result, callerSignal)) ?? {
           type: 'committed',
         };
@@ -412,6 +429,7 @@ export async function runRetryLoop<
           ] as Array<CallSettledAttempt<MODEL, RESULT, COMMIT>>,
           result,
         });
+        entryPoint.release?.(result);
         return result;
       }
 
@@ -425,6 +443,7 @@ export async function runRetryLoop<
         ] as Array<CallSettledAttempt<MODEL, RESULT, COMMIT>>,
         result,
       });
+      entryPoint.release?.(result);
       return result;
     }
   } catch (error) {
@@ -449,6 +468,12 @@ export async function runRetryLoop<
         error,
       });
     }
+    /**
+     * The attempt that failed terminally is the caller's too: they receive its
+     * error, so whatever it said belongs to them. Released after the report,
+     * so `onSettled` is always the first word on the outcome.
+     */
+    if (lastResult !== undefined) entryPoint.release?.(lastResult);
     throw error;
   } finally {
     recorder?.endOperation({

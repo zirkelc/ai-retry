@@ -204,6 +204,128 @@ describe('retryableStreamText', () => {
       });
     });
 
+    describe("the caller's own stream callbacks", () => {
+      /**
+       * Every attempt is issued with the caller's whole argument object, so
+       * without holding them a discarded attempt reports a call that
+       * completed, or an abort nobody saw, for output that was thrown away.
+       */
+      const record = (events: Array<string>) => ({
+        onFinish: () => void events.push('onFinish'),
+        onError: () => void events.push('onError'),
+        onAbort: () => void events.push('onAbort'),
+        onStepFinish: () => void events.push('onStepFinish'),
+        onChunk: () => void events.push('onChunk'),
+      });
+
+      it('should stay silent for an attempt discarded on its result', async () => {
+        // Arrange — the primary finishes with no content, so the loop reads it
+        // to the end and fails over. That stream finished, and saying so would
+        // be reporting a call the caller never received.
+        const events: Array<string> = [];
+        const primary = MockLanguageModel.from({
+          doStream: contentFilterStreamChunks,
+        });
+        const fallback = MockLanguageModel.from({ doStream: mockStreamChunks });
+
+        // Act
+        const result = await retryableStreamText({
+          model: primary,
+          prompt,
+          ...record(events),
+          retry: [finishReason('content-filter').switch({ model: fallback })],
+        });
+        await Streams.toArray(result.fullStream);
+
+        // Assert — one finish, belonging to the attempt the caller got.
+        expect(events.filter((event) => event === 'onFinish').length).toBe(1);
+      });
+
+      it('should stay silent for an attempt discarded on a deadline', async () => {
+        // Arrange — the primary opens its stream and stalls, so the deadline
+        // aborts it. The caller never saw that abort.
+        const events: Array<string> = [];
+        const stalling = MockLanguageModel.from({
+          doStream: async () => ({
+            stream: new ReadableStream({
+              start(controller) {
+                controller.enqueue(Language.streamStart());
+                /** Backstop, so an unaborted stream cannot hang the test. */
+                setTimeout(() => {
+                  try {
+                    controller.close();
+                  } catch {}
+                }, 2_000).unref?.();
+              },
+            }),
+          }),
+        });
+        const fallback = MockLanguageModel.from({ doStream: mockStreamChunks });
+
+        // Act
+        const result = await retryableStreamText({
+          model: stalling,
+          prompt,
+          timeout: { firstChunkMs: 50 },
+          ...record(events),
+          retry: [fallback],
+        });
+        await Streams.toArray(result.fullStream);
+
+        // Assert
+        expect(events.includes('onAbort')).toBe(false);
+        expect(events.filter((event) => event === 'onFinish').length).toBe(1);
+      });
+
+      it('should report the attempt that failed terminally', async () => {
+        // Arrange — nothing recovered this one, so its error is the caller's.
+        const events: Array<string> = [];
+        const model = MockLanguageModel.from({
+          doStream: errorStreamChunks(retryableError),
+        });
+
+        // Act
+        const result = retryableStreamText({
+          model,
+          prompt,
+          ...record(events),
+          retry: {
+            retries: [],
+            onSettled: () => void events.push('onSettled'),
+          },
+        });
+
+        // Assert — held back until the loop gave up, then released.
+        await expect(result).rejects.toThrow();
+        expect(events.includes('onError')).toBe(true);
+        expect(events.indexOf('onSettled')).toBeLessThan(
+          events.indexOf('onError'),
+        );
+      });
+
+      it('should forward the winning attempt as its stream is consumed', async () => {
+        // Arrange — nothing is held on the happy path beyond the settle: the
+        // consumer drives these, and the loop settled long before.
+        const events: Array<string> = [];
+        const model = MockLanguageModel.from({ doStream: mockStreamChunks });
+
+        // Act
+        const result = await retryableStreamText({
+          model,
+          prompt,
+          ...record(events),
+          retry: [],
+        });
+        const beforeConsuming = [...events];
+        await Streams.toArray(result.fullStream);
+
+        // Assert
+        expect(beforeConsuming.includes('onFinish')).toBe(false);
+        expect(events.filter((event) => event === 'onFinish').length).toBe(1);
+        expect(events.includes('onChunk')).toBe(true);
+      });
+    });
+
     describe('deadlines', () => {
       it('should fall over on a call-level timeout, which no model-level retry can see', async () => {
         // Arrange — this is the failure mode the call layer exists for: once the
@@ -278,9 +400,13 @@ describe('retryableStreamText', () => {
         consoleError.mockRestore();
       });
 
-      it('should keep a caller-supplied onError', async () => {
-        // Arrange
-        const onError = vi.fn();
+      it('should not report a recovered error to the caller', async () => {
+        // Arrange — the primary fails before committing and the loop recovers,
+        // so the caller receives the fallback's stream and never saw the
+        // failure. `streamText`'s `onError` describes the call the caller got;
+        // the retry's own `onError` is where recovered failures are reported.
+        const callerOnError = vi.fn();
+        const retryOnError = vi.fn();
         const primary = MockLanguageModel.from({
           doStream: errorStreamChunks(retryableError),
         });
@@ -290,13 +416,14 @@ describe('retryableStreamText', () => {
         const result = await retryableStreamText({
           model: primary,
           prompt,
-          onError,
-          retry: [fallback],
+          onError: callerOnError,
+          retry: { retries: [fallback], onError: retryOnError },
         });
         await Streams.toArray(result.fullStream);
 
         // Assert
-        expect(onError.mock.calls.length).toBe(1);
+        expect(callerOnError.mock.calls.length).toBe(0);
+        expect(retryOnError.mock.calls.length).toBe(1);
       });
     });
   });

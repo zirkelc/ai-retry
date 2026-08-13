@@ -144,4 +144,25 @@ describe('retryableStreamText', () => {
       },
     });
   });
+
+  it('should carry the tool set into the callbacks, as a direct call does', () => {
+    // Arrange — the argument type is instantiated at TOOLS, not at the bare
+    // `ToolSet` a non-generic `Parameters<typeof streamText>[0]` would give, so
+    // `onStepFinish` sees the caller's own tools rather than any tool set.
+    streamText({
+      model,
+      prompt: 'hi',
+      tools: { weather },
+      onStepFinish: (direct) => {
+        retryableStreamText({
+          model,
+          prompt: 'hi',
+          tools: { weather },
+          onStepFinish: (wrapped) => {
+            expectTypeOf(wrapped).toEqualTypeOf<typeof direct>();
+          },
+        });
+      },
+    });
+  });
 });

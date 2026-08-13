@@ -1279,6 +1279,30 @@ The event also carries `model` (the one that settled it, or the one whose failur
 
 It stays silent in two cases, both the absence of a call to report rather than an outcome: when retries are `disabled`, and when the rejection came from no attempt at all, such as one of your own callbacks throwing.
 
+#### Your own stream callbacks belong to one attempt
+
+`retryableStreamText` issues every attempt with the arguments you passed, callbacks included — so `onFinish`, `onAbort`, `onStepFinish`, `onChunk` and `onError` are held back until the loop knows whether that attempt is the one you get. **An attempt the loop discards is silent**, and the attempt you receive reports exactly once, always after `onSettled`.
+
+That matters because those callbacks are where side effects live: usage metrics, spans, trace writes. Without it a recovered fail-over would run your `onFinish` for a stream you never saw, or your `onAbort` for a deadline that was recovered from — and you could not filter them out, because at the moment one fires the loop has not yet decided whether a retry follows.
+
+A failure nobody recovered is still yours, so a terminal attempt's callbacks do fire. **Errors that a retry recovered from reach the retry's own `onError`, not the call's:**
+
+```typescript
+await retryableStreamText({
+  model: primaryModel,
+  prompt: 'Invent a new holiday.',
+  /** The call you received. Silent for attempts that were discarded. */
+  onError: (event) => log.error(event.error),
+  retry: {
+    retries: [fallbackModel],
+    /** Every failed attempt, recovered or not. */
+    onError: (context) => log.warn(context.current.error),
+  },
+});
+```
+
+Nothing is delayed on the happy path: a committed stream's callbacks are driven by you reading it, which happens after the loop has settled.
+
 `onError` and `onRetry` are unchanged, and remain the per-attempt channel for *why* something retried.
 
 **It mirrors the operation span**, so a metric built on the hook and one built on [telemetry](#telemetry) agree by construction:

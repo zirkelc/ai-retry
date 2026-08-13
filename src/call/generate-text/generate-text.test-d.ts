@@ -195,4 +195,25 @@ describe('retryableGenerateText', () => {
       retry: [{ model, timeout: { chunkMs: 100 } }],
     });
   });
+
+  it('should carry the tool set into the callbacks, as a direct call does', () => {
+    // Arrange — the argument type is instantiated at TOOLS, not at the bare
+    // `ToolSet` a non-generic `Parameters<typeof generateText>[0]` would give, so
+    // `onStepFinish` sees the caller's own tools rather than any tool set.
+    generateText({
+      model,
+      prompt: 'hi',
+      tools: { weather },
+      onStepFinish: (direct) => {
+        retryableGenerateText({
+          model,
+          prompt: 'hi',
+          tools: { weather },
+          onStepFinish: (wrapped) => {
+            expectTypeOf(wrapped).toEqualTypeOf<typeof direct>();
+          },
+        });
+      },
+    });
+  });
 });

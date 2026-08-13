@@ -132,6 +132,11 @@ export function defineRetryableCall<
     result: RESULT,
     callerSignal: AbortSignal | undefined,
   ) => Promise<Settled<COMMIT>>;
+  /**
+   * Tells the entry point which attempt the caller ends up with, so anything
+   * it held back on a discarded attempt's behalf can be released.
+   */
+  release?: (result: RESULT) => void;
 }) {
   const entryPoint = entry as unknown as EntryPoint<
     MODEL,
