@@ -1,7 +1,6 @@
 import { delay } from '@ai-sdk/provider-utils';
 import { evaluateError } from '../internal/evaluate-error.js';
 import { findRetryModel } from '../internal/find-retry-model.js';
-import { isErrorAttempt } from '../internal/guards.js';
 import { resolveBackoffDelay } from '../internal/resolve-backoff-delay.js';
 import { totalTimeoutMs } from '../internal/retry-timeout.js';
 import {
@@ -22,13 +21,16 @@ import type {
 } from '../types.js';
 import type {
   CallArgs,
-  CallFailureContext,
   CallFinishReason,
   CallRetryAttempt,
   CallRetryContext,
   CallRetryResultAttempt,
 } from './types.js';
-import type { CallRetryLoopOptions, CallSuccessContext } from './retry-arg.js';
+import type {
+  CallRetryOptions,
+  CallSettledAttempt,
+  CallSettledEvent,
+} from './retry-arg.js';
 
 /**
  * The subset of an entry point's arguments the loop itself reads. Everything
@@ -103,18 +105,6 @@ export type EntryPoint<
     result: RESULT,
     callerSignal: AbortSignal | undefined,
   ) => Promise<Settled<COMMIT>>;
-  /**
-   * Hold the success report back until the entry point can say the outcome is
-   * final, instead of firing it as soon as the loop has a result.
-   *
-   * Only streaming needs this. Everywhere else the result is complete when it
-   * arrives, so the loop reporting immediately is exactly right. A stream is
-   * handed over having barely started, and whether it ends well is decided
-   * later, in the consumer's hands, where only the entry point is watching.
-   *
-   * Given the winning result and a `report` to call once, or never.
-   */
-  deferSuccess?: (result: RESULT, report: () => void) => void;
 };
 
 /** Whether the `disabled` switch is on for this call. */
@@ -159,54 +149,19 @@ function resolveOverrides<MODEL extends AnyModel, INPUT>(
 }
 
 /**
- * Report the attempt that produced the result, through whichever terminal hook
- * the entry point declares. Exactly one is ever exposed, so at most one fires.
+ * Report what the call amounted to, exactly once.
+ *
+ * `attempts` arrives holding every attempt that failed or was judged; a
+ * success appends the attempt that ended the loop, which the loop otherwise
+ * never records. Either way the array ends with the attempt that settled the
+ * operation and its length is the attempt count — the same number the
+ * operation span reports as `ai_retry.attempts`.
  */
-function reportOutcome<MODEL extends AnyModel, INPUT, OVERRIDE, RESULT, COMMIT>(
-  entryPoint: { deferSuccess?: (result: RESULT, report: () => void) => void },
-  options: CallRetryLoopOptions<MODEL, INPUT, OVERRIDE, RESULT, COMMIT>,
-  result: RESULT,
-  context: CallSuccessContext<MODEL, RESULT, COMMIT>,
+function reportSettled<MODEL extends AnyModel, INPUT, OVERRIDE, RESULT, COMMIT>(
+  options: CallRetryOptions<MODEL, INPUT, OVERRIDE, RESULT, COMMIT>,
+  event: CallSettledEvent<MODEL, RESULT, COMMIT>,
 ): void {
-  /**
-   * The commit point is now, by definition, so this never waits. It is given
-   * its own narrower view: at this moment the caller owns the result and
-   * nothing more is known, least of all how it ends.
-   */
-  options.onCommit?.({
-    current: { type: 'commit', model: context.current.model, result },
-    attempts: context.attempts,
-  });
-
-  const onSuccess = options.onSuccess;
-  if (onSuccess === undefined) return;
-
-  const report = () => onSuccess(context);
-  if (entryPoint.deferSuccess) {
-    entryPoint.deferSuccess(result, report);
-    return;
-  }
-  report();
-}
-
-/**
- * Report a terminally failed call. The final attempt (last entry of `attempts`)
- * is surfaced as `current`; a rejection that no attempt caused has none, and
- * stays silent.
- */
-function emitFailure<MODEL extends AnyModel, INPUT, OVERRIDE, RESULT, COMMIT>(
-  options: CallRetryLoopOptions<MODEL, INPUT, OVERRIDE, RESULT, COMMIT>,
-  attempts: Array<CallRetryAttempt<MODEL, COMMIT>>,
-  error: unknown,
-): void {
-  if (!options.onFailure) return;
-  const current = attempts.at(-1);
-  if (!current || !isErrorAttempt(current as any)) return;
-  options.onFailure({
-    current,
-    attempts,
-    error,
-  } as unknown as CallFailureContext<MODEL, COMMIT>);
+  options.onSettled?.(event);
 }
 
 /**
@@ -239,7 +194,7 @@ export async function runRetryLoop<
 >(input: {
   entryPoint: EntryPoint<MODEL, ARGS, RESULT, COMMIT>;
   args: ARGS;
-  options: CallRetryLoopOptions<MODEL, INPUT, OVERRIDE, RESULT, COMMIT>;
+  options: CallRetryOptions<MODEL, INPUT, OVERRIDE, RESULT, COMMIT>;
 }): Promise<RESULT> {
   const { entryPoint, args, options } = input;
 
@@ -448,22 +403,27 @@ export async function runRetryLoop<
           outcome: 'success',
           finishReason,
         });
-        reportOutcome(entryPoint, options, result, {
-          current: {
-            type: 'success',
-            model: attemptModel,
-            result,
-            finishReason,
-          },
-          attempts: [...attempts],
+        reportSettled(options, {
+          outcome: 'success',
+          model: attemptModel,
+          attempts: [
+            ...attempts,
+            { type: 'success', model: attemptModel, result },
+          ] as Array<CallSettledAttempt<MODEL, RESULT, COMMIT>>,
+          result,
         });
         return result;
       }
 
       recorder?.endAttempt({ attempt: attemptNumber, outcome: 'success' });
-      reportOutcome(entryPoint, options, result, {
-        current: { type: 'success', model: attemptModel, result },
-        attempts: [...attempts],
+      reportSettled(options, {
+        outcome: 'success',
+        model: attemptModel,
+        attempts: [
+          ...attempts,
+          { type: 'success', model: attemptModel, result },
+        ] as Array<CallSettledAttempt<MODEL, RESULT, COMMIT>>,
+        result,
       });
       return result;
     }
@@ -473,10 +433,22 @@ export async function runRetryLoop<
      * retry matched, the caller's signal was already aborted, the caller
      * aborted during a backoff delay, or a caller-supplied handler threw.
      * Reporting once at the boundary is what makes it impossible to reject
-     * without telling `onFailure` and the operation span about it.
+     * without telling `onSettled` and the operation span about it.
+     *
+     * A rejection no attempt caused — one of your own callbacks throwing —
+     * leaves `attempts` empty, and there is no call outcome to report.
      */
     operationError = error;
-    emitFailure(options, attempts, error);
+    if (attempts.length > 0) {
+      reportSettled(options, {
+        outcome: 'failure',
+        model: currentModel,
+        attempts: [...attempts] as Array<
+          CallSettledAttempt<MODEL, RESULT, COMMIT>
+        >,
+        error,
+      });
+    }
     throw error;
   } finally {
     recorder?.endOperation({

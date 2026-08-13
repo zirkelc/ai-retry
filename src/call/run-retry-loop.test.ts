@@ -273,44 +273,114 @@ describe('hooks', () => {
     expect(seen[0]).toEqual({ prompt, temperature: 0.3 });
   });
 
-  it('should report the winning attempt and its result to onSuccess', async () => {
-    // Arrange
-    const primary = MockLanguageModel.from(retryableError);
-    const fallback = MockLanguageModel.from(mockResultText);
-    const onSuccess = vi.fn();
+  describe('onSettled', () => {
+    /**
+     * The four outcomes the hook exists to tell apart, since the question it
+     * answers is how often retrying rescues a call. `attempts.length` counts
+     * every attempt, terminal one included, so it reads the same on both
+     * paths: 1 means no retry happened, more means one did.
+     */
+    it('should report a success that took no retry', async () => {
+      // Arrange
+      const model = MockLanguageModel.from(mockResultText);
+      const onSettled = vi.fn();
 
-    // Act
-    await retryableGenerateText({
-      model: primary,
-      prompt,
-      retry: { retries: [fallback], onSuccess },
+      // Act
+      await retryableGenerateText({
+        model,
+        prompt,
+        retry: { retries: [], onSettled },
+      });
+
+      // Assert
+      const event = onSettled.mock.calls[0]![0];
+      expect(event.outcome).toBe('success');
+      expect(event.attempts.length).toBe(1);
+      expect(event.model).toBe(model);
+      expect(event.result.text).toBe(mockResultText);
     });
 
-    // Assert
-    const context = onSuccess.mock.calls[0]![0];
-    expect(context.current.model).toBe(fallback);
-    expect(context.current.result.text).toBe(mockResultText);
-    expect(context.current.finishReason).toBe('stop');
-    expect(context.attempts.length).toBe(1);
-  });
+    it('should report a success that a retry rescued', async () => {
+      // Arrange
+      const primary = MockLanguageModel.from(retryableError);
+      const fallback = MockLanguageModel.from(mockResultText);
+      const onSettled = vi.fn();
 
-  it('should report a terminal failure to onFailure', async () => {
-    // Arrange
-    const primary = MockLanguageModel.from(nonRetryableError);
-    const onFailure = vi.fn();
+      // Act
+      await retryableGenerateText({
+        model: primary,
+        prompt,
+        retry: { retries: [fallback], onSettled },
+      });
 
-    // Act
-    const result = retryableGenerateText({
-      model: primary,
-      prompt,
-      retry: { retries: [], onFailure },
+      // Assert
+      const event = onSettled.mock.calls[0]![0];
+      expect(event.outcome).toBe('success');
+      expect(event.attempts.length).toBe(2);
+      expect(event.model).toBe(fallback);
+      expect(event.attempts.at(-1).type).toBe('success');
+      expect(event.attempts[0].type).toBe('error');
     });
 
-    // Assert
-    await expect(result).rejects.toThrow();
-    const context = onFailure.mock.calls[0]![0];
-    expect(context.error).toBe(nonRetryableError);
-    expect(context.attempts.length).toBe(1);
+    it('should report a failure that took no retry', async () => {
+      // Arrange
+      const model = MockLanguageModel.from(nonRetryableError);
+      const onSettled = vi.fn();
+
+      // Act
+      const result = retryableGenerateText({
+        model,
+        prompt,
+        retry: { retries: [], onSettled },
+      });
+
+      // Assert
+      await expect(result).rejects.toThrow();
+      const event = onSettled.mock.calls[0]![0];
+      expect(event.outcome).toBe('failure');
+      expect(event.attempts.length).toBe(1);
+      expect(event.error).toBe(nonRetryableError);
+    });
+
+    it('should report a failure that a retry could not rescue', async () => {
+      // Arrange
+      const primary = MockLanguageModel.from(retryableError);
+      const fallback = MockLanguageModel.from(retryableError);
+      const onSettled = vi.fn();
+
+      // Act
+      const result = retryableGenerateText({
+        model: primary,
+        prompt,
+        retry: { retries: [fallback], onSettled },
+      });
+
+      // Assert
+      await expect(result).rejects.toThrow();
+      const event = onSettled.mock.calls[0]![0];
+      expect(event.outcome).toBe('failure');
+      expect(event.attempts.length).toBe(2);
+    });
+
+    it('should fire exactly once, whichever way the call goes', async () => {
+      // Arrange
+      const onSettled = vi.fn();
+
+      // Act
+      await retryableGenerateText({
+        model: MockLanguageModel.from(mockResultText),
+        prompt,
+        retry: { retries: [], onSettled },
+      });
+      await retryableGenerateText({
+        model: MockLanguageModel.from(nonRetryableError),
+        prompt,
+        retry: { retries: [], onSettled },
+      }).catch(() => {});
+
+      // Assert
+      expect(onSettled.mock.calls.length).toBe(2);
+    });
   });
 });
 
@@ -319,20 +389,20 @@ describe('disabled', () => {
     // Arrange
     const primary = MockLanguageModel.from(nonRetryableError);
     const fallback = MockLanguageModel.from(mockResultText);
-    const onFailure = vi.fn();
+    const onSettled = vi.fn();
 
     // Act
     const result = retryableGenerateText({
       model: primary,
       prompt,
       maxRetries: 0,
-      retry: { retries: [fallback], disabled: true, onFailure },
+      retry: { retries: [fallback], disabled: true, onSettled },
     });
 
     // Assert
     await expect(result).rejects.toThrow();
     expect(fallback.doGenerate.mock.calls.length).toBe(0);
-    expect(onFailure.mock.calls.length).toBe(0);
+    expect(onSettled.mock.calls.length).toBe(0);
   });
 });
 

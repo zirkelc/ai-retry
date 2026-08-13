@@ -1164,9 +1164,8 @@ const result = await retryableGenerateText({
     retries: [serviceOverloaded(fallbackModel)],
     onRetry: (context) =>
       console.log(`Retrying with ${context.current.model.modelId}`),
-    onSuccess: (context) =>
-      console.log(`Answered by ${context.current.model.modelId}`),
-    onFailure: (context) => console.error(context.error),
+    onSettled: (event) =>
+      console.log(`${event.outcome} after ${event.attempts.length} attempt(s)`),
     telemetry: { isEnabled: true },
   },
 });
@@ -1247,47 +1246,51 @@ For `retryableStreamText` the boundary is the **first content part**. Before it,
 
 Because a pre-commit stream has emitted no text and no tool calls _by definition_, result-based conditions on a stream are effectively finish-reason-shaped. The type says so: `StreamTextCommitResult` declares `finishReason`, `usage` and `providerMetadata` and nothing else, so `finishReason('content-filter')` on an otherwise empty response works and there is no content field to reach for in the first place.
 
-#### Reporting the outcome: `onSuccess`, or `onCommit` for a stream
+#### Reporting the outcome: `onSettled`
 
-Each entry point names its terminal hook for what the loop can actually observe there.
-
-**`onSuccess`** — `generateText`, `embed`, `embedMany`, `generateImage`. Fires once an attempt produced the result you receive, which for these is a completed call. `context.current.result` is that result, and `context.attempts` holds the attempts retried before it, empty when the first one won.
-
-**`onCommit`** — `retryableStreamText` only, and a weaker claim. The loop can report the moment an attempt stopped being recoverable, and for a stream that is the **first content part**: bytes have started, not that the stream ended well. A stream that commits and then fails in your hands still fires it, which is exactly why it is not called `onSuccess`.
+One terminal hook, on every entry point, called exactly once with what the whole call amounted to.
 
 ```typescript
-const result = await retryableStreamText({
+const result = await retryableGenerateText({
   model: primaryModel,
   prompt: 'Invent a new holiday.',
   retry: {
     retries: [fallbackModel],
-    onCommit: (context) =>
-      console.log(`committed to ${context.current.model.modelId}`),
+    onSettled: ({ outcome, attempts }) =>
+      metrics.increment(
+        `ai_retry.${outcome}.${attempts.length > 1 ? 'retried' : 'first_try'}`,
+      ),
   },
 });
 ```
 
-**`onSuccess`** — `retryableStreamText` has this too, reporting the other end of the same stream: consumed to the end, carrying no failure. Both fire for one call, in that order, and each gets a context matching what is known at the time. `onCommit` reports `current.type: 'commit'` and no finish reason, because nothing has finished; `onSuccess` reports `'success'`. By then the result's promises have settled, so `await result.finishReason` reads without waiting.
+That one line answers the question the library exists for — how often does retrying actually rescue a call — because `attempts` always holds **every** attempt, the terminal one included:
 
-```typescript
-retry: {
-  retries: [fallbackModel],
-  onCommit: (context) => metrics.committed(context.current.model.modelId),
-  onSuccess: (context) => metrics.completed(context.attempts.length),
-}
-```
+| | `outcome` | `attempts.length` |
+| ---------------------- | --------- | ----------------- |
+| succeeded, no retry    | `success` | 1                 |
+| succeeded after a retry | `success` | > 1              |
+| failed, no retry       | `failure` | 1                 |
+| failed after retrying  | `failure` | > 1               |
 
-Three cases keep it silent, all deliberate:
+The event also carries `model` (the one that settled it, or the one whose failure ended the loop), `result` on success and `error` on failure. Each entry in `attempts` says how it ended: `error`, `result` (judged, then retried) or `success`.
 
-| case                                                       | why                                                                                              |
-| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| the stream carried an `error` part, or a deadline aborted it | it did not end well                                                                              |
-| the attempt lost and the loop failed over                  | its own stream ran to completion, but you never saw it                                           |
-| the stream was never consumed                              | a stream only advances when read, so there is no ending to report, and nothing is buffered to force one |
+**For `retryableStreamText` it settles at the commit point** — the first content part — not at the end of the stream. That is where this library's job ends: a stream that commits and then dies was never something a retry could have rescued, so counting it as a failure would measure the library against work it never attempted. It also means a stream you never consume still settles. For end-to-end stream health, use `streamText`'s own `onFinish` and `onError` on the same call.
 
-It is not a rename of `streamText`'s own `onFinish`, which fires after `onError` too — on that callback alone, "ended" is not "ended well".
+It stays silent in two cases, both the absence of a call to report rather than an outcome: when retries are `disabled`, and when the rejection came from no attempt at all, such as one of your own callbacks throwing.
 
-`onFailure` fires when the attempts are exhausted without producing a result: no condition matched, every candidate was tried, your signal was already aborted, or you aborted during a backoff delay. Neither fires when retries are disabled, and `onFailure` reports _attempt_ failures — a rejection no attempt caused (one of your own callbacks throwing) still rejects the call, but there is no failed attempt to hand over.
+`onError` and `onRetry` are unchanged, and remain the per-attempt channel for *why* something retried.
+
+**It mirrors the operation span**, so a metric built on the hook and one built on [telemetry](#telemetry) agree by construction:
+
+| span attribute | `onSettled` |
+| ------------------------ | ------------------- |
+| `ai_retry.outcome`       | `outcome`           |
+| `ai_retry.attempts`      | `attempts.length`   |
+| `ai_retry.model.final`   | `model`             |
+| `ai_retry.error`         | `error`             |
+
+If you already export telemetry, you can answer the same question from spans alone and skip the hook entirely.
 
 #### Which one should I use?
 
@@ -1496,7 +1499,7 @@ interface ModelSuccessContext<MODEL> {
 
 Passed to the `onSuccess` callback. `attempts` holds the preceding attempts that were retried, in order, and is empty when the first attempt succeeded. The successful attempt itself is `current` and is not repeated in `attempts`.
 
-The call-level functions have their own [`CallSuccessContext`](#reporting-the-outcome-onsuccess-or-oncommit-for-a-stream) instead, which carries the entry point's own result.
+The call-level functions have their own [`CallSettledEvent`](#reporting-the-outcome-onsettled) instead, which carries the entry point's own result.
 
 ### License
 

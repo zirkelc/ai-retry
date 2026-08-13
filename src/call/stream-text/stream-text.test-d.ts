@@ -2,7 +2,6 @@ import { streamText, tool } from 'ai';
 import { describe, expectTypeOf, it } from 'vitest';
 import { z } from 'zod';
 import { MockLanguageModel } from '../../internal/test-utils.js';
-import type { CallFinishReason } from '../types.js';
 import { retryableStreamText } from './stream-text.js';
 
 const model = MockLanguageModel.from();
@@ -84,27 +83,27 @@ describe('retryableStreamText', () => {
         disabled: false,
         onError: () => {},
         onRetry: () => {},
-        onFailure: () => {},
+        onSettled: () => {},
       },
     });
   });
 
-  it('should type onSuccess with the entry point result', async () => {
+  it('should type onSettled with the entry point result', async () => {
     // Act
     const direct = streamText({ model, prompt: 'hi', tools: { weather } });
 
     // Assert — the hook sees the same result the caller does, and for a stream
-    // that means the *unsettled* one: `onCommit` fires at the commit point,
-    // so every field is still the promise a direct call hands back.
+    // that means the *unsettled* one: it settles at the commit point, so every
+    // field is still the promise a direct call hands back.
     await retryableStreamText({
       model,
       prompt: 'hi',
       tools: { weather },
       retry: {
         retries: [],
-        onCommit: (context) => {
-          expectTypeOf(context.current.result.toolResults).toEqualTypeOf<
-            typeof direct.toolResults
+        onSettled: (event) => {
+          expectTypeOf(event.result?.toolResults).toEqualTypeOf<
+            typeof direct.toolResults | undefined
           >();
         },
       },
@@ -131,24 +130,16 @@ describe('retryableStreamText', () => {
     });
   });
 
-  it('should offer both ends of the stream, told apart by their contexts', () => {
-    // Assert — `onCommit` when the attempt becomes the caller's, `onSuccess`
-    // when it ends well. The contexts differ because the knowledge does.
+  it('should report the outcome and every attempt through onSettled', () => {
+    // Assert — one terminal hook, the same shape as every other entry point.
     retryableStreamText({
       model,
       prompt: 'hi',
       retry: {
         retries: [],
-        onCommit: (context) => {
-          expectTypeOf(context.current.type).toEqualTypeOf<'commit'>();
-          // @ts-expect-error nothing has finished yet, so there is no reason
-          context.current.finishReason;
-        },
-        onSuccess: (context) => {
-          expectTypeOf(context.current.type).toEqualTypeOf<'success'>();
-          expectTypeOf(context.current.finishReason).toEqualTypeOf<
-            CallFinishReason | undefined
-          >();
+        onSettled: (event) => {
+          expectTypeOf(event.outcome).toEqualTypeOf<'success' | 'failure'>();
+          expectTypeOf(event.attempts.length).toEqualTypeOf<number>();
         },
       },
     });

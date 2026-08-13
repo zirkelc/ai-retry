@@ -77,14 +77,14 @@ export type { GenerateImageCommitResult } from './call/generate-image/types.js';
  * against the other.
  */
 export type {
-  CallSuccessAttempt,
-  CallSuccessContext,
+  CallSettledAttempt,
+  CallSettledEvent,
+  CallSuccessfulAttempt,
   CallRetryArg,
   CallRetryOptions,
 } from './call/retry-arg.js';
 export type {
   CallArgs,
-  CallFailureContext,
   CallFinishReason,
   CallLanguageModelUsage,
   CallRetries,

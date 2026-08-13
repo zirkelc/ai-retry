@@ -83,7 +83,7 @@ describe('retryableEmbed', () => {
         disabled: false,
         onError: () => {},
         onRetry: () => {},
-        onFailure: () => {},
+        onSettled: () => {},
       },
     });
   });
@@ -138,7 +138,7 @@ describe('retryableEmbed', () => {
     });
   });
 
-  it('should type onSuccess with the entry point result', async () => {
+  it('should type onSettled with the entry point result', async () => {
     // Act
     const direct = await embed({ model: embeddingModel, value: 'hi' });
 
@@ -148,10 +148,11 @@ describe('retryableEmbed', () => {
       value: 'hi',
       retry: {
         retries: [],
-        onSuccess: (context) => {
-          expectTypeOf(context.current.result.embedding).toEqualTypeOf<
-            typeof direct.embedding
+        onSettled: (event) => {
+          expectTypeOf(event.result?.embedding).toEqualTypeOf<
+            typeof direct.embedding | undefined
           >();
+          expectTypeOf(event.outcome).toEqualTypeOf<'success' | 'failure'>();
         },
       },
     });

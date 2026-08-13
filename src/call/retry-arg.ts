@@ -3,91 +3,82 @@ import type {
   OnRetryOverrides,
   RetryTelemetrySettings,
   RetryTimeout,
-  TotalTimeout,
 } from '../types.js';
 import type {
-  CallFailureContext,
-  CallFinishReason,
   CallRetries,
   CallRetryAttempt,
   CallRetryContext,
 } from './types.js';
 
 /**
- * The attempt that produced the returned result.
+ * The attempt that ended the retry loop.
  *
- * For a streaming entry point this is the attempt that *committed* — its first
- * content part reached the stream — not one that finished well. Past that
- * point the stream belongs to the caller, and an error while consuming it
- * fires nothing here; use the SDK's own `onFinish` for that.
+ * A third way for an attempt to end, alongside the two a retryable sees: it
+ * errored, it produced a result that was judged and retried, or — this — it
+ * settled the operation.
+ *
+ * For a streaming entry point that means the attempt *committed*: its first
+ * content part reached the stream. Whether the stream then ends well is past
+ * this library's reach, and past anything it could have retried, so it is not
+ * reported here. Use `streamText`'s own `onFinish` for that.
  */
-export type CallSuccessAttempt<MODEL extends AnyModel, RESULT> = {
+export type CallSuccessfulAttempt<MODEL extends AnyModel, RESULT> = {
   type: 'success';
-  /** The model that produced the result. */
+  /** The model that settled the operation. */
   model: MODEL;
   /** The entry point's own result, exactly as the caller receives it. */
   result: RESULT;
-  /**
-   * The unified finish reason, when it was known before the result was
-   * handed over. Absent for a committed stream, whose finish reason is only
-   * decided during consumption.
-   */
-  finishReason?: CallFinishReason;
 };
 
+/** An attempt, however it ended. */
+export type CallSettledAttempt<MODEL extends AnyModel, RESULT, COMMIT> =
+  | CallRetryAttempt<MODEL, COMMIT>
+  | CallSuccessfulAttempt<MODEL, RESULT>;
+
 /**
- * The attempt whose result the caller now owns, where owning it is all that
- * can be said.
+ * What one call amounted to, reported once, whether it succeeded or not.
  *
- * Distinct from {@link CallSuccessAttempt} because the difference is real: at
- * the commit point a stream has emitted one content part and nothing more is
- * known about it. There is no finish reason to report — the generation has not
- * finished — and calling this `success` would be the same overclaim the
- * `onCommit` name exists to avoid.
+ * The only terminal hook, deliberately: separate success and failure callbacks
+ * make the common question — how often does retrying actually rescue a call —
+ * a matter of correlating two handlers, and of knowing which of them counts
+ * the attempt that ended things. This carries both facts in one place.
+ *
+ * `attempts` always holds every attempt, the terminal one included, so its
+ * length is the attempt count rather than a retry count that means something
+ * different on each path:
+ *
+ * ```ts
+ * onSettled: ({ outcome, attempts }) =>
+ *   metrics.increment(
+ *     `ai_retry.${outcome}.${attempts.length > 1 ? 'retried' : 'first_try'}`,
+ *   );
+ * ```
+ *
+ * Mirrors the operation span field for field — `ai_retry.outcome`,
+ * `ai_retry.attempts`, `ai_retry.model.final` — so a metric built on this and
+ * one built on telemetry agree by construction.
  */
-export type CallCommitAttempt<MODEL extends AnyModel, RESULT> = {
-  type: 'commit';
-  /** The model whose attempt the caller now owns. */
+export type CallSettledEvent<
+  MODEL extends AnyModel,
+  RESULT,
+  COMMIT = RESULT,
+> = {
+  /** Whether the call produced a result or threw. */
+  outcome: 'success' | 'failure';
+  /** The model that settled it, or the one whose failure ended the loop. */
   model: MODEL;
-  /** The entry point's own result, exactly as the caller receives it. */
-  result: RESULT;
-};
-
-/**
- * The context passed to `onCommit`, with the attempt that committed and the
- * attempts retried before it.
- */
-export type CallCommitContext<
-  MODEL extends AnyModel,
-  RESULT,
-  COMMIT = RESULT,
-> = {
-  /** The attempt that committed. */
-  current: CallCommitAttempt<MODEL, RESULT>;
   /**
-   * The preceding attempts that were retried, in order. Empty when the first
-   * attempt committed.
+   * Every attempt, in order, ending with the one that settled the operation.
+   * Never empty: a call always makes at least one attempt.
    */
-  attempts: Array<CallRetryAttempt<MODEL, COMMIT>>;
-};
-
-/**
- * The context passed to `onSuccess`, with the attempt that produced the result
- * and the attempts retried before it.
- */
-export type CallSuccessContext<
-  MODEL extends AnyModel,
-  RESULT,
-  COMMIT = RESULT,
-> = {
-  /** The attempt that produced the result. */
-  current: CallSuccessAttempt<MODEL, RESULT>;
+  attempts: Array<CallSettledAttempt<MODEL, RESULT, COMMIT>>;
+  /** The result, on success. */
+  result?: RESULT;
   /**
-   * The preceding attempts that were retried, in order. Empty when the first
-   * attempt succeeded. The successful attempt is `current` and is not repeated
-   * here.
+   * What the call rejects with, on failure: a `RetryError` wrapping every
+   * attempt's error when more than one was made, otherwise the original.
    */
-  attempts: Array<CallRetryAttempt<MODEL, COMMIT>>;
+  error?: unknown;
 };
 
 /**
@@ -103,15 +94,16 @@ export type CallSuccessContext<
  *   rather than against `INPUT`, so its return value neither competes with the
  *   `retries` array to define `INPUT` nor has to repeat every field some
  *   listed retry happens to set.
- * - `RESULT` is what the entry point returns, which `onSuccess` receives.
+ * - `RESULT` is what the entry point returns, which `onSettled` reports.
  * - `COMMIT` is what a result condition judges. It is the result for most entry
  *   points, and defaults to it; see `CallRetryContext` for when it is not.
  */
-export type CallRetryOptionsBase<
+export type CallRetryOptions<
   MODEL extends AnyModel,
   INPUT,
   OVERRIDE,
-  COMMIT,
+  RESULT,
+  COMMIT = RESULT,
   TIMEOUT extends RetryTimeout = number,
 > = {
   /** Retry handlers and fallback models, evaluated on each failed attempt. */
@@ -154,50 +146,8 @@ export type CallRetryOptionsBase<
    * attempt caused — a callback of your own throwing, for instance. Also
    * silent when retries are disabled.
    */
-  onFailure?: (context: CallFailureContext<MODEL, COMMIT>) => void;
-};
-
-/**
- * Retry configuration for an entry point whose result is complete by the time
- * the caller receives it, which reports its outcome through `onSuccess`.
- *
- * `streamText` is the exception and declares its own, because what it hands
- * over is a stream that has barely started: see its `onCommit`.
- */
-export type CallRetryOptions<
-  MODEL extends AnyModel,
-  INPUT,
-  OVERRIDE,
-  RESULT,
-  COMMIT = RESULT,
-  TIMEOUT extends RetryTimeout = number,
-> = CallRetryOptionsBase<MODEL, INPUT, OVERRIDE, COMMIT, TIMEOUT> & {
-  /** Called once an attempt produces the result the caller receives. */
-  onSuccess?: (context: CallSuccessContext<MODEL, RESULT, COMMIT>) => void;
-};
-
-/**
- * What the retry loop reads: whichever terminal hook the entry point declares.
- *
- * The loop reports one thing — an attempt produced the result the caller
- * receives — and each entry point names it for what that means there. Four call
- * it `onSuccess`, because their result is complete when it arrives.
- * `streamText` calls it `onCommit`, because its result is a stream that has
- * barely started and may still fail in the consumer's hands.
- *
- * Both are optional here and exactly one is ever exposed, by the entry point's
- * own public signature.
- */
-export type CallRetryLoopOptions<
-  MODEL extends AnyModel,
-  INPUT,
-  OVERRIDE,
-  RESULT,
-  COMMIT = RESULT,
-  TIMEOUT extends RetryTimeout = number,
-> = CallRetryOptionsBase<MODEL, INPUT, OVERRIDE, COMMIT, TIMEOUT> & {
-  onSuccess?: (context: CallSuccessContext<MODEL, RESULT, COMMIT>) => void;
-  onCommit?: (context: CallCommitContext<MODEL, RESULT, COMMIT>) => void;
+  /** Called once, with what the whole call amounted to. */
+  onSettled?: (event: CallSettledEvent<MODEL, RESULT, COMMIT>) => void;
 };
 
 /**
@@ -236,7 +186,7 @@ export function toCallRetryOptions<
   retry:
     | CallRetryArg<MODEL, INPUT, OVERRIDE, RESULT, COMMIT, TIMEOUT>
     | undefined,
-): CallRetryLoopOptions<MODEL, INPUT, OVERRIDE, RESULT, COMMIT, TIMEOUT> {
+): CallRetryOptions<MODEL, INPUT, OVERRIDE, RESULT, COMMIT, TIMEOUT> {
   if (retry === undefined) return { retries: [] };
   return Array.isArray(retry) ? { retries: retry } : retry;
 }

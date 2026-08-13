@@ -67,12 +67,12 @@ describe('retryableGenerateImage', () => {
         disabled: false,
         onError: () => {},
         onRetry: () => {},
-        onFailure: () => {},
+        onSettled: () => {},
       },
     });
   });
 
-  it('should type onSuccess with the entry point result', async () => {
+  it('should type onSettled with the entry point result', async () => {
     // Act
     const direct = await generateImage({ model: imageModel, prompt: 'a cat' });
 
@@ -82,10 +82,11 @@ describe('retryableGenerateImage', () => {
       prompt: 'a cat',
       retry: {
         retries: [],
-        onSuccess: (context) => {
-          expectTypeOf(context.current.result.images).toEqualTypeOf<
-            typeof direct.images
+        onSettled: (event) => {
+          expectTypeOf(event.result?.images).toEqualTypeOf<
+            typeof direct.images | undefined
           >();
+          expectTypeOf(event.outcome).toEqualTypeOf<'success' | 'failure'>();
         },
       },
     });

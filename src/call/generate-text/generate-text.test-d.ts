@@ -132,12 +132,12 @@ describe('retryableGenerateText', () => {
         disabled: false,
         onError: () => {},
         onRetry: () => {},
-        onFailure: () => {},
+        onSettled: () => {},
       },
     });
   });
 
-  it('should type onSuccess with the entry point result', async () => {
+  it('should type onSettled with the entry point result', async () => {
     // Act
     const direct = await generateText({
       model,
@@ -152,10 +152,11 @@ describe('retryableGenerateText', () => {
       tools: { weather },
       retry: {
         retries: [],
-        onSuccess: (context) => {
-          expectTypeOf(context.current.result.toolResults).toEqualTypeOf<
-            typeof direct.toolResults
+        onSettled: (event) => {
+          expectTypeOf(event.result?.toolResults).toEqualTypeOf<
+            typeof direct.toolResults | undefined
           >();
+          expectTypeOf(event.outcome).toEqualTypeOf<'success' | 'failure'>();
         },
       },
     });

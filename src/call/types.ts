@@ -192,22 +192,3 @@ export type CallRetries<
   | Retry<ResolvableModel<MODEL>, INPUT, TIMEOUT>
   | ResolvableModel<MODEL>
 >;
-
-/**
- * The context passed to `onFailure` when a call terminally fails: no retry
- * matched, every candidate was tried, or the caller cancelled.
- */
-export type CallFailureContext<
-  MODEL extends AnyResolvableModel,
-  COMMIT = unknown,
-> = {
-  /** The final attempt that failed. */
-  current: CallRetryErrorAttempt<ResolvedModel<MODEL>>;
-  /** Every attempt made, including the final failed one. */
-  attempts: Array<CallRetryAttempt<ResolvedModel<MODEL>, COMMIT>>;
-  /**
-   * The error surfaced to the caller. A `RetryError` wrapping every attempt
-   * error when more than one attempt was made, otherwise the raw error.
-   */
-  error: unknown;
-};
