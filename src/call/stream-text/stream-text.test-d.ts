@@ -1,4 +1,4 @@
-import { streamText, tool } from 'ai';
+import { Output, streamText, tool } from 'ai';
 import { describe, expectTypeOf, it } from 'vitest';
 import { z } from 'zod';
 import { MockLanguageModel } from '../../internal/test-utils.js';
@@ -163,6 +163,27 @@ describe('retryableStreamText', () => {
           },
         });
       },
+    });
+  });
+
+  it('should carry a structured output through, as a direct call does', () => {
+    // Arrange — same as `generateText`: forwarding only TOOLS would pin the
+    // other two parameters to their defaults and reject `Output.object`.
+    const schema = z.object({ a: z.string() });
+
+    // Assert
+    void (async () => {
+      const direct = streamText({
+        model,
+        prompt: 'hi',
+        output: Output.object({ schema }),
+      });
+      const wrapped = await retryableStreamText({
+        model,
+        prompt: 'hi',
+        output: Output.object({ schema }),
+      });
+      expectTypeOf(wrapped.output).toEqualTypeOf<typeof direct.output>();
     });
   });
 });

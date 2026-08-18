@@ -1,4 +1,4 @@
-import { generateText, tool } from 'ai';
+import { generateText, Output, tool } from 'ai';
 import { describe, expectTypeOf, it } from 'vitest';
 import { z } from 'zod';
 import {
@@ -214,6 +214,48 @@ describe('retryableGenerateText', () => {
           },
         });
       },
+    });
+  });
+
+  it('should carry a structured output through, as a direct call does', () => {
+    // Arrange — the SDK declares three type parameters, so forwarding only
+    // TOOLS pins RUNTIME_CONTEXT and OUTPUT to their defaults. `Output.object`
+    // then fails to assign, and a structured-output call cannot be wrapped at
+    // all.
+    const schema = z.object({ a: z.string() });
+
+    // Assert
+    void (async () => {
+      const direct = await generateText({
+        model,
+        prompt: 'hi',
+        output: Output.object({ schema }),
+      });
+      const wrapped = await retryableGenerateText({
+        model,
+        prompt: 'hi',
+        output: Output.object({ schema }),
+      });
+      expectTypeOf(wrapped.output).toEqualTypeOf<typeof direct.output>();
+      expectTypeOf(wrapped.output).toEqualTypeOf<{ a: string }>();
+    });
+  });
+
+  it('should carry a runtime context through, as a direct call does', () => {
+    // Assert — the third parameter, exercised the same way.
+    void (async () => {
+      const runtimeContext = { tenant: 'acme' } as const;
+      const direct = await generateText({
+        model,
+        prompt: 'hi',
+        runtimeContext,
+      });
+      const wrapped = await retryableGenerateText({
+        model,
+        prompt: 'hi',
+        runtimeContext,
+      });
+      expectTypeOf(wrapped.steps).toEqualTypeOf<typeof direct.steps>();
     });
   });
 });

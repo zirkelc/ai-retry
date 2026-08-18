@@ -1,4 +1,5 @@
-import { generateText, type ToolSet } from 'ai';
+import { generateText, type Output, type ToolSet } from 'ai';
+import type { Context } from '@ai-sdk/provider-utils';
 import { resolveLanguageModel } from '../../internal/resolve-model.js';
 import type { LanguageModel, StepTimeout } from '../../types.js';
 import type { GenerateTextInput } from '../inputs.js';
@@ -25,19 +26,21 @@ import { defineRetryableCall, viaTimeoutArg } from '../retryable-calls.js';
  */
 export type RetryableGenerateText = <
   TOOLS extends ToolSet,
+  RUNTIME_CONTEXT extends Context = Context,
+  OUTPUT extends Output.Output = Output.Output<string, string>,
   INPUT extends GenerateTextInput = GenerateTextInput,
 >(
-  args: Parameters<typeof generateText<TOOLS>>[0] & {
+  args: Parameters<typeof generateText<TOOLS, RUNTIME_CONTEXT, OUTPUT>>[0] & {
     retry?: CallRetryArg<
       LanguageModel,
       INPUT,
       GenerateTextInput,
-      Awaited<ReturnType<typeof generateText<TOOLS>>>,
-      Awaited<ReturnType<typeof generateText<TOOLS>>>,
+      Awaited<ReturnType<typeof generateText<TOOLS, RUNTIME_CONTEXT, OUTPUT>>>,
+      Awaited<ReturnType<typeof generateText<TOOLS, RUNTIME_CONTEXT, OUTPUT>>>,
       StepTimeout
     >;
   },
-) => ReturnType<typeof generateText<TOOLS>>;
+) => ReturnType<typeof generateText<TOOLS, RUNTIME_CONTEXT, OUTPUT>>;
 
 export const retryableGenerateText = defineRetryableCall<
   LanguageModel,

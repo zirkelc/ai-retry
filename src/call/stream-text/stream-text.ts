@@ -1,4 +1,5 @@
-import { streamText, type ToolSet } from 'ai';
+import { streamText, type Output, type ToolSet } from 'ai';
+import type { Context } from '@ai-sdk/provider-utils';
 import { detectStreamCommit } from './detect-stream-commit.js';
 import type { CallRetryArg } from '../retry-arg.js';
 import { resolveLanguageModel } from '../../internal/resolve-model.js';
@@ -99,19 +100,21 @@ const heldByResult = new WeakMap<object, HeldCallbacks>();
  */
 export type RetryableStreamText = <
   TOOLS extends ToolSet,
+  RUNTIME_CONTEXT extends Context = Context,
+  OUTPUT extends Output.Output = Output.Output<string, string>,
   INPUT extends StreamTextInput = StreamTextInput,
 >(
-  args: Parameters<typeof streamText<TOOLS>>[0] & {
+  args: Parameters<typeof streamText<TOOLS, RUNTIME_CONTEXT, OUTPUT>>[0] & {
     retry?: CallRetryArg<
       LanguageModel,
       INPUT,
       StreamTextInput,
-      ReturnType<typeof streamText<TOOLS>>,
+      ReturnType<typeof streamText<TOOLS, RUNTIME_CONTEXT, OUTPUT>>,
       StreamTextCommitResult,
       StreamTimeout
     >;
   },
-) => Promise<ReturnType<typeof streamText<TOOLS>>>;
+) => Promise<ReturnType<typeof streamText<TOOLS, RUNTIME_CONTEXT, OUTPUT>>>;
 
 export const retryableStreamText = defineRetryableCall<
   LanguageModel,
