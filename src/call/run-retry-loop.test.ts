@@ -434,6 +434,46 @@ describe('telemetry', () => {
     expect(attempts[1]!.attributes['ai_retry.attempt.outcome']).toBe('success');
   });
 
+  it('should make the attempt the active span, so callees nest under it', async () => {
+    // Arrange — the entry point and the provider open their own spans from
+    // whatever context is active when they run. Unless the attempt is active
+    // by then they attach to whatever surrounded the retryable call, and the
+    // model's work is rendered beside the retry tree rather than inside it.
+    // This mock opens a span exactly as the SDK does.
+    const { exporter, tracer } = createSpanExporter();
+    const { context } = await import('@opentelemetry/api');
+    const parentIdOf = (span: unknown): string | undefined =>
+      (
+        span as {
+          parentSpanContext?: { spanId: string };
+          parentSpanId?: string;
+        }
+      ).parentSpanContext?.spanId ??
+      (span as { parentSpanId?: string }).parentSpanId;
+
+    const opensASpan = MockLanguageModel.from(mockResultText);
+    const issued = opensASpan.doGenerate;
+    opensASpan.doGenerate = vi.fn(async (options: never) => {
+      tracer.startSpan('callee', undefined, context.active()).end();
+      return issued(options);
+    }) as typeof opensASpan.doGenerate;
+
+    // Act
+    await retryableGenerateText({
+      model: MockLanguageModel.from(retryableError),
+      prompt,
+      retry: {
+        retries: [opensASpan],
+        telemetry: { isEnabled: true, tracer },
+      },
+    });
+
+    // Assert
+    const callee = findSpan(exporter, 'callee');
+    const attempts = attemptSpans(exporter);
+    expect(parentIdOf(callee)).toBe(attempts.at(-1)!.spanContext().spanId);
+  });
+
   /**
    * The span name and the standard `gen_ai.operation.name` are the one piece of
    * telemetry each entry point supplies itself, so the claim is made for all

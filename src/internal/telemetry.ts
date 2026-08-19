@@ -73,6 +73,11 @@ export interface RetryTelemetry {
   startAttempt(input: AttemptStart): void;
   endAttempt(input: AttemptEnd): void;
   endOperation(input: OperationEnd): void;
+  /**
+   * Runs `fn` with the attempt as the ambient span, so anything it calls opens
+   * its own spans inside that attempt rather than beside the whole retry tree.
+   */
+  withAttempt<T>(attempt: number, fn: () => T): T;
 }
 
 /**
@@ -85,6 +90,8 @@ interface TelemetrySink {
   attemptStart(input: AttemptStart): void;
   attemptEnd(input: AttemptEnd): void;
   operationEnd(input: OperationEnd): void;
+  /** Runs `fn` with this attempt as the ambient span, where that means anything. */
+  withAttempt<T>(attempt: number, fn: () => T): T;
 }
 
 /**
@@ -107,6 +114,17 @@ class CompositeRetryTelemetry implements RetryTelemetry {
 
   endOperation(input: OperationEnd): void {
     for (const sink of this.#sinks) sink.operationEnd(input);
+  }
+
+  /**
+   * Nested rather than iterated: each sink wraps the next, so `fn` runs inside
+   * every sink's notion of the attempt at once.
+   */
+  withAttempt<T>(attempt: number, fn: () => T): T {
+    return this.#sinks.reduceRight<() => T>(
+      (next, sink) => () => sink.withAttempt(attempt, next),
+      fn,
+    )();
   }
 }
 
@@ -222,6 +240,24 @@ class OpenTelemetrySink implements TelemetrySink {
       this.#operationContext,
     );
     this.#attemptSpans.set(attempt, span);
+  }
+
+  /**
+   * Makes the attempt the *active* span for the duration of `fn`.
+   *
+   * Parenting the attempt under the operation shapes this library's own spans,
+   * and nothing more. Everything the attempt goes on to call — the SDK entry
+   * point, the provider, whatever they instrument — opens its spans from the
+   * ambient context, so without this they attach to whatever surrounded the
+   * retryable call and the model's work is rendered as a sibling of the retry
+   * tree rather than inside the attempt that issued it.
+   */
+  withAttempt<T>(attempt: number, fn: () => T): T {
+    const span = this.#attemptSpans.get(attempt);
+    if (!span) return fn();
+
+    const { context, trace } = this.#api;
+    return context.with(trace.setSpan(context.active(), span), fn);
   }
 
   attemptEnd({

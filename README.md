@@ -824,6 +824,8 @@ ai_retry.doGenerate            outcome=success, attempts=2
 
 Attempt spans also carry the standard `gen_ai.request.model` / `gen_ai.provider.name` attributes so observability tools (Langfuse, etc.) recognize and render them.
 
+The attempt span is also the **active** span while its call runs, so the AI SDK's own spans, and the provider's beneath them, nest inside the attempt that issued them rather than appearing beside the retry tree. This needs a context manager registered in your OpenTelemetry setup, which `provider.register()` does; without one the spans are still parented correctly relative to each other, but anything the attempt calls attaches to whatever surrounded your call.
+
 > [!NOTE]
 > **Streaming:** retries only happen before the first content chunk (see [Streaming](#streaming)), so a `ai_retry.doStream` attempt is marked `success` once content begins flowing; mid-stream retries appear as additional attempt spans.
 

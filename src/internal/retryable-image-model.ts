@@ -116,7 +116,15 @@ export class RetryableImageModel
         /**
          * Call the function that may need to be retried
          */
-        const result = await input.fn(retryCallOptions);
+        /**
+         * Issued with the attempt as the ambient span, so the provider's own
+         * spans nest inside it rather than beside the retry tree.
+         */
+        const result = await (input.recorder
+          ? input.recorder.withAttempt(attemptNumber, () =>
+              input.fn(retryCallOptions),
+            )
+          : input.fn(retryCallOptions));
 
         input.recorder?.endAttempt({
           attempt: attemptNumber,

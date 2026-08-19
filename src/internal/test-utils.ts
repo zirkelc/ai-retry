@@ -5,6 +5,8 @@ import {
   type ReadableSpan,
   SimpleSpanProcessor,
 } from '@opentelemetry/sdk-trace-base';
+import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks';
+import { context } from '@opentelemetry/api';
 import {
   APICallError,
   embed,
@@ -341,7 +343,14 @@ export const errorStreamChunks = (
 export const partsToText = (parts: Array<LanguageModelStreamPart>): string =>
   parts.map((p) => (p.type === 'text-delta' ? p.delta : '')).join('');
 
-/** Create an in-memory OpenTelemetry exporter and a tracer wired to it. */
+/**
+ * Create an in-memory OpenTelemetry exporter and a tracer wired to it.
+ *
+ * A context manager is registered globally, as any real setup does through
+ * `provider.register()`. Without one `context.with()` is inert and
+ * `context.active()` always returns the root, so anything asserting that a
+ * span is *active* — rather than merely parented — would pass regardless.
+ */
 export const createSpanExporter = (): {
   exporter: InMemorySpanExporter;
   tracer: Tracer;
@@ -350,6 +359,9 @@ export const createSpanExporter = (): {
   const provider = new BasicTracerProvider({
     spanProcessors: [new SimpleSpanProcessor(exporter)],
   });
+  context.setGlobalContextManager(
+    new AsyncLocalStorageContextManager().enable(),
+  );
   return { exporter, tracer: provider.getTracer('test') };
 };
 

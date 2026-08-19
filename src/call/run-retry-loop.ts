@@ -302,7 +302,16 @@ export async function runRetryLoop<
       let result: RESULT;
       let settled: Settled<COMMIT>;
       try {
-        result = await entryPoint.call(attemptArgs);
+        /**
+         * Issued with the attempt as the ambient span, so the entry point's own
+         * spans — and the provider's below them — nest inside the attempt that
+         * issued them rather than beside the retry tree.
+         */
+        result = await (recorder
+          ? recorder.withAttempt(attemptNumber, () =>
+              entryPoint.call(attemptArgs),
+            )
+          : entryPoint.call(attemptArgs));
         lastResult = result;
         settled = (await entryPoint.settle?.(result, callerSignal)) ?? {
           type: 'committed',

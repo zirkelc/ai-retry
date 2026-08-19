@@ -130,9 +130,15 @@ export class RetryableLanguageModel
 
       try {
         /**
-         * Call the function that may need to be retried
+         * Call the function that may need to be retried, with the attempt as
+         * the ambient span so the provider's own spans nest inside it rather
+         * than beside the retry tree.
          */
-        const result = await input.fn(retryCallOptions);
+        const result = await (input.recorder
+          ? input.recorder.withAttempt(attemptNumber, () =>
+              input.fn(retryCallOptions),
+            )
+          : input.fn(retryCallOptions));
 
         /**
          * Check if the result should trigger a retry (only for generate results, not streams)
