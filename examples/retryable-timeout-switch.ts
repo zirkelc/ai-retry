@@ -20,9 +20,9 @@
  * Run:
  *   pnpm build && pnpm tsx examples/retryable-timeout-switch.ts
  */
-import { retryableGenerateText } from 'ai-retry/generate-text';
+import { experimental_retryableGenerateText as retryableGenerateText } from 'ai-retry/generate-text';
 import { timeout } from 'ai-retry/generate-text/conditions';
-import { retryableStreamText } from 'ai-retry/stream-text';
+import { experimental_retryableStreamText as retryableStreamText } from 'ai-retry/stream-text';
 import { Language, MockLanguageModel } from 'ai-test-kit/language';
 import type { LanguageModelV4CallOptions } from '@ai-sdk/provider';
 

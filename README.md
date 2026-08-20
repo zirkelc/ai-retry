@@ -903,7 +903,7 @@ A `streamText` deadline is still useful as a hard ceiling on the call. Recoverin
 
 `createRetryableModel` retries _below_ `generateText` / `streamText`, which makes it blind to a call-level timeout (`timeout.totalMs`, `stepMs`, `firstChunkMs`) or an inbound `abortSignal`: those live _on_ the call, and once one fires the SDK tears the call down. The call-level functions close that gap by re-running the **whole call** with the next model.
 
-Each takes the arguments its SDK entry point takes, plus a `retry` field. The model stays a normal argument and is swapped per attempt. The signature differs from the SDK's in two places, both covered under [Deadlines](#deadlines): `experimental_retryableStreamText` returns a promise where `streamText` does not, and the embedding and image functions take a `timeout` the SDK does not give them.
+Each takes the arguments its SDK entry point takes, plus a `retry` field. The model stays a normal argument and is swapped per attempt. The signature differs from the SDK's in two places, both covered under [Deadlines](#deadlines): `retryableStreamText` returns a promise where `streamText` does not, and the embedding and image functions take a `timeout` the SDK does not give them.
 
 | function                               | wraps           | import from               | model family |
 | -------------------------------------- | --------------- | ------------------------- | ------------ |
@@ -915,9 +915,9 @@ Each takes the arguments its SDK entry point takes, plus a `retry` field. The mo
 
 Everything else works as at the model layer: the same `Retry` fields (`maxAttempts`, `delay`, `backoffFactor`, `timeout`, `options`), the same `RetryError` when every attempt fails, and conditions with the same names imported from `ai-retry/<function>/conditions`. Only `result()` behaves differently, as described under [Conditions](#conditions-1).
 
-#### `experimental_retryableGenerateText`
+#### `retryableGenerateText`
 
-Everything is recoverable right up to the moment the call resolves, errors and results alike.
+Everything is recoverable until the call resolves, errors and results alike.
 
 ```typescript
 import { anthropic } from '@ai-sdk/anthropic';
@@ -941,9 +941,9 @@ const result = await retryableGenerateText({
 console.log(result.text);
 ```
 
-#### `experimental_retryableStreamText`
+#### `retryableStreamText`
 
-The reason this layer exists: a `timeout` on a `streamText` call cannot be recovered from below it (see [Timeouts](#timeouts)), so the retry has to sit here.
+A `timeout` on a `streamText` call cannot be recovered below the model: when it fires, `streamText` closes its stream as aborted, so everything a fallback model produces afterwards is discarded (see [Timeouts](#timeouts)). A retry here re-runs `streamText` itself, so the fallback gets a new, open stream.
 
 ```typescript
 import { openai } from '@ai-sdk/openai';
@@ -962,9 +962,9 @@ const result = await retryableStreamText({
 for await (const chunk of result.textStream) process.stdout.write(chunk);
 ```
 
-#### `experimental_retryableEmbed`
+#### `retryableEmbed`
 
-`embed` has no `timeout` argument, so this library lends it one and turns it into a fresh `AbortSignal` per attempt (see [Deadlines](#deadlines)).
+`embed` has no `timeout` argument, so this library adds one and turns it into a fresh `AbortSignal` per attempt (see [Deadlines](#deadlines)).
 
 ```typescript
 import { openai } from '@ai-sdk/openai';
@@ -987,9 +987,9 @@ const result = await retryableEmbed({
 console.log(result.embedding.length);
 ```
 
-#### `experimental_retryableEmbedMany`
+#### `retryableEmbedMany`
 
-Same shape, for the batch entry point. A retry re-runs the whole call, so the fallback re-embeds every value rather than resuming a partial batch.
+A retry re-runs the whole call, so the fallback re-embeds every value rather than resuming a partial batch.
 
 ```typescript
 import { openai } from '@ai-sdk/openai';
@@ -1008,9 +1008,7 @@ const embeddings = await retryableEmbedMany({
 });
 ```
 
-#### `experimental_retryableGenerateImage`
-
-Image models fail in ways that are not errors at all: the call succeeds and returns nothing usable.
+#### `retryableGenerateImage`
 
 ```typescript
 import { openai } from '@ai-sdk/openai';
@@ -1044,7 +1042,7 @@ const { images } = await retryableGenerateImage({
 flowchart TB
   you(["your code"])
 
-  subgraph outer["experimental_retryableStreamText: a retry replaces this entire box"]
+  subgraph outer["retryableStreamText: a retry replaces this entire box"]
     subgraph call["one streamText() call"]
       direction TB
       sig["abort signal, owned by the call<br>totalMs · stepMs · firstChunkMs · chunkMs · your abortSignal"]
@@ -1061,10 +1059,10 @@ flowchart TB
   gate -- "textStream / fullStream" --> you
 ```
 
-The nesting is the whole rule:
+The nesting decides what a retry can recover:
 
 - **`createRetryableModel` swaps the model**, the innermost box. The signal and the gate survive the swap, so the fallback runs and produces chunks, and the gate drops every one of them: the signal it checks latched the moment the deadline fired.
-- **`experimental_retryableStreamText` swaps the call**, signal and gate included, so the fallback gets fresh ones and its output reaches you.
+- **`retryableStreamText` swaps the call**, signal and gate included, so the fallback gets fresh ones and its output reaches you.
 
 `generateText` has the same layering minus the gate, which is why a retryable model recovers `generateText` deadlines but not `streamText` ones (see [Timeouts](#timeouts)).
 
@@ -1162,13 +1160,13 @@ const result = await retryableGenerateText({
 });
 ```
 
-Grouping everything under one key keeps exactly one name in collision range should the SDK add arguments of its own.
+Everything sits under one key, so the SDK can add arguments of its own without colliding with this library's.
 
 **`maxRetries` defaults to `0`.** Left at the SDK's own default, the entry point would re-issue the failing model several times before the loop ever saw the error, multiplying every deadline. Set `maxRetries` explicitly if you want the SDK's in-call retries as well.
 
 #### Deadlines
 
-`Retry.timeout` gives each attempt a fresh deadline, which is the point: attempt 1's clock is already spent by the time it fails.
+`Retry.timeout` gives each attempt a fresh deadline; the first attempt's clock is already spent by the time it fails.
 
 A number is a total budget in milliseconds. An object is the SDK's own timeout configuration, and is **merged** into whatever the call already carried, key by key, so narrowing one window leaves the others standing:
 
@@ -1184,7 +1182,7 @@ const result = await retryableStreamText({
 });
 ```
 
-**What you may write depends on where the retryable ends up**, because a deadline is only worth stating if something can measure it:
+**Which `timeout` shape a retry accepts depends on the entry point it is used with**, because each entry point can only measure some of the windows:
 
 | Retry lands in                            | `timeout` accepts                              |
 | ----------------------------------------- | ---------------------------------------------- |
@@ -1209,7 +1207,7 @@ retry: [
 ],
 ```
 
-Overrides are checked against the entry point they are handed to: `options: { values }` belongs to `embedMany` and is rejected by `experimental_retryableEmbed`. A retryable that sets no options at all stays usable everywhere.
+Overrides are checked against the entry point they are handed to: `options: { values }` belongs to `embedMany` and is rejected by `retryableEmbed`. A retryable that sets no options at all stays usable everywhere.
 
 Per-field precedence, highest first: the `onRetry` return value → `Retry.options` → the call's own arguments.
 
@@ -1217,13 +1215,13 @@ Per-field precedence, highest first: the `onRetry` return value → `Retry.optio
 
 For `generateText`, `embed`, `embedMany` and `generateImage`, an attempt is recoverable until it resolves; errors and result-based conditions both apply.
 
-For `streamText` the boundary is the **first content part**. Before it, an error, a deadline, or even a finish with no content at all can fail over. Once a content part reaches the stream the attempt is committed and belongs to you; an error during consumption propagates to the stream rather than triggering a fallback. That ceiling is inherent to streaming, and the same one the model wrappers have.
+For `streamText` the boundary is the **first content part**. Before it, an error, a deadline, or even a finish with no content at all can fail over. Once a content part reaches the stream the attempt is committed; an error during consumption propagates to the stream rather than triggering a fallback. The model wrappers have the same limit.
 
 A pre-commit stream has emitted no text and no tool calls by definition, so result-based conditions on a stream are effectively finish-reason-shaped: `StreamTextCommitResult` declares `finishReason`, `usage` and `providerMetadata` and nothing else.
 
 #### Reporting the outcome: `onSettled`
 
-One terminal hook, on every entry point, called exactly once with what the whole call amounted to.
+One terminal hook, on every entry point, called exactly once per call with its final outcome.
 
 ```typescript
 const result = await retryableGenerateText({
@@ -1239,7 +1237,7 @@ const result = await retryableGenerateText({
 });
 ```
 
-`attempts` always holds **every** attempt, the terminal one included, so one line distinguishes the four outcomes that measure how often retrying rescues a call:
+`attempts` always holds **every** attempt, the terminal one included, so `outcome` and `attempts.length` distinguish the four cases:
 
 | | `outcome` | `attempts.length` |
 | ---------------------- | --------- | ----------------- |
@@ -1250,7 +1248,7 @@ const result = await retryableGenerateText({
 
 The event also carries `model` (the one that settled it, or the one whose failure ended the loop), `result` on success and `error` on failure. Each entry in `attempts` says how it ended: `error`, `result` (judged, then retried) or `success`.
 
-**For `streamText` it settles at the commit point**, the first content part, not at the end of the stream. A stream that commits and then dies was never something a retry could have rescued, so counting it as a failure would measure the library against work it never attempted. It also means a stream you never consume still settles. For end-to-end stream health, use `streamText`'s own `onFinish` and `onError` on the same call.
+**For `streamText` it settles at the commit point**, the first content part, not at the end of the stream. A stream that commits and then dies is beyond the reach of a retry, so it counts as a success here. It also means a stream you never consume still settles. For end-to-end stream health, use `streamText`'s own `onFinish` and `onError` on the same call.
 
 It stays silent in two cases, both the absence of a call to report rather than an outcome: when retries are `disabled`, and when the rejection came from no attempt at all, such as one of your own callbacks throwing.
 
@@ -1265,9 +1263,9 @@ It stays silent in two cases, both the absence of a call to report rather than a
 
 #### Your own stream callbacks belong to one attempt
 
-`experimental_retryableStreamText` issues every attempt with the arguments you passed, callbacks included, so `onFinish`, `onAbort`, `onStepFinish`, `onChunk` and `onError` are held back until the loop knows whether that attempt is the one you get. **An attempt the loop discards is silent**, and the attempt you receive reports exactly once, always after `onSettled`. Without this, a recovered fail-over would run your `onFinish` for a stream you never saw, or your `onAbort` for a deadline that was recovered from, and you could not filter them out yourself: at the moment one fires the loop has not yet decided whether a retry follows.
+`retryableStreamText` issues every attempt with the arguments you passed, callbacks included, so `onFinish`, `onAbort`, `onStepFinish`, `onChunk` and `onError` are held back until the loop knows whether that attempt is the one you get. **An attempt the loop discards is silent**, and the attempt you receive reports exactly once, always after `onSettled`. Without this, a recovered fail-over would run your `onFinish` for a stream you never saw, or your `onAbort` for a deadline that was recovered from, and you could not filter them out yourself: at the moment one fires, the loop has not yet decided whether a retry follows.
 
-A failure nobody recovered is still yours, so a terminal attempt's callbacks do fire. **Errors that a retry recovered from reach the retry's own `onError`, not the call's:**
+The terminal attempt's callbacks do fire, whether it succeeded or failed. **Errors that a retry recovered from reach the retry's own `onError`, not the call's:**
 
 ```typescript
 await retryableStreamText({

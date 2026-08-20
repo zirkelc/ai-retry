@@ -6,12 +6,7 @@ import { experimental_retryableEmbedMany } from './call/embed-many/index.js';
 import { experimental_retryableGenerateImage } from './call/generate-image/index.js';
 import { experimental_retryableGenerateText } from './call/generate-text/index.js';
 import { experimental_retryableStreamText } from './call/stream-text/index.js';
-import {
-  createRetryable,
-  experimental_retryableGenerateText as rootGenerateText,
-  isErrorAttempt,
-  isResultAttempt,
-} from './index.js';
+import { createRetryable, isErrorAttempt, isResultAttempt } from './index.js';
 import { createRetryableModel } from './internal/create-retryable-model.js';
 import {
   Embedding,
@@ -61,11 +56,6 @@ describe('the per-entry-point barrels', () => {
 });
 
 describe('the root entry point', () => {
-  it('should still re-export the call-level functions, deprecated', () => {
-    // Assert — the same function object, not a second copy of it.
-    expect(rootGenerateText).toBe(experimental_retryableGenerateText);
-  });
-
   it('should export the attempt guards', () => {
     // Assert
     expect(typeof isErrorAttempt).toBe('function');
