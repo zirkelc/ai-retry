@@ -5,7 +5,19 @@ import {
   type ReadableSpan,
   SimpleSpanProcessor,
 } from '@opentelemetry/sdk-trace-base';
-import { APICallError, type TextStreamPart } from 'ai';
+import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks';
+import { context } from '@opentelemetry/api';
+import {
+  APICallError,
+  embed,
+  embedMany,
+  generateImage,
+  generateText,
+  NoImageGeneratedError,
+  type TextStreamPart,
+} from 'ai';
+import { z } from 'zod';
+import { Condition } from './conditions/condition.js';
 import { Errors, Streams } from 'ai-test-kit';
 import { Embedding, MockEmbeddingModel } from 'ai-test-kit/embedding';
 import { Image, MockImageModel } from 'ai-test-kit/image';
@@ -21,10 +33,22 @@ import type {
   LanguageModelGenerate,
   LanguageModelResult,
   LanguageModelStreamPart,
-  RetryContext,
-  RetryErrorAttempt,
-  RetryResultAttempt,
+  ModelRetryContext,
+  ModelRetryErrorAttempt,
+  ModelRetryResultAttempt,
 } from '../types.js';
+import type {
+  CallArgs,
+  CallFinishReason,
+  CallRetryContext,
+  CallRetryErrorAttempt,
+  CallRetryResultAttempt,
+} from '../call/types.js';
+import type { EmbedCommitResult } from '../call/embed/types.js';
+import type { EmbedManyCommitResult } from '../call/embed-many/types.js';
+import type { GenerateImageCommitResult } from '../call/generate-image/types.js';
+import type { GenerateTextCommitResult } from '../call/generate-text/types.js';
+import type { StreamTextCommitResult } from '../call/stream-text/types.js';
 
 /**
  * Re-exported for test convenience: the auto-detecting factory builds a
@@ -74,15 +98,15 @@ export const errorFromChunks = (
 };
 
 /**
- * Build a synthetic `RetryContext` carrying an error attempt for a language
+ * Build a synthetic `ModelRetryContext` carrying an error attempt for a language
  * model. Used by unit tests that exercise condition predicates without
  * spinning up `generateText`.
  */
 export const buildErrorContext = (
   error: unknown,
   model: MockLanguageModel = MockLanguageModel.from(),
-): RetryContext<MockLanguageModel> => {
-  const attempt: RetryErrorAttempt<MockLanguageModel> = {
+): ModelRetryContext<MockLanguageModel> => {
+  const attempt: ModelRetryErrorAttempt<MockLanguageModel> = {
     type: 'error',
     error,
     model,
@@ -92,16 +116,17 @@ export const buildErrorContext = (
 };
 
 /**
- * Build a synthetic `RetryContext` carrying a result attempt for a language
+ * Build a synthetic `ModelRetryContext` carrying a result attempt for a language
  * model.
  */
 export const buildResultContext = (
   result: LanguageModelGenerate = Language.result([]),
   model: MockLanguageModel = MockLanguageModel.from(),
-): RetryContext<MockLanguageModel> => {
-  const attempt: RetryResultAttempt = {
+): ModelRetryContext<MockLanguageModel> => {
+  const attempt: ModelRetryResultAttempt = {
     type: 'result',
     result,
+    finishReason: result.finishReason.unified,
     model,
     options: {} as LanguageModelCallOptions,
   };
@@ -109,14 +134,14 @@ export const buildResultContext = (
 };
 
 /**
- * Build a synthetic `RetryContext` carrying an error attempt for an image
+ * Build a synthetic `ModelRetryContext` carrying an error attempt for an image
  * model.
  */
 export const buildImageErrorContext = (
   error: unknown,
   model: MockImageModel = MockImageModel.from(),
-): RetryContext<MockImageModel> => {
-  const attempt: RetryErrorAttempt<MockImageModel> = {
+): ModelRetryContext<MockImageModel> => {
+  const attempt: ModelRetryErrorAttempt<MockImageModel> = {
     type: 'error',
     error,
     model,
@@ -224,6 +249,31 @@ export const contentFilterResult: LanguageModelResult = Language.result([], {
   finishReason: 'content-filter',
 });
 
+/**
+ * Conditions that always match and never match, for exercising the combinators
+ * without involving a real predicate.
+ */
+export const truthy = new Condition<MockLanguageModel>(() => true);
+export const falsy = new Condition<MockLanguageModel>(() => false);
+
+/** The error the SDK raises when a generation produced no images. */
+export const noImageError = new NoImageGeneratedError({
+  message: 'No image generated',
+});
+
+/**
+ * A schema and the payloads that satisfy or defeat it, shared by every test
+ * that exercises schema validation — the condition, the model wrapper and the
+ * deprecated retryable all need the same three cases.
+ */
+export const personSchema = z.object({
+  name: z.string(),
+  age: z.number(),
+});
+export const validJson = JSON.stringify({ name: 'Alice', age: 30 });
+export const invalidJson = JSON.stringify({ name: 123 });
+export const notJson = 'this is not json';
+
 /** Stream parts for a full successful stream, including response metadata. */
 export const mockStreamChunks: Array<LanguageModelStreamPart> = [
   Language.streamStart(),
@@ -268,6 +318,10 @@ export const mockEmbeddings: EmbeddingModelEmbed = Embedding.result(
 /** A successful image generation result. */
 export const mockImageResult: ImageModelGenerate = Image.result([Image.png()]);
 
+/** A successful image generation result carrying `count` images. */
+export const mockImageResults = (count: number): ImageModelGenerate =>
+  Image.result(Array.from({ length: count }, () => Image.png()));
+
 /** Stream parts for a successful stream: content then a `stop` finish. */
 export const successStreamChunks = (
   text: string,
@@ -289,7 +343,14 @@ export const errorStreamChunks = (
 export const partsToText = (parts: Array<LanguageModelStreamPart>): string =>
   parts.map((p) => (p.type === 'text-delta' ? p.delta : '')).join('');
 
-/** Create an in-memory OpenTelemetry exporter and a tracer wired to it. */
+/**
+ * Create an in-memory OpenTelemetry exporter and a tracer wired to it.
+ *
+ * A context manager is registered globally, as any real setup does through
+ * `provider.register()`. Without one `context.with()` is inert and
+ * `context.active()` always returns the root, so anything asserting that a
+ * span is *active* — rather than merely parented — would pass regardless.
+ */
 export const createSpanExporter = (): {
   exporter: InMemorySpanExporter;
   tracer: Tracer;
@@ -298,6 +359,9 @@ export const createSpanExporter = (): {
   const provider = new BasicTracerProvider({
     spanProcessors: [new SimpleSpanProcessor(exporter)],
   });
+  context.setGlobalContextManager(
+    new AsyncLocalStorageContextManager().enable(),
+  );
   return { exporter, tracer: provider.getTracer('test') };
 };
 
@@ -323,3 +387,149 @@ export const attemptSpans = (
         Number(a.attributes['ai_retry.attempt.number']) -
         Number(b.attributes['ai_retry.attempt.number']),
     );
+
+/* ------------------------------------------------------------------ *
+ * Call-layer fixtures
+ * ------------------------------------------------------------------ */
+
+/**
+ * Build a real `generateText` result, exactly as a caller receives it.
+ *
+ * Run through the SDK rather than assembled from a literal, and that is the
+ * point: the SDK exposes most of a result through prototype getters, so a
+ * hand-built stand-in behaves differently under spreading and property access
+ * than the object a condition is actually handed.
+ */
+export const callGenerateTextResult = async (
+  text: string = mockResultText,
+  options?: Parameters<typeof generateText>[0],
+): Promise<GenerateTextCommitResult> =>
+  generateText({
+    model: MockLanguageModel.from(text),
+    prompt: 'Hello!',
+    ...options,
+  } as Parameters<typeof generateText>[0]);
+
+/** A real `embed` result. */
+export const callEmbedResult = async (
+  vector: Array<number> = [0.1, 0.2, 0.3],
+): Promise<EmbedCommitResult> =>
+  embed({
+    model: MockEmbeddingModel.from([vector]),
+    value: 'Hello!',
+  });
+
+/** A real `embedMany` result. */
+export const callEmbedManyResult = async (
+  vectors: Array<Array<number>> = [[0.1, 0.2, 0.3]],
+): Promise<EmbedManyCommitResult> =>
+  embedMany({
+    model: MockEmbeddingModel.from(vectors),
+    values: vectors.map((_, i) => `value ${i}`),
+  });
+
+/** A real `generateImage` result. */
+export const callImageResult = async (
+  count = 1,
+): Promise<GenerateImageCommitResult> =>
+  generateImage({
+    model: MockImageModel.from(
+      Image.result(Array.from({ length: count }, () => Image.png())),
+    ),
+    prompt: 'a cat',
+  });
+
+/** A `streamText` result as a contentless stream reports it. */
+export const callStreamTextResult = (
+  finishReason: CallFinishReason = 'stop',
+): StreamTextCommitResult => ({
+  finishReason,
+  usage: {
+    inputTokens: 10,
+    outputTokens: 0,
+    totalTokens: 10,
+    inputTokenDetails: {
+      noCacheTokens: 10,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+    },
+    outputTokenDetails: { textTokens: 0, reasoningTokens: 0 },
+  },
+  providerMetadata: undefined,
+});
+
+/**
+ * Build a synthetic `CallRetryContext` carrying an error attempt for a
+ * language model. The call-layer counterpart of {@link buildErrorContext}.
+ */
+export const buildCallErrorContext = <COMMIT>(
+  error: unknown,
+  model: MockLanguageModel = MockLanguageModel.from(),
+): CallRetryContext<MockLanguageModel, COMMIT> => {
+  const attempt: CallRetryErrorAttempt<MockLanguageModel> = {
+    type: 'error',
+    error,
+    model,
+    options: {} as CallArgs<MockLanguageModel>,
+  };
+  return { current: attempt, attempts: [attempt] };
+};
+
+/**
+ * Build a synthetic `CallRetryContext` carrying a result attempt for a
+ * language model. The call-layer counterpart of {@link buildResultContext}.
+ */
+export const buildCallResultContext = <COMMIT>(
+  result: COMMIT,
+  model: MockLanguageModel = MockLanguageModel.from(),
+): CallRetryContext<MockLanguageModel, COMMIT> => {
+  const attempt: CallRetryResultAttempt<MockLanguageModel, COMMIT> = {
+    type: 'result',
+    result,
+    model,
+    options: {} as CallArgs<MockLanguageModel>,
+  };
+  return { current: attempt, attempts: [attempt] };
+};
+
+/** As {@link buildCallResultContext}, for an embedding model. */
+export const buildCallEmbeddingResultContext = <COMMIT>(
+  result: COMMIT,
+  model: MockEmbeddingModel = MockEmbeddingModel.from(),
+): CallRetryContext<MockEmbeddingModel, COMMIT> => {
+  const attempt: CallRetryResultAttempt<MockEmbeddingModel, COMMIT> = {
+    type: 'result',
+    result,
+    model,
+    options: {} as CallArgs<MockEmbeddingModel>,
+  };
+  return { current: attempt, attempts: [attempt] };
+};
+
+/** As {@link buildCallResultContext}, for an image model. */
+export const buildCallImageResultContext = <COMMIT>(
+  result: COMMIT,
+  model: MockImageModel = MockImageModel.from(),
+): CallRetryContext<MockImageModel, COMMIT> => {
+  const attempt: CallRetryResultAttempt<MockImageModel, COMMIT> = {
+    type: 'result',
+    result,
+    model,
+    options: {} as CallArgs<MockImageModel>,
+  };
+  return { current: attempt, attempts: [attempt] };
+};
+
+/** As {@link buildCallErrorContext}, for an image model. */
+export const buildCallImageErrorContext = <COMMIT>(
+  error: unknown,
+  model: MockImageModel = MockImageModel.from(),
+): CallRetryContext<MockImageModel, COMMIT> => {
+  const attempt: CallRetryErrorAttempt<MockImageModel> = {
+    type: 'error',
+    error,
+    model,
+    options: {} as CallArgs<MockImageModel>,
+  };
+  return { current: attempt, attempts: [attempt] };
+};

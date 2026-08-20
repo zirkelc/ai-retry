@@ -13,7 +13,7 @@ import {
   error,
   finishReason,
   timeout,
-} from '../../language-model/conditions/index.js';
+} from '../../model/language-model/conditions/index.js';
 import {
   contentFilterError,
   contentFilterStreamChunks,

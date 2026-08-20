@@ -5,6 +5,7 @@ import { resolveImageModel } from './resolve-model.js';
 import { mergeImageModelCallOptions } from './merge-retry-call-options.js';
 import { resolveBackoffDelay } from './resolve-backoff-delay.js';
 import { retryDiesOnAbortedSignal } from './retry-dies-on-aborted-signal.js';
+import { totalTimeoutMs } from './retry-timeout.js';
 import { createRetryTelemetry, type RetryTelemetry } from './telemetry.js';
 import type {
   ImageModel,
@@ -12,8 +13,8 @@ import type {
   ImageModelGenerate,
   OnRetryOverrides,
   Retry,
-  RetryContext,
-  RetryErrorAttempt,
+  ModelRetryContext,
+  ModelRetryErrorAttempt,
 } from '../types.js';
 export class RetryableImageModel
   extends BaseRetryableModel<ImageModel>
@@ -39,17 +40,18 @@ export class RetryableImageModel
   private async withRetry<RESULT extends ImageModelGenerate>(input: {
     fn: (retryCallOptions: ImageModelCallOptions) => Promise<RESULT>;
     callOptions: ImageModelCallOptions;
-    attempts?: Array<RetryErrorAttempt<ImageModel>>;
+    attempts?: Array<ModelRetryErrorAttempt<ImageModel>>;
     recorder?: RetryTelemetry;
   }): Promise<{
     result: RESULT;
-    attempts: Array<RetryErrorAttempt<ImageModel>>;
+    attempts: Array<ModelRetryErrorAttempt<ImageModel>>;
     callOptions: ImageModelCallOptions;
   }> {
     /**
      * Track all attempts.
      */
-    const attempts: Array<RetryErrorAttempt<ImageModel>> = input.attempts ?? [];
+    const attempts: Array<ModelRetryErrorAttempt<ImageModel>> =
+      input.attempts ?? [];
 
     /**
      * Track current retry configuration.
@@ -70,7 +72,7 @@ export class RetryableImageModel
       // a retry actually fires (today it is purely observational).
       let onRetryOverrides: OnRetryOverrides<ImageModel> | undefined;
       if (previousAttempt) {
-        const currentAttempt: RetryErrorAttempt<ImageModel> = {
+        const currentAttempt: ModelRetryErrorAttempt<ImageModel> = {
           ...previousAttempt,
           model: this.currentModel,
         };
@@ -80,7 +82,7 @@ export class RetryableImageModel
          */
         const updatedAttempts = [...attempts];
 
-        const context: RetryContext<ImageModel> = {
+        const context: ModelRetryContext<ImageModel> = {
           current: currentAttempt,
           attempts: updatedAttempts,
         };
@@ -107,14 +109,22 @@ export class RetryableImageModel
         attempt: attemptNumber,
         provider: attemptModel.provider,
         modelId: attemptModel.modelId,
-        timeoutMs: currentRetry?.timeout,
+        timeoutMs: totalTimeoutMs(currentRetry?.timeout),
       });
 
       try {
         /**
          * Call the function that may need to be retried
          */
-        const result = await input.fn(retryCallOptions);
+        /**
+         * Issued with the attempt as the ambient span, so the provider's own
+         * spans nest inside it rather than beside the retry tree.
+         */
+        const result = await (input.recorder
+          ? input.recorder.withAttempt(attemptNumber, () =>
+              input.fn(retryCallOptions),
+            )
+          : input.fn(retryCallOptions));
 
         input.recorder?.endAttempt({
           attempt: attemptNumber,
@@ -186,7 +196,7 @@ export class RetryableImageModel
    */
   private async handleError(
     error: unknown,
-    attempts: ReadonlyArray<RetryErrorAttempt<ImageModel>>,
+    attempts: ReadonlyArray<ModelRetryErrorAttempt<ImageModel>>,
     callOptions: ImageModelCallOptions,
   ) {
     return evaluateError({
@@ -205,7 +215,7 @@ export class RetryableImageModel
    * final attempt (last entry of `attempts`) is surfaced as `current`.
    */
   private emitFailure(
-    attempts: Array<RetryErrorAttempt<ImageModel>>,
+    attempts: Array<ModelRetryErrorAttempt<ImageModel>>,
     error: unknown,
   ) {
     if (!this.options.onFailure) return;
@@ -241,7 +251,7 @@ export class RetryableImageModel
      * Shared attempts array, threaded into `withRetry` so it stays populated
      * (including the final failed attempt) when the retry loop throws.
      */
-    const attempts: Array<RetryErrorAttempt<ImageModel>> = [];
+    const attempts: Array<ModelRetryErrorAttempt<ImageModel>> = [];
     let operationError: unknown;
     try {
       const { result, callOptions: finalCallOptions } = await this.withRetry({

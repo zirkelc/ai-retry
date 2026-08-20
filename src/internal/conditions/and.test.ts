@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { buildErrorContext, MockLanguageModel } from '../test-utils.js';
+import {
+  buildErrorContext,
+  falsy,
+  MockLanguageModel,
+  truthy,
+} from '../test-utils.js';
 import { and } from './and.js';
 import { Condition } from './condition.js';
 
 const ctx = buildErrorContext(new Error('boom'));
-
-const truthy = new Condition<MockLanguageModel>(() => true);
-const falsy = new Condition<MockLanguageModel>(() => false);
 
 describe('and', () => {
   it(`should return true when all conditions match`, async () => {

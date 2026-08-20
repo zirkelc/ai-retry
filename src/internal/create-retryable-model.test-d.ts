@@ -9,7 +9,7 @@ import type {
   LanguageModelCallOptions,
   LanguageModelGenerate,
   LanguageModelStream,
-  SuccessContext,
+  ModelSuccessContext,
 } from '../types.js';
 
 describe('createRetryableModel', () => {
@@ -47,8 +47,8 @@ describe('createRetryableModel', () => {
     expectTypeOf(retryable).toEqualTypeOf<LanguageModel>();
   });
 
-  it('should type SuccessContext correctly for language models', () => {
-    type Ctx = SuccessContext<LanguageModel>;
+  it('should type ModelSuccessContext correctly for language models', () => {
+    type Ctx = ModelSuccessContext<LanguageModel>;
 
     expectTypeOf<Ctx['current']['model']>().toEqualTypeOf<LanguageModel>();
     expectTypeOf<Ctx['current']['result']>().toEqualTypeOf<
@@ -60,8 +60,8 @@ describe('createRetryableModel', () => {
     expectTypeOf<Ctx['current']['type']>().toEqualTypeOf<'success'>();
   });
 
-  it('should type SuccessContext correctly for embedding models', () => {
-    type Ctx = SuccessContext<EmbeddingModel>;
+  it('should type ModelSuccessContext correctly for embedding models', () => {
+    type Ctx = ModelSuccessContext<EmbeddingModel>;
 
     expectTypeOf<Ctx['current']['model']>().toEqualTypeOf<EmbeddingModel>();
     expectTypeOf<

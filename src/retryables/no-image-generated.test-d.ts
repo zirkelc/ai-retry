@@ -3,7 +3,7 @@ import {
   createRetryableModel,
   MockImageModel,
 } from '../internal/test-utils.js';
-import type { Retryable } from '../types.js';
+import type { ModelRetryable } from '../types.js';
 import { noImageGenerated } from './no-image-generated.js';
 
 describe('noImageGenerated', () => {
@@ -16,7 +16,7 @@ describe('noImageGenerated', () => {
       retries: [retryable],
     });
 
-    expectTypeOf(retryable).toEqualTypeOf<Retryable<MockImageModel>>();
+    expectTypeOf(retryable).toEqualTypeOf<ModelRetryable<MockImageModel>>();
   });
 
   it('should accept image model with options', () => {
@@ -28,6 +28,6 @@ describe('noImageGenerated', () => {
       retries: [retryable],
     });
 
-    expectTypeOf(retryable).toEqualTypeOf<Retryable<MockImageModel>>();
+    expectTypeOf(retryable).toEqualTypeOf<ModelRetryable<MockImageModel>>();
   });
 });

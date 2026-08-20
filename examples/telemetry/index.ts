@@ -30,7 +30,7 @@ import { MockLanguageModelV4 } from 'ai/test';
 import {
   createRetryableModel,
   httpStatus,
-} from '../../src/language-model/index.js';
+} from '../../src/model/language-model/index.js';
 
 const usage = {
   inputTokens: { total: 8, noCache: 8, cacheRead: 0, cacheWrite: 0 },

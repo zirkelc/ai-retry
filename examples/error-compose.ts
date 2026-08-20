@@ -6,7 +6,7 @@ import {
   error,
   httpStatus,
   or,
-} from '../src/language-model/index.js';
+} from '../src/model/language-model/index.js';
 
 const baseModel = openai('gpt-5');
 const fallbackModel = anthropic('claude-opus-4-5');

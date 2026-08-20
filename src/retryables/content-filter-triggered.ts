@@ -1,7 +1,7 @@
 import { APICallError } from 'ai';
 import type {
   ResolvableLanguageModel,
-  Retryable,
+  ModelRetryable,
   RetryableOptions,
 } from '../types.js';
 import {
@@ -23,7 +23,7 @@ import {
 export function contentFilterTriggered<MODEL extends ResolvableLanguageModel>(
   model: MODEL,
   options?: RetryableOptions<MODEL>,
-): Retryable<MODEL> {
+): ModelRetryable<MODEL> {
   return (context) => {
     const { current } = context;
 

@@ -1,5 +1,6 @@
 import { gateway } from 'ai';
 import type {
+  AnyModel,
   AnyResolvableModel,
   EmbeddingModel,
   ImageModel,
@@ -13,9 +14,7 @@ import { isModel } from './guards.js';
  * model family. A bare string is ambiguous across families, so the
  * caller (which knows its family) supplies the matching resolver.
  */
-export type GatewayResolver = (
-  id: string,
-) => LanguageModel | EmbeddingModel | ImageModel;
+export type GatewayResolver = (id: string) => AnyModel;
 
 export const resolveLanguageModel = (id: string): LanguageModel =>
   gateway.languageModel(id);

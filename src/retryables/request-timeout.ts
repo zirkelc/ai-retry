@@ -1,6 +1,6 @@
 import type {
   AnyResolvableModel,
-  Retryable,
+  ModelRetryable,
   RetryableOptions,
 } from '../types.js';
 import { isErrorAttempt, isTimeoutError } from '../internal/guards.js';
@@ -19,7 +19,7 @@ import { isErrorAttempt, isTimeoutError } from '../internal/guards.js';
 export function requestTimeout<MODEL extends AnyResolvableModel>(
   model: MODEL,
   options?: RetryableOptions<MODEL>,
-): Retryable<MODEL> {
+): ModelRetryable<MODEL> {
   return (context) => {
     const { current } = context;
 

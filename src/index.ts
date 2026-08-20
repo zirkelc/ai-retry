@@ -5,6 +5,33 @@ export * from './types.js';
 export { isErrorAttempt, isResultAttempt } from './internal/guards.js';
 
 /**
+ * The call-level retry context and the shape of the `retry` argument. A
+ * different type from the model-level `ModelRetryContext` on purpose: the two
+ * layers see different results and different call arguments, and keeping them
+ * distinct is what stops a condition written for one from silently typechecking
+ * against the other.
+ *
+ * These are the layer's shared types, so they live here; the functions
+ * themselves and their per-entry-point types are published only at
+ * `ai-retry/<function>`.
+ */
+export type {
+  CallSettledAttempt,
+  CallSettledEvent,
+  CallSuccessfulAttempt,
+  CallRetryArg,
+  CallRetryOptions,
+} from './call/retry-arg.js';
+export type {
+  CallRetries,
+  CallRetryable,
+  CallRetryAttempt,
+  CallRetryContext,
+  CallRetryErrorAttempt,
+  CallRetryResultAttempt,
+} from './call/types.js';
+
+/**
  * Create a retryable model, auto-detecting the model family (language,
  * embedding, or image) from the base model at runtime.
  *

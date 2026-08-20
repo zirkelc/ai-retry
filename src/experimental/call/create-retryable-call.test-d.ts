@@ -8,7 +8,7 @@ import type {
   EmbeddingModel,
   ImageModel,
   LanguageModel,
-  RetryCallOptions,
+  ModelRetryCallOptions,
 } from '../../types.js';
 import {
   createRetryableCall,
@@ -54,7 +54,7 @@ describe('createRetryableCall types', () => {
         // Assert — only what the driver itself knows about the attempt.
         expectTypeOf(context.current.model).toEqualTypeOf<LanguageModel>();
         expectTypeOf(context.current.options).toEqualTypeOf<
-          RetryCallOptions<LanguageModel>
+          ModelRetryCallOptions<LanguageModel>
         >();
         expectTypeOf(context.current).not.toHaveProperty('result');
       },

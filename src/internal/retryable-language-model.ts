@@ -7,6 +7,7 @@ import { mergeLanguageModelCallOptions } from './merge-retry-call-options.js';
 import { createRetryTelemetry, type RetryTelemetry } from './telemetry.js';
 import { resolveBackoffDelay } from './resolve-backoff-delay.js';
 import { retryDiesOnAbortedSignal } from './retry-dies-on-aborted-signal.js';
+import { totalTimeoutMs } from './retry-timeout.js';
 import type {
   LanguageModel,
   LanguageModelCallOptions,
@@ -15,9 +16,9 @@ import type {
   LanguageModelStreamPart,
   OnRetryOverrides,
   Retry,
-  RetryAttempt,
-  RetryContext,
-  RetryResultAttempt,
+  ModelRetryAttempt,
+  ModelRetryContext,
+  ModelRetryResultAttempt,
 } from '../types.js';
 import {
   isErrorAttempt,
@@ -51,12 +52,12 @@ export class RetryableLanguageModel
   >(input: {
     fn: (retryCallOptions: LanguageModelCallOptions) => Promise<RESULT>;
     callOptions: LanguageModelCallOptions;
-    attempts?: Array<RetryAttempt<LanguageModel>>;
+    attempts?: Array<ModelRetryAttempt<LanguageModel>>;
     currentRetry?: Retry<LanguageModel>;
     recorder?: RetryTelemetry;
   }): Promise<{
     result: RESULT;
-    attempts: Array<RetryAttempt<LanguageModel>>;
+    attempts: Array<ModelRetryAttempt<LanguageModel>>;
     callOptions: LanguageModelCallOptions;
     /**
      * For stream results: the still-open attempt span number, to be closed by
@@ -67,7 +68,8 @@ export class RetryableLanguageModel
     /**
      * Track all attempts.
      */
-    const attempts: Array<RetryAttempt<LanguageModel>> = input.attempts ?? [];
+    const attempts: Array<ModelRetryAttempt<LanguageModel>> =
+      input.attempts ?? [];
 
     /**
      * Track current retry configuration.
@@ -86,7 +88,7 @@ export class RetryableLanguageModel
        */
       let onRetryOverrides: OnRetryOverrides<LanguageModel> | undefined;
       if (previousAttempt) {
-        const currentAttempt: RetryAttempt<LanguageModel> = {
+        const currentAttempt: ModelRetryAttempt<LanguageModel> = {
           ...previousAttempt,
           model: this.currentModel,
         };
@@ -96,7 +98,7 @@ export class RetryableLanguageModel
          */
         const updatedAttempts = [...attempts];
 
-        const context: RetryContext<LanguageModel> = {
+        const context: ModelRetryContext<LanguageModel> = {
           current: currentAttempt,
           attempts: updatedAttempts,
         };
@@ -123,14 +125,20 @@ export class RetryableLanguageModel
         attempt: attemptNumber,
         provider: attemptModel.provider,
         modelId: attemptModel.modelId,
-        timeoutMs: currentRetry?.timeout,
+        timeoutMs: totalTimeoutMs(currentRetry?.timeout),
       });
 
       try {
         /**
-         * Call the function that may need to be retried
+         * Call the function that may need to be retried, with the attempt as
+         * the ambient span so the provider's own spans nest inside it rather
+         * than beside the retry tree.
          */
-        const result = await input.fn(retryCallOptions);
+        const result = await (input.recorder
+          ? input.recorder.withAttempt(attemptNumber, () =>
+              input.fn(retryCallOptions),
+            )
+          : input.fn(retryCallOptions));
 
         /**
          * Check if the result should trigger a retry (only for generate results, not streams)
@@ -255,12 +263,13 @@ export class RetryableLanguageModel
    */
   private async handleResult(
     result: LanguageModelResult,
-    attempts: ReadonlyArray<RetryAttempt<LanguageModel>>,
+    attempts: ReadonlyArray<ModelRetryAttempt<LanguageModel>>,
     callOptions: LanguageModelCallOptions,
   ) {
-    const resultAttempt: RetryResultAttempt = {
+    const resultAttempt: ModelRetryResultAttempt = {
       type: 'result',
       result: result,
+      finishReason: result.finishReason.unified,
       model: this.currentModel,
       options: callOptions,
     };
@@ -270,7 +279,7 @@ export class RetryableLanguageModel
      */
     const updatedAttempts = [...attempts, resultAttempt];
 
-    const context: RetryContext<LanguageModel> = {
+    const context: ModelRetryContext<LanguageModel> = {
       current: resultAttempt,
       attempts: updatedAttempts,
     };
@@ -295,7 +304,7 @@ export class RetryableLanguageModel
    */
   private handleError(
     error: unknown,
-    attempts: ReadonlyArray<RetryAttempt<LanguageModel>>,
+    attempts: ReadonlyArray<ModelRetryAttempt<LanguageModel>>,
     callOptions: LanguageModelCallOptions,
   ) {
     return evaluateError({
@@ -314,7 +323,7 @@ export class RetryableLanguageModel
    * final attempt (last entry of `attempts`) is surfaced as `current`.
    */
   private emitFailure(
-    attempts: Array<RetryAttempt<LanguageModel>>,
+    attempts: Array<ModelRetryAttempt<LanguageModel>>,
     error: unknown,
   ) {
     if (!this.options.onFailure) return;
@@ -350,7 +359,7 @@ export class RetryableLanguageModel
      * Shared attempts array, threaded into `withRetry` so it stays populated
      * (including the final failed attempt) when the retry loop throws.
      */
-    const attempts: Array<RetryAttempt<LanguageModel>> = [];
+    const attempts: Array<ModelRetryAttempt<LanguageModel>> = [];
     let operationError: unknown;
     /**
      * Only the retry loop is guarded. `onSuccess` runs after it, so a throwing
@@ -429,7 +438,7 @@ export class RetryableLanguageModel
      * Shared attempts array, threaded into `withRetry` so it stays populated
      * (including the final failed attempt) when the retry loop throws.
      */
-    let attempts: Array<RetryAttempt<LanguageModel>> = [];
+    let attempts: Array<ModelRetryAttempt<LanguageModel>> = [];
     let finalCallOptions: LanguageModelCallOptions;
     /**
      * The open attempt span for the stream currently being consumed, closed
@@ -479,6 +488,15 @@ export class RetryableLanguageModel
           | ReadableStreamDefaultReader<LanguageModelStreamPart>
           | undefined;
         let isStreaming = false;
+        /**
+         * Whether a failure was forwarded to the consumer as a stream part.
+         *
+         * A stream that carries an `error` part still closes normally, so
+         * completing the loop says nothing about whether the generation
+         * succeeded. Without this the consumer sees a failure while
+         * `onSuccess` reports a success.
+         */
+        let forwardedError = false;
 
         /** Set when the operation ends in failure, for the operation span. */
         let operationError: unknown;
@@ -531,6 +549,12 @@ export class RetryableLanguageModel
                     // If no data has been streamed yet, we can retry
                     throw value.error;
                   }
+                  /**
+                   * Past the commit boundary the error belongs to the
+                   * consumer's stream and cannot be retried, but it is still a
+                   * failure and must not be reported as a success.
+                   */
+                  forwardedError = true;
                 }
 
                 /**
@@ -852,12 +876,22 @@ export class RetryableLanguageModel
           }
 
           /**
-           * Stream completed successfully — finalize sticky model and fire
-           * onSuccess. Deferred to here (rather than after the initial
-           * withRetry resolves) so the final model and full attempts list
-           * are observed, including any mid-stream retries.
+           * Stream finished — finalize sticky model and, if it finished
+           * *well*, fire onSuccess. Deferred to here (rather than after the
+           * initial withRetry resolves) so the final model and full attempts
+           * list are observed, including any mid-stream retries.
+           *
+           * A stream that forwarded an error part reached this point too: it
+           * closed normally, carrying the failure as cargo. That is not a
+           * success, and neither is it an attempt failure the retry loop can
+           * report — the consumer already has it, through `streamText`'s own
+           * `onError`. So nothing fires.
            */
           this.updateStickyModel(startModel);
+
+          if (forwardedError) {
+            return;
+          }
 
           this.options.onSuccess?.({
             current: {

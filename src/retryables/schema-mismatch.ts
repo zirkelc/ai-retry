@@ -2,7 +2,7 @@ import { safeParseJSON } from '@ai-sdk/provider-utils';
 import { fromJSONSchema } from 'zod';
 import type {
   ResolvableLanguageModel,
-  Retryable,
+  ModelRetryable,
   RetryableOptions,
 } from '../types.js';
 import { isResultAttempt } from '../internal/guards.js';
@@ -23,7 +23,7 @@ import { isResultAttempt } from '../internal/guards.js';
 export function schemaMismatch<MODEL extends ResolvableLanguageModel>(
   model: MODEL,
   options?: RetryableOptions<MODEL>,
-): Retryable<MODEL> {
+): ModelRetryable<MODEL> {
   return async (context) => {
     /**
      * Only handle result attempts

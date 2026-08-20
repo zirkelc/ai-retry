@@ -8,66 +8,21 @@ import {
 } from 'ai';
 import { describe, expect, it } from 'vitest';
 import {
-  MockEmbeddingModel,
-  MockImageModel,
-  MockLanguageModel,
   chunksToText,
   createRetryableModel,
+  Embedding,
+  MockEmbeddingModel,
   mockEmbeddings,
+  MockImageModel,
   mockImageResult,
+  MockLanguageModel,
   mockResult,
   mockResultText,
   mockStreamChunks,
   type LanguageModelGenerateFn,
-  type LanguageModelStreamFn,
 } from '../internal/test-utils.js';
-import type {
-  EmbeddingModelCallOptions,
-  LanguageModelCallOptions,
-} from '../types.js';
+import type { LanguageModelCallOptions } from '../types.js';
 import { requestTimeout } from './request-timeout.js';
-
-const embeddingTimeoutError = async (opts: EmbeddingModelCallOptions) => {
-  // Check if abortSignal is aborted and throw appropriate error
-  // AbortSignal.timeout() throws TimeoutError, not AbortError
-  if (opts.abortSignal?.aborted) {
-    throw Errors.timeout();
-  }
-
-  // Listen for abort event during the async operation
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      resolve(mockEmbeddings);
-    }, 1_000);
-
-    opts.abortSignal?.addEventListener('abort', () => {
-      clearTimeout(timeout);
-      // AbortSignal.timeout() throws TimeoutError when it fires
-      reject(Errors.timeout());
-    });
-  });
-};
-
-const timeoutError = async (opts: LanguageModelCallOptions) => {
-  // Check if abortSignal is aborted and throw appropriate error
-  // AbortSignal.timeout() throws TimeoutError, not AbortError
-  if (opts.abortSignal?.aborted) {
-    throw Errors.timeout();
-  }
-
-  // Listen for abort event during the async operation
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      resolve(mockResult);
-    }, 1_000);
-
-    opts.abortSignal?.addEventListener('abort', () => {
-      clearTimeout(timeout);
-      // AbortSignal.timeout() throws TimeoutError when it fires
-      reject(Errors.timeout());
-    });
-  });
-};
 
 const genericError = Errors.internalServerError();
 
@@ -95,7 +50,7 @@ describe('requestTimeout', () => {
     it('should fallback in case of timeout error', async () => {
       // Arrange
       const baseModel = MockLanguageModel.from({
-        doGenerate: timeoutError as LanguageModelGenerateFn,
+        doGenerate: { content: [], delayInMs: 1_000 },
       });
       const retryModel = MockLanguageModel.from({ doGenerate: mockResult });
 
@@ -206,7 +161,7 @@ describe('requestTimeout', () => {
       let retryModelSignal: AbortSignal | undefined;
 
       const baseModel = MockLanguageModel.from({
-        doGenerate: timeoutError as LanguageModelGenerateFn,
+        doGenerate: { content: [], delayInMs: 1_000 },
       });
 
       const retryModel = MockLanguageModel.from({
@@ -280,7 +235,7 @@ describe('requestTimeout', () => {
     it.todo('should fallback in case of timeout error', async () => {
       // Arrange
       const baseModel = MockLanguageModel.from({
-        doStream: timeoutError as LanguageModelStreamFn,
+        doStream: { chunks: mockStreamChunks, initialDelayInMs: 1_000 },
       });
       const retryModel = MockLanguageModel.from({
         doStream: mockStreamChunks,
@@ -383,7 +338,10 @@ describe('requestTimeout', () => {
 
     it('should fallback in case of timeout error', async () => {
       // Arrange
-      const baseModel = MockEmbeddingModel.from(embeddingTimeoutError as any);
+      const baseModel = MockEmbeddingModel.from({
+        embeddings: [Embedding.vector(3)],
+        delayInMs: 1_000,
+      });
       const retryModel = MockEmbeddingModel.from(mockEmbeddings);
 
       // Act

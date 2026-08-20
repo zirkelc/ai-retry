@@ -5,7 +5,7 @@ import { MockLanguageModel } from './test-utils.js';
 import type {
   LanguageModel,
   LanguageModelCallOptions,
-  RetryAttempt,
+  ModelRetryAttempt,
 } from '../types.js';
 
 describe('evaluateError', () => {
@@ -57,7 +57,7 @@ describe('evaluateError', () => {
   it('should wrap in a RetryError when no retry matches after multiple attempts', async () => {
     // Arrange — one prior attempt already recorded.
     const error = new Error('second');
-    const priorAttempts: Array<RetryAttempt<LanguageModel>> = [
+    const priorAttempts: Array<ModelRetryAttempt<LanguageModel>> = [
       { type: 'error', error: new Error('first'), model: primary, options },
     ];
 

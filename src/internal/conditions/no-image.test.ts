@@ -1,7 +1,9 @@
 import { NoImageGeneratedError } from 'ai';
 import { describe, expect, it } from 'vitest';
 import { buildImageErrorContext, MockImageModel } from '../test-utils.js';
-import { noImage } from './no-image.js';
+import { createNoImageAPI } from './no-image.js';
+
+const { noImage } = createNoImageAPI();
 
 describe('noImage', () => {
   it(`should match NoImageGeneratedError`, async () => {
