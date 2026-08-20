@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.4.0](https://github.com/zirkelc/ai-retry/compare/v2.3.0...v2.4.0) (2026-08-20)
+
+
+### Features
+
+* call-level retry functions for each AI SDK entry point ([#78](https://github.com/zirkelc/ai-retry/issues/78)) ([2345d0d](https://github.com/zirkelc/ai-retry/commit/2345d0dde74756c485d3874922e26e66cf365db2))
+
+
+### Documentation
+
+* **README:** add Timeouts section on which deadlines can fail over ([4325a9b](https://github.com/zirkelc/ai-retry/commit/4325a9b4b7e2453ed6c2e4cac7958b82ae1580dc))
+
 ## [2.3.0](https://github.com/zirkelc/ai-retry/compare/v2.2.1...v2.3.0) (2026-07-30)
 
 
