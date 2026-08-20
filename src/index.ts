@@ -17,24 +17,27 @@ export { isErrorAttempt, isResultAttempt } from './internal/guards.js';
  * @deprecated Import from `ai-retry/generate-text`.
  */
 export {
-  retryableGenerateText,
+  retryableGenerateText as experimental_retryableGenerateText,
   type RetryableGenerateText,
 } from './call/generate-text/generate-text.js';
 /** @deprecated Import from `ai-retry/stream-text`. */
 export {
-  retryableStreamText,
+  retryableStreamText as experimental_retryableStreamText,
   type RetryableStreamText,
 } from './call/stream-text/stream-text.js';
 /** @deprecated Import from `ai-retry/embed`. */
-export { retryableEmbed, type RetryableEmbed } from './call/embed/embed.js';
+export {
+  retryableEmbed as experimental_retryableEmbed,
+  type RetryableEmbed,
+} from './call/embed/embed.js';
 /** @deprecated Import from `ai-retry/embed-many`. */
 export {
-  retryableEmbedMany,
+  retryableEmbedMany as experimental_retryableEmbedMany,
   type RetryableEmbedMany,
 } from './call/embed-many/embed-many.js';
 /** @deprecated Import from `ai-retry/generate-image`. */
 export {
-  retryableGenerateImage,
+  retryableGenerateImage as experimental_retryableGenerateImage,
   type RetryableGenerateImage,
 } from './call/generate-image/generate-image.js';
 
