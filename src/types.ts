@@ -335,12 +335,6 @@ export interface RetryableModelOptions<MODEL extends AnyModel> {
    */
   telemetry?: RetryTelemetrySettings;
 
-  /**
-   * @deprecated Use `telemetry` instead. Kept as an alias for compatibility;
-   * when both are set, `telemetry` takes precedence.
-   */
-  experimental_telemetry?: RetryTelemetrySettings;
-
   // TODO: future iteration could let `onError` similarly decide whether a retry actually fires (today it is purely observational).
   onError?: (context: ModelRetryContext<MODEL>) => void;
   /**
