@@ -28,7 +28,7 @@ Two shapes of failure are covered:
 
 ### Retryable model
 
-`createRetryableModel` wraps a model instance. The retry runs *inside* `doGenerate` / `doStream`, below the entry point. You build it once and hand it to any code that takes a `LanguageModel`: `generateText`, an agent, a framework.
+`createRetryableModel` wraps a model instance. The retry runs *inside* the models `doGenerate` / `doStream` / `doEmbed` methods. You build it once and hand it to any code that takes a `model`: `generateText`, `streamText`, `embed`, etc.
 
 ```mermaid
 sequenceDiagram
@@ -65,7 +65,7 @@ Because it sits below the call, it sees provider errors and raw results, but it 
 
 ### Retryable call
 
-`retryableGenerateText` (and its four siblings) wraps the entry point itself. Each attempt is a fresh `generateText` call with its own abort signal, so call deadlines and judged results are recoverable too.
+`retryableGenerateText` (and its four siblings) wraps the actual function call. Each attempt is a fresh call (e.g. `generateText`) with its own abort signal, so call timeouts are recoverable too.
 
 ```mermaid
 sequenceDiagram
@@ -102,18 +102,24 @@ sequenceDiagram
     deactivate RC
 ```
 
-### What each layer recovers
+### Recovery matrix
 
 | Failure                                | Visible at         | retryable model | retryable call                             |
 | -------------------------------------- | ------------------ | --------------- | ------------------------------------------ |
-| Provider error (429, 529, 5xx)         | below the call     | recovers        | recovers                                   |
+| Provider error (e.g. 429, 529, 5xx)         | below the call     | recovers        | recovers                                   |
 | Bad result (content filter, schema)    | both layers        | recovers        | recovers                                   |
-| Call deadline under `generateText`     | on the call        | recovers        | recovers                                   |
-| Call deadline under `streamText`       | on the call        | discarded       | recovers                                   |
+| Timeout under `generateText`     | on the call        | recovers        | recovers                                   |
+| Timeout under `streamText`       | on the call        | discarded       | recovers                                   |
 | Inbound `abortSignal` fired            | on the call        | cannot see it   | honored, not retried; a cancel is deliberate |
 | Error after the first content chunk    | after commit       | committed       | committed                                  |
 
-**Which one should I use?** Use `createRetryableModel` when you need one configured model to hand to code that does not know about retries at all. Use the call-level functions when a deadline or cancellation on the call itself has to be recoverable, or when you want retry configuration to sit next to the call. They also [compose](./docs/timeouts.md#why-the-call-layer-recovers-what-a-retryable-model-cannot): a retryable model below handles provider fail-over, a retryable call above handles deadlines.
+A `timeout` argument belongs to the call, not to the model, which is why the two `streamText` rows differ. Full mechanics: [docs/timeouts.md](./docs/timeouts.md).
+
+### Choosing a layer
+
+- **Retryable model**: one configured model for code that only takes a `model` (an agent, a framework, a `Provider`). The retry configuration travels with the model.
+- **Retryable call**: call timeouts and cancellation are recoverable, and the retry configuration sits next to the call.
+- The layers [compose](./docs/timeouts.md#why-the-call-layer-recovers-what-a-retryable-model-cannot): a retryable model below handles provider fail-over, a retryable call above handles timeouts.
 
 ## Installation
 
@@ -122,7 +128,7 @@ sequenceDiagram
 >
 > - Use [`ai-retry@0.x`](https://github.com/zirkelc/ai-retry/tree/v0.x) for AI SDK v5
 > - Use [`ai-retry@1.x`](https://github.com/zirkelc/ai-retry/tree/v1.x) for AI SDK v6
-> - Use `ai-retry@2.x` or `ai-retry@3.x` for AI SDK v7 (3.x drops the `experimental_` prefixes from the call-level functions, see the [migration guide](./MIGRATION.md))
+> - Use `ai-retry@2.x` or `ai-retry@3.x` for AI SDK v7 (3.x drops the `experimental_` prefixes from the retryable functions, see the [migration guide](./MIGRATION.md))
 
 ```bash
 npm install ai-retry@3
@@ -173,7 +179,7 @@ Pick the entry point that matches the model family. Each module exposes `createR
 
 | Entry point                | For models passed to                                           |
 | -------------------------- | -------------------------------------------------------------- |
-| `ai-retry/language-model`  | `generateText`, `generateObject`, `streamText`, `streamObject` |
+| `ai-retry/language-model`  | `generateText`, `streamText` |
 | `ai-retry/embedding-model` | `embed`, `embedMany`                                           |
 | `ai-retry/image-model`     | `generateImage`                                                |
 
@@ -184,7 +190,7 @@ import { createRetryableModel, noImage } from 'ai-retry/image-model';
 
 ### Retryable call
 
-Each call-level function takes exactly the arguments its SDK entry point takes, plus a `retry` field. The model stays a normal argument and is swapped per attempt.
+Each retryable function takes exactly the arguments its AI SDK entry point takes, plus a `retry` field. The model stays a normal argument and is swapped per attempt.
 
 | Function                 | Wraps           | Import from               |
 | ------------------------ | --------------- | ------------------------- |
@@ -194,11 +200,7 @@ Each call-level function takes exactly the arguments its SDK entry point takes, 
 | `retryableEmbedMany`     | `embedMany`     | `ai-retry/embed-many`     |
 | `retryableGenerateImage` | `generateImage` | `ai-retry/generate-image` |
 
-The signature differs from the SDK's in two places: `retryableStreamText` returns a **promise** where `streamText` returns its result synchronously (the loop has to know which attempt won before it can hand anything back), and the embedding and image functions take a `timeout` the SDK does not give them (see [Retry timeouts](./docs/timeouts.md#retry-timeouts-at-the-call-layer)).
-
 #### `retryableGenerateText`
-
-Everything is recoverable until the call resolves, errors and results alike.
 
 ```typescript
 import { anthropic } from '@ai-sdk/anthropic';
@@ -222,7 +224,8 @@ const result = await retryableGenerateText({
 
 #### `retryableStreamText`
 
-A `timeout` on a `streamText` call cannot be recovered below the model: when it fires, `streamText` closes its stream as aborted, so everything a fallback model produces afterwards is discarded. A retry here re-runs `streamText` itself, so the fallback gets a new, open stream.
+> [!IMPORTANT]
+> `retryableStreamText` returns a **promise** where `streamText` returns its result synchronously.
 
 ```typescript
 import { openai } from '@ai-sdk/openai';
@@ -243,10 +246,12 @@ for await (const chunk of result.textStream) process.stdout.write(chunk);
 
 #### `retryableEmbed`
 
-`embed` has no `timeout` argument, so this library adds one and turns it into a fresh `AbortSignal` per attempt (see [Retry timeouts](./docs/timeouts.md#retry-timeouts-at-the-call-layer)).
+> [!IMPORTANT]
+> By default, `embed` has no `timeout` argument, only `abortSignal`. `retryableEmbed` adds a `timeout` property and turns this into a fresh `AbortSignal` per attempt.
 
 ```typescript
 import { openai } from '@ai-sdk/openai';
+import { azure } from '@ai-sdk/azure';
 import { retryableEmbed } from 'ai-retry/embed';
 import { httpStatus } from 'ai-retry/embed/conditions';
 
@@ -259,7 +264,7 @@ const result = await retryableEmbed({
     /** Rate limited: wait it out on the same model before moving on. */
     httpStatus(429).retry({ maxAttempts: 3, delay: 1_000, backoffFactor: 2 }),
     /** Still failing, so switch. A bare model is shorthand for "always try this next". */
-    openai.textEmbedding('text-embedding-3-large'),
+    azure.textEmbedding('text-embedding-3-large'),
   ],
 });
 
@@ -268,21 +273,20 @@ console.log(result.embedding.length);
 
 #### `retryableEmbedMany`
 
-A retry re-runs the whole call, so the fallback re-embeds every value rather than resuming a partial batch.
-
 ```typescript
 import { openai } from '@ai-sdk/openai';
+import { azure } from '@ai-sdk/azure';
 import { retryableEmbedMany } from 'ai-retry/embed-many';
-import { result } from 'ai-retry/embed-many/conditions';
+import { httpStatus } from 'ai-retry/embed-many/conditions';
 
 const { embeddings } = await retryableEmbedMany({
   model: openai.textEmbedding('text-embedding-3-small'),
   values: ['sunny day at the beach', 'rainy afternoon in the city'],
   retry: [
-    /** A degenerate embedding is not an error, so nothing throws to catch. */
-    result((res) => res.embeddings.some((e) => e.every((v) => v === 0))).switch({
-      model: openai.textEmbedding('text-embedding-3-large'),
-    }),
+    /** Rate limited: wait it out on the same model before moving on. */
+    httpStatus(429).retry({ maxAttempts: 3, delay: 1_000, backoffFactor: 2 }),
+    /** Still failing, so switch. A bare model is shorthand for "always try this next". */
+    azure.textEmbedding('text-embedding-3-large'),
   ],
 });
 ```
@@ -309,16 +313,9 @@ const { images } = await retryableGenerateImage({
 });
 ```
 
-### Max retries
-
-The AI SDK functions wrap **every** model in their own retry loop, controlled by `maxRetries`, which defaults to `2`. It retries the same model on retryable errors and stacks with `ai-retry`'s loops, on a different side in each layer:
-
-- Under a **retryable model**, the SDK loop sits *above* the wrapper: when no condition matches a retryable error, the SDK re-runs the whole retryable model, re-evaluating every condition and fallback, up to two more times. Pass `maxRetries: 0` on the call and let `ai-retry` be the single authority on retries.
-- Around a **call**, the SDK loop sits *below* the retry: left at its default it would re-issue the failing model several times before your conditions see the error, multiplying every deadline. The call-level functions therefore default `maxRetries` to `0`. Set it explicitly if you want the SDK's in-call retries as well.
-
 ## Retries
 
-The list of things `ai-retry` tries, in order, is the `retries` option on a retryable model, and the `retry` argument on a call-level function (whose object form names the inner list `retries` as well). Its entries are of two kinds:
+The list of things `ai-retry` tries, in order, is the `retries` option on a retryable model, and the `retry` argument on a retryable function (whose object form names the inner list `retries` as well). Its entries are of two kinds:
 
 - **Fallbacks** are model instances (or gateway strings). They always match and are used as plain fallbacks.
 - **Conditions** are typed predicates produced by helpers like `error()` or `httpStatus()` and finalized with a `.switch()` or `.retry()` action. They only fire when their predicate matches.
@@ -339,7 +336,7 @@ const retryableModel = createRetryableModel({
 });
 ```
 
-Each fallback is attempted once by default; use the object form to pass options like `maxAttempts`, `delay` or `timeout`. Once everything is exhausted, a `RetryError` is thrown (see [All retries failed](#all-retries-failed)).
+Each fallback is attempted once by default; use the object form to pass options like `maxAttempts`, `delay` or `timeout`. Once everything is exhausted, a `RetryError` is thrown (see [Error handling](#error-handling)).
 
 ### Actions
 
@@ -355,6 +352,71 @@ timeout().switch({ model: fallback, timeout: 30_000 });
 // Retry the current model with exponential backoff, max 3 attempts
 error.isRetryable(true).retry({ delay: 1_000, backoffFactor: 2, maxAttempts: 3 });
 ```
+
+### Retry fields
+
+Every entry in the list, whether a bare fallback model, a `.switch()` target or a `.retry()`, is described by the same `Retry` object:
+
+| Field           | Description                                                                                                    |
+| --------------- | -------------------------------------------------------------------------------------------------------------- |
+| `model`         | Model for the next attempt                                                                                      |
+| `maxAttempts`   | Attempts allowed per unique model (`provider/modelId`). Defaults: `1` for fallbacks and `.switch()`, `2` for `.retry()` |
+| `delay`         | Milliseconds to wait before the attempt                                                                         |
+| `backoffFactor` | Multiplier applied to `delay` on every further attempt                                                          |
+| `timeout`       | Fresh deadline for the attempt. Accepted shape depends on the layer (see [Model layer](#model-layer) and [Call layer](#call-layer)) |
+| `options`       | Argument overrides for the attempt. Shape depends on the layer                                                  |
+
+- Attempts are counted per unique model, so the same model listed in several retryables shares one budget.
+- Delays respect the request's abort signal, so a waiting retry can still be cancelled.
+
+```typescript
+const retryableModel = createRetryableModel({
+  model: openai('gpt-4'),
+  retries: [
+    // Exponential backoff: 2s, 4s, 8s
+    { model: openai('gpt-4'), delay: 2_000, backoffFactor: 2, maxAttempts: 3 },
+  ],
+});
+```
+
+### Disabling
+
+`disabled` turns all retry logic off: as an option on `createRetryableModel`, or inside a retryable function's `retry` object. It accepts a boolean or a function. When disabled, the base model or call executes directly.
+
+```typescript
+const retryableModel = createRetryableModel({
+  model: openai('gpt-4'),
+  retries: [/* ... */],
+  disabled: true, // hard off
+  // disabled: process.env.NODE_ENV === 'test',      // env-based
+  // disabled: () => !featureFlags.isEnabled('ai'),  // dynamic
+});
+```
+
+### Callbacks
+
+Both layers accept the same two per-attempt callbacks:
+
+- `onError` fires for every failed attempt, recovered or not.
+- `onRetry` fires before the next attempt; `context.current.model` is the model about to be tried. It may return argument overrides for that attempt, useful when they depend on the failed attempt.
+
+Override precedence, highest first: the `onRetry` return value, then `Retry.options`, then the original arguments.
+
+```typescript
+const retryableModel = createRetryableModel({
+  model: azure('gpt-5-chat'),
+  retries: [openai('gpt-5-chat')],
+  onRetry: (context) => {
+    const { current, attempts } = context;
+    if (current.model.provider !== attempts.at(-1).model.provider) {
+      /** Strip provider-scoped metadata before retrying on a different provider. */
+      return { options: { prompt: stripProviderMetadata(current.options.prompt) } };
+    }
+  },
+});
+```
+
+Each layer adds its own terminal callbacks, documented in its section below.
 
 ## Conditions
 
@@ -529,81 +591,11 @@ error(isContentFilter).switch({ model: anthropic('claude-3-haiku-20240307') });
 
 A check like "only retry on the first attempt" is just `(e, ctx) => ctx.attempts.length === 1 && isContentFilter(e)`.
 
-## All retries failed
-
-If all retry attempts fail, a `RetryError` is thrown containing all individual errors. If no retry was attempted (no retryable matched), the original error is re-thrown directly.
-
-```typescript
-import { RetryError } from 'ai';
-
-try {
-  const result = await generateText({ model: retryableModel, prompt: 'Hello!' });
-} catch (err) {
-  if (err instanceof RetryError) {
-    console.error('All retry attempts failed:', err.errors);
-  }
-}
-```
-
-Errors are tracked per unique model (`provider/modelId`). Once a model has hit its `maxAttempts`, no further retry will land on it.
-
-## Vercel AI Gateway
-
-You can pass a model as a string and it will be resolved through the default `gateway` [provider instance](https://ai-sdk.dev/providers/ai-sdk-providers/ai-gateway#provider-instance). Each entry point resolves strings to its own model family, so the string is typed against that family's gateway model ids.
-
-```typescript
-const retryableModel = createRetryableModel({
-  model: 'openai/gpt-5',
-  retries: ['anthropic/claude-sonnet-4'],
-});
-```
-
-## Model-layer options
+## Model layer
 
 Options specific to `createRetryableModel`.
 
-### Disabling retries
-
-```typescript
-const retryableModel = createRetryableModel({
-  model: openai('gpt-4'),
-  retries: [/* ... */],
-  disabled: true, // hard off
-  // disabled: process.env.NODE_ENV === 'test',      // env-based
-  // disabled: () => !featureFlags.isEnabled('ai'),  // dynamic
-});
-```
-
-When disabled the base model executes directly, no retry logic runs.
-
-### Delays and attempts
-
-Delays accept exponential backoff and respect the request's abort signal so they can still be cancelled. Attempts are counted per unique model, so duplicates across multiple retryables don't get more chances than configured.
-
-```typescript
-const retryableModel = createRetryableModel({
-  model: openai('gpt-4'),
-  retries: [
-    // Exponential backoff: 2s, 4s, 8s
-    { model: openai('gpt-4'), delay: 2_000, backoffFactor: 2, maxAttempts: 3 },
-  ],
-});
-```
-
-The same `delay` / `backoffFactor` / `maxAttempts` options are accepted by `.switch({...})` and `.retry({...})`.
-
-### Retry timeouts
-
-When a retry specifies a `timeout` (a number of milliseconds), a fresh `AbortSignal.timeout()` is created for that attempt and composed with the original signal, so user cancellation still works. If the original signal has already fired, setting `timeout` is the explicit opt-in for retrying past it; without one, `ai-retry` re-throws rather than firing a doomed retry. See [docs/timeouts.md](./docs/timeouts.md) for the full mechanics.
-
-```typescript
-const retryableModel = createRetryableModel({
-  model: openai('gpt-4'),
-  retries: [timeout().switch({ model: openai('gpt-3.5-turbo'), timeout: 30_000 })],
-});
-```
-
-### Overriding call options per retry
+### Option overrides
 
 A retry can replace any of the provider call options for its attempt: the prompt, sampling settings, headers, or `providerOptions`. Overrides completely replace the original values; anything not named falls through to the request's own.
 
@@ -654,30 +646,22 @@ The overridable fields per model family:
 | `headers`          | Additional HTTP headers          |
 | `providerOptions`  | Provider-specific options        |
 
-Overrides can also be computed at retry time by returning them from `onRetry`, useful when they depend on the failed attempt. Precedence, highest first: the `onRetry` return value, then `Retry.options`, then the original call options.
+### Timeouts
+
+When a retry specifies a `timeout` (a number of milliseconds), a fresh `AbortSignal.timeout()` is created for that attempt and composed with the original signal, so user cancellation still works. If the original signal has already fired, setting `timeout` is the explicit opt-in for retrying past it; without one, `ai-retry` re-throws rather than firing a doomed retry. See [docs/timeouts.md](./docs/timeouts.md) for the full mechanics.
 
 ```typescript
 const retryableModel = createRetryableModel({
-  model: azure('gpt-5-chat'),
-  retries: [openai('gpt-5-chat')],
-  onRetry: (context) => {
-    const { current, attempts } = context;
-    if (current.model.provider !== attempts.at(-1).model.provider) {
-      /** Strip provider-scoped metadata before retrying on a different provider. */
-      return { options: { prompt: stripProviderMetadata(current.options.prompt) } };
-    }
-  },
+  model: openai('gpt-4'),
+  retries: [timeout().switch({ model: openai('gpt-3.5-turbo'), timeout: 30_000 })],
 });
 ```
 
-### Logging
+### Outcome callbacks
 
-- `onError` fires when an error occurs.
-- `onRetry` fires before attempting a retry (`context.current.model` is the model about to be tried).
-- `onSuccess` fires after a successful request with the model that handled it.
-- `onFailure` fires when the request ultimately fails and no retry recovered it.
-
-`onSuccess` and `onFailure` are counterparts: exactly one of them is invoked per request once its final outcome is known. `context.error` on failure is the error surfaced to the caller, and neither fires when retries are disabled.
+- `onSuccess` fires after a successful request, with the model that handled it.
+- `onFailure` fires when the request ultimately fails and no retry recovered it. `context.error` is the error surfaced to the caller.
+- Exactly one of the two fires per request. Neither fires when retries are disabled.
 
 ### Reset
 
@@ -697,9 +681,13 @@ const retryableModel = createRetryableModel({
 });
 ```
 
-## Call-layer options
+## Call layer
 
-Options specific to the call-level functions. A bare array is the common form of `retry`; pass an object for hooks, telemetry or the disable switch:
+Options specific to the retryable functions.
+
+### The retry argument
+
+A bare array is the common form of `retry`; pass an object for hooks, telemetry or the disable switch:
 
 ```typescript
 const result = await retryableGenerateText({
@@ -716,9 +704,17 @@ const result = await retryableGenerateText({
 
 Everything sits under one key, so the SDK can add arguments of its own without colliding with this library's.
 
-### Retry timeouts
+### Argument overrides
 
-`Retry.timeout` gives each attempt a fresh deadline. A number is a total budget in milliseconds; an object is the SDK's own timeout configuration, **merged** into whatever the call already carried, key by key. Which shape a retry accepts depends on the entry point (`{ chunkMs }` on a `generateText` retry is a type error). `embed`, `embedMany` and `generateImage` additionally take a call-level `timeout` argument the SDK does not give them, turned into a fresh `AbortSignal` per attempt. Details and tables: [docs/timeouts.md](./docs/timeouts.md#retry-timeouts-at-the-call-layer).
+`Retry.options` holds the entry point's **own** arguments, so a retry can rewrite the prompt in the shape you wrote it. Overrides are checked against the entry point they are handed to: `options: { values }` belongs to `embedMany` and is rejected by `retryableEmbed`.
+
+```typescript
+retry: [{ model: fallbackModel, options: { prompt: 'Answer in one sentence.' } }],
+```
+
+### Timeouts
+
+`Retry.timeout` gives each attempt a fresh deadline. A number is a total budget in milliseconds; an object is the SDK's own timeout configuration, **merged** into whatever the call already carried, key by key. Which shape a retry accepts depends on the retryable function. `embed`, `embedMany` and `generateImage` additionally take a call-level `timeout` argument the SDK does not give them, turned into a fresh `AbortSignal` per attempt. Details and tables: [docs/timeouts.md](./docs/timeouts.md#retry-timeouts-at-the-call-layer).
 
 ```typescript
 const result = await retryableStreamText({
@@ -732,25 +728,9 @@ const result = await retryableStreamText({
 });
 ```
 
-### Overriding arguments per retry
+### Outcome callbacks
 
-`Retry.options` holds the entry point's **own** arguments, so a retry can rewrite the prompt in the shape you wrote it. Overrides are checked against the entry point they are handed to: `options: { values }` belongs to `embedMany` and is rejected by `retryableEmbed`.
-
-```typescript
-retry: [{ model: fallbackModel, options: { prompt: 'Answer in one sentence.' } }],
-```
-
-Per-field precedence, highest first: the `onRetry` return value, then `Retry.options`, then the call's own arguments.
-
-### What can still fail over
-
-For `generateText`, `embed`, `embedMany` and `generateImage`, an attempt is recoverable until it resolves; errors and result-based conditions both apply.
-
-For `streamText` the boundary is the **first content part**. Before it, an error, a deadline, or even a finish with no content at all can fail over. Once a content part reaches the stream the attempt is committed; an error during consumption propagates to the stream rather than triggering a fallback.
-
-### Reporting the outcome: `onSettled`
-
-One terminal hook, on every entry point, called exactly once per call with its final outcome.
+`onSettled` is the terminal hook: called exactly once per call with its final outcome.
 
 ```typescript
 const result = await retryableGenerateText({
@@ -777,9 +757,8 @@ const result = await retryableGenerateText({
 
 The event also carries `model` (the one that settled it, or the one whose failure ended the loop), `result` on success and `error` on failure. Each entry in `attempts` says how it ended: `error`, `result` (judged, then retried) or `success`.
 
-**For `streamText` it settles at the commit point**, the first content part, not at the end of the stream. A stream that commits and then dies is beyond the reach of a retry, so it counts as a success here. It also means a stream you never consume still settles. For end-to-end stream health, use `streamText`'s own `onFinish` and `onError` on the same call.
-
-It stays silent in two cases, both the absence of a call to report rather than an outcome: when retries are `disabled`, and when the rejection came from no attempt at all, such as one of your own callbacks throwing.
+- For `streamText` it settles at the **commit point**, the first content part, not at the end of the stream. A stream you never consume still settles; for end-to-end stream health, use `streamText`'s own `onFinish` and `onError` on the same call.
+- It stays silent when retries are `disabled`, and when the rejection came from no attempt at all (one of your own callbacks throwing).
 
 **It mirrors the operation span**, so a metric built on the hook and one built on [telemetry](#telemetry) agree by construction:
 
@@ -790,9 +769,14 @@ It stays silent in two cases, both the absence of a call to report rather than a
 | `ai_retry.model.final` | `model`           |
 | `ai_retry.error`       | `error`           |
 
-### Your own stream callbacks belong to one attempt
+### Stream callbacks
 
-`retryableStreamText` issues every attempt with the arguments you passed, callbacks included, so `onFinish`, `onAbort`, `onStepFinish`, `onChunk` and `onError` are held back until the loop knows whether that attempt is the one you get. **An attempt the loop discards is silent**, and the attempt you receive reports exactly once, always after `onSettled`. Errors that a retry recovered from reach the retry's own `onError`, not the call's:
+`retryableStreamText` issues every attempt with the arguments you passed, callbacks included. To keep discarded attempts invisible:
+
+- `onFinish`, `onAbort`, `onStepFinish`, `onChunk` and `onError` are held back until the loop knows which attempt is the one you get.
+- A discarded attempt is silent. The attempt you receive reports exactly once, always after `onSettled`.
+- Errors that a retry recovered from reach the retry's own `onError`, not the call's.
+- Nothing is delayed on the happy path: a committed stream's callbacks are driven by you reading it, which happens after the loop has settled.
 
 ```typescript
 await retryableStreamText({
@@ -808,19 +792,45 @@ await retryableStreamText({
 });
 ```
 
-Nothing is delayed on the happy path: a committed stream's callbacks are driven by you reading it, which happens after the loop has settled.
-
 ## Streaming
 
-Retries and fallbacks on a stream only apply **before the first content chunk** is emitted. Once streaming begins delivering content, the response is committed to the current model, and mid-stream errors propagate to the caller rather than triggering a fallback. This boundary is inherent to streaming and applies at both layers. If reliable retries are critical, consider `generateText` instead of `streamText`.
+- Fail-over stops at the **first content chunk**. After it, the response is committed to the current model and errors propagate to the stream instead of triggering a fallback. The boundary applies at both layers.
+- Before commit, an error, a timeout, or a finish with no content at all can fail over.
+- Result conditions on streams are judged when the `finish` part arrives, and only when no content has been emitted.
+- The non-streaming functions have no commit boundary: an attempt is recoverable until it resolves, for errors and result conditions alike.
+- After a fail-over, the consumer sees exactly one stream preamble, the one belonging to the model that produced the output. The "stream started" signal arrives at first-content time rather than when the response headers arrive.
+- If reliable retries are critical, prefer `generateText` over `streamText`.
 
-Result-based conditions apply to streams as well: the decision happens when the upstream `finish` part arrives and only fires if no content has been emitted yet, so a `content-filter` finish on an otherwise empty response can still trigger a fallback.
+## Error handling
 
-After a fail-over, the consumer still sees exactly one stream preamble (`stream-start`, `response-metadata`, …), the one belonging to the model that actually produced the output. The practical side effect: the "stream started" signal arrives at first-content time rather than when the response headers arrive (typically a sub-second difference).
+If all retry attempts fail, a `RetryError` is thrown containing all individual errors. If no retry was attempted (no retryable matched), the original error is re-thrown directly.
 
-## Timeouts
+```typescript
+import { RetryError } from 'ai';
 
-A `timeout` argument belongs to the call, not to the model, so which layer you retry at decides whether it can fail over: see the [recovery matrix](#what-each-layer-recovers) above. Under `generateText` a retryable model still recovers it (the call just rejects); under `streamText` the stream is already finalized as aborted, so only a call-level retry gets the fallback's output to you. The full mechanics, per-deadline tables and the timer lifecycle live in [docs/timeouts.md](./docs/timeouts.md).
+try {
+  const result = await generateText({ model: retryableModel, prompt: 'Hello!' });
+} catch (err) {
+  if (err instanceof RetryError) {
+    console.error('All retry attempts failed:', err.errors);
+  }
+}
+```
+
+## Max retries
+
+The AI SDK functions wrap **every** model in their own retry loop, controlled by `maxRetries`, which defaults to `2`. Since `ai-retry` also implements its own retry logic, the two layers can interact, potentially causing more retries than expected if both are active. It's recommended to set `maxRetries: 0` on the AI SDK functions when using `ai-retry` to avoid overlapping retry loops.
+
+## Vercel AI Gateway
+
+You can pass a model as a string and it will be resolved through the default `gateway` [provider instance](https://ai-sdk.dev/providers/ai-sdk-providers/ai-gateway#provider-instance). Each entry point resolves strings to its own model family, so the string is typed against that family's gateway model ids.
+
+```typescript
+const retryableModel = createRetryableModel({
+  model: 'openai/gpt-5',
+  retries: ['anthropic/claude-sonnet-4'],
+});
+```
 
 ## Telemetry
 
@@ -910,7 +920,7 @@ interface RetryableModelOptions<MODEL extends LanguageModel | EmbeddingModel | I
 
 ### `retryableGenerateText(args)` and siblings
 
-Each call-level function takes its SDK entry point's arguments plus `retry`, either a bare array of retryables or an options object:
+Each retryable function takes its SDK entry point's arguments plus `retry`, either a bare array of retryables or an options object:
 
 ```ts
 interface CallRetryOptions<MODEL> {
@@ -984,7 +994,7 @@ Types belonging to one retry layer carry its prefix, so the two never read alike
 
 ## Migration
 
-- **v2 → v3**: the call-level functions lost their `experimental_` prefix. Import `retryableGenerateText` instead of `experimental_retryableGenerateText`, and so on for all five.
+- **v2 → v3**: the retryable functions lost their `experimental_` prefix. Import `retryableGenerateText` instead of `experimental_retryableGenerateText`, and so on for all five.
 - The deprecated function-style retryables (`contentFilterTriggered`, `serviceOverloaded`, …) and the root `createRetryable` are documented in the [v1 README](https://github.com/zirkelc/ai-retry/blob/v1.x/README.md); see the [migration guide](./MIGRATION.md) to convert to the condition API.
 
 ## License

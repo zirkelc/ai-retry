@@ -2,7 +2,7 @@
 
 ## Migrating to v3
 
-The call-level functions lost their `experimental_` prefix.
+The retryable functions lost their `experimental_` prefix.
 
 ```diff
 - import { experimental_retryableGenerateText as retryableGenerateText } from 'ai-retry/generate-text';

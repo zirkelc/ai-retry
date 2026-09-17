@@ -1,6 +1,6 @@
 # Timeouts
 
-This document is the deep dive behind the README's [Timeouts](../README.md#timeouts) section: which deadline fires when, which retry layer can recover it, and why. Throughout, "deadline" means one configured timeout window, or the moment it fires.
+This document is the deep dive behind the README's [recovery matrix](../README.md#recovery-matrix): which deadline fires when, which retry layer can recover it, and why. Throughout, "deadline" means one configured timeout window, or the moment it fires.
 
 ## Who owns a deadline
 
