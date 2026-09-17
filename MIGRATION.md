@@ -1,11 +1,29 @@
-# Migrating to the condition API
+# Migration guide
+
+## Migrating to v3
+
+The retryable functions lost their `experimental_` prefix.
+
+```diff
+- import { experimental_retryableGenerateText as retryableGenerateText } from 'ai-retry/generate-text';
++ import { retryableGenerateText } from 'ai-retry/generate-text';
+```
+
+The same rename applies to all five: `retryableGenerateText`, `retryableStreamText`, `retryableEmbed`, `retryableEmbedMany`, `retryableGenerateImage`. Behavior, arguments and import paths are unchanged.
+
+Two experimental predecessors were removed with no direct replacement:
+
+- The `ai-retry/experimental/call` and `ai-retry/experimental/stream` entry points (`createRetryableCall`, `createRetryableStream`). Use the call-level functions above; they cover the same ground with a per-entry-point API.
+- The deprecated `experimental_telemetry` option on `createRetryableModel`. Use `telemetry`.
+
+## Migrating to the condition API
 
 The **condition-based API** (per-model entry points + `createRetryableModel`) is the recommended way to configure retries. This guide shows how to move existing code from the function-style retryables to the condition API.
 
 > [!TIP]
 > Nothing forces an immediate rewrite. The function-style retryables and the root `createRetryable` are deprecated but still work — they ship in the same package as the condition API, so you can migrate incrementally.
 
-## What still works
+### What still works
 
 The following keeps compiling and running unchanged:
 
@@ -24,7 +42,7 @@ const model = createRetryable({
 
 The root `createRetryable` and every function from `ai-retry/retryables` are kept for backwards compatibility, but they are **`@deprecated`**. Your editor/linter will flag them. The two steps below convert this to the new condition API.
 
-## Step 1: Switch the factory
+### Step 1: Switch the factory
 
 ```diff
 - import { createRetryable } from 'ai-retry';
@@ -36,7 +54,7 @@ The root `createRetryable` and every function from `ai-retry/retryables` are kep
 
 Use the entry point that matches your model: `ai-retry/language-model`, `ai-retry/embedding-model`, or `ai-retry/image-model`. Unlike the auto-detecting root `createRetryable` (which only resolves bare gateway strings as language models), each per-family factory is typed for its family and resolves gateway strings for that family.
 
-## Step 2: Replace each retryable with a condition
+### Step 2: Replace each retryable with a condition
 
 Every deprecated retryable maps to a condition built from the matchers exported by `ai-retry/<family>-model` (also available on the `ai-retry/<family>-model/conditions` subpath). `.switch({ model })` switches to a fallback for a single attempt (matching the old default); `.retry({ ... })` retries the same model.
 
@@ -72,13 +90,13 @@ Full example:
   });
 ```
 
-## Behavior parity notes
+### Behavior parity notes
 
 - `.switch({ model })` switches to the fallback for a single attempt — the same as the old retryables' implicit `maxAttempts: 1`.
 - `.retry()` defaults to `maxAttempts: 2` (one original + one retry) and honors `Retry-After` / `Retry-After-Ms` headers (capped at 60s), matching `retryAfterDelay`. `maxAttempts: 1` is rejected — use `.switch()` for a single different-model attempt.
 - The condition matchers are the exact same implementations that powered the deprecated retryables, so matching semantics are unchanged.
 
-## Reference
+### Reference
 
 - [README](./README.md) — full condition API documentation
 - [Earlier README](https://github.com/zirkelc/ai-retry/blob/v1/README.md) — full function-style retryable documentation
