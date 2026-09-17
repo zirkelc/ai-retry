@@ -320,7 +320,7 @@ The list of things `ai-retry` tries, in order, is the `retries` option on a retr
 - **Fallbacks** are model instances (or gateway strings). They always match and are used as plain fallbacks.
 - **Conditions** are typed predicates produced by helpers like `error()` or `httpStatus()` and finalized with a `.switch()` or `.retry()` action. They only fire when their predicate matches.
 
-You can think of the array as a big `if-else` chain: each condition is an `if` branch matching some error or result, and each fallback is an `else` branch matching anything left over. Order matters: the array is evaluated top-down until one matches.
+You can think of the array as a big `if-else` chain: each condition is an `if` branch matching some error or result, and each fallback is an `else` branch matching anything left over. Order matters: the array is evaluated top-down until one matches. Once everything is exhausted, a `RetryError` is thrown (see [Error handling](#error-handling)).
 
 ```typescript
 const retryableModel = createRetryableModel({
@@ -336,7 +336,26 @@ const retryableModel = createRetryableModel({
 });
 ```
 
-Each fallback is attempted once by default; use the object form to pass options like `maxAttempts`, `delay` or `timeout`. Once everything is exhausted, a `RetryError` is thrown (see [Error handling](#error-handling)).
+### Fallbacks
+
+A fallback is a plain model instance (or gateway string). It always matches, so it acts as a catch-all: when no earlier condition fired, the next fallback is tried. Each fallback is attempted once by default; use the object form to pass [Retry fields](#retry-fields) like `maxAttempts`, `delay` or `timeout`.
+
+```typescript
+const retryableModel = createRetryableModel({
+  model: openai('gpt-4o'),
+  retries: [
+    openai('gpt-4o-mini'), // first fallback
+    anthropic('claude-3-haiku-20240307'), // second fallback
+
+    // Object form to pass options:
+    { model: anthropic('claude-3-haiku-20240307'), maxAttempts: 2 },
+  ],
+});
+```
+
+### Conditions
+
+A condition is a typed predicate over the retry context, produced by helpers like `httpStatus()`, `finishReason()` or the low-level `error()` / `result()`. Conditions are typed for their layer and model family, and do nothing on their own: an action turns one into a retryable. Every helper is documented in the [Condition reference](#condition-reference).
 
 ### Actions
 
@@ -418,7 +437,7 @@ const retryableModel = createRetryableModel({
 
 Each layer adds its own terminal callbacks, documented in its section below.
 
-## Conditions
+## Condition reference
 
 The condition helpers are shared between both layers. At the model layer, import them from the model entry point (`ai-retry/language-model`, …); at the call layer, from `ai-retry/<function>/conditions`. Each import is typed for its destination, and the type system keeps the layers apart: a model-level condition in a call-level `retry` is a type error, and the reverse too.
 
@@ -833,9 +852,6 @@ const retryableModel = createRetryableModel({
 ```
 
 ## Telemetry
-
-> [!NOTE]
-> Experimental: span names and attributes may change in patch versions.
 
 `ai-retry` can emit [OpenTelemetry](https://opentelemetry.io/) spans for each request and every retry attempt. Spans are created on the active OpenTelemetry context, so they nest automatically under the AI SDK's own spans when that integration is active. A single trace then shows the individual attempts: which model each used, why it was retried, and the backoff between them.
 
