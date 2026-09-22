@@ -306,24 +306,6 @@ describe('telemetry', () => {
       expect(operation.attributes['ai_retry.metadata.env']).toBe('test');
     });
 
-    it('should honor the deprecated experimental_telemetry alias', async () => {
-      // Arrange
-      const baseModel = MockLanguageModel.from('ok');
-      const model = createRetryableModel({
-        model: baseModel,
-        retries: [],
-        experimental_telemetry: { isEnabled: true, tracer },
-      });
-
-      // Act
-      await model.doGenerate(MockLanguageModel.callOptions());
-
-      // Assert
-      const operation = findSpan(exporter, 'ai_retry.doGenerate');
-      expect(operation.attributes['ai_retry.outcome']).toBe('success');
-      expect(attemptSpans(exporter).length).toBe(1);
-    });
-
     it('should nest the operation span under a surrounding active span', async () => {
       // Arrange
       const contextManager = new AsyncLocalStorageContextManager();

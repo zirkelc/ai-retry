@@ -61,12 +61,8 @@ export abstract class BaseRetryableModel<MODEL extends AnyModel> {
     }
   }
 
-  /**
-   * Resolve the telemetry settings, preferring `telemetry` over the deprecated
-   * `experimental_telemetry` alias.
-   */
   protected get telemetrySettings(): RetryableModelOptions<MODEL>['telemetry'] {
-    return this.options.telemetry ?? this.options.experimental_telemetry;
+    return this.options.telemetry;
   }
 
   /**
