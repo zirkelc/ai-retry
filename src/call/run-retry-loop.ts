@@ -325,13 +325,14 @@ export async function runRetryLoop<
           retries: options.retries,
           onError: options.onError as unknown as (context: never) => void,
           resolve: entryPoint.resolveGatewayModel,
+          abortSignal: callerSignal,
         });
 
         attempts.push(evaluation.attempt as CallRetryAttempt<MODEL, COMMIT>);
 
         /**
          * No retry matched. Surface the error, wrapped in a `RetryError` when
-         * more than one attempt was made.
+         * more than one attempt was made and the caller did not cancel.
          */
         if (!evaluation.retryModel) {
           recorder?.endAttempt({

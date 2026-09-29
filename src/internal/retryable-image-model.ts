@@ -1,10 +1,9 @@
-import { delay } from '@ai-sdk/provider-utils';
 import { BaseRetryableModel } from './base-retryable-model.js';
 import { evaluateError } from './evaluate-error.js';
 import { resolveImageModel } from './resolve-model.js';
 import { mergeImageModelCallOptions } from './merge-retry-call-options.js';
 import { resolveBackoffDelay } from './resolve-backoff-delay.js';
-import { retryDiesOnAbortedSignal } from './retry-dies-on-aborted-signal.js';
+import { isRetryCancelled, waitBeforeRetry } from './retry-signal.js';
 import { totalTimeoutMs } from './retry-timeout.js';
 import { createRetryTelemetry, type RetryTelemetry } from './telemetry.js';
 import type {
@@ -136,6 +135,8 @@ export class RetryableImageModel
           error,
           attempts,
           retryCallOptions,
+          input.callOptions.abortSignal,
+          currentRetry,
         );
 
         attempts.push(attempt);
@@ -159,9 +160,7 @@ export class RetryableImageModel
          * instantly with the same abort. Rethrow rather than fire a
          * misleading retry against a dead signal.
          */
-        if (
-          retryDiesOnAbortedSignal(input.callOptions.abortSignal, retryModel)
-        ) {
+        if (isRetryCancelled(input.callOptions.abortSignal, retryModel)) {
           input.recorder?.endAttempt({
             attempt: attemptNumber,
             outcome: 'failure',
@@ -179,11 +178,11 @@ export class RetryableImageModel
           delayMs: calculatedDelay,
         });
 
-        if (calculatedDelay !== undefined) {
-          await delay(calculatedDelay, {
-            abortSignal: retryCallOptions.abortSignal,
-          });
-        }
+        await waitBeforeRetry(
+          calculatedDelay,
+          input.callOptions.abortSignal,
+          retryModel,
+        );
 
         this.currentModel = retryModel.model;
         currentRetry = retryModel;
@@ -198,8 +197,12 @@ export class RetryableImageModel
     error: unknown,
     attempts: ReadonlyArray<ModelRetryErrorAttempt<ImageModel>>,
     callOptions: ImageModelCallOptions,
+    inboundSignal: AbortSignal | undefined,
+    currentRetry: Retry<ImageModel> | undefined,
   ) {
     return evaluateError({
+      abortSignal: inboundSignal,
+      currentRetry,
       error,
       model: this.currentModel,
       options: callOptions,

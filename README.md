@@ -185,8 +185,8 @@ const retryableEmbedding = createRetryableModel({
 import { createRetryableModel } from 'ai-retry/image-model';
 
 const retryableImage = createRetryableModel({
-  model: 'google/imagen-4.0-generate-001',
-  retries: ['google/imagen-4.0-fast-generate-001'],
+  model: 'openai/gpt-image-1',
+  retries: ['openai/gpt-image-1-mini'],
 });
 ```
 
@@ -519,7 +519,7 @@ When disabled the base model executes directly, no retry logic runs.
 
 #### Retry delays
 
-Delays accept exponential backoff and respect the request's abort signal so they can still be cancelled.
+Delays accept exponential backoff and respect the request's abort signal so they can still be cancelled. A delay before a retry that sets its own `timeout` ignores a request deadline that has fired, as the retry does, so the wait does not end the retry before it starts.
 
 ```typescript
 import { createRetryableModel } from 'ai-retry/language-model';
@@ -540,9 +540,11 @@ The same `delay` / `backoffFactor` / `maxAttempts` options are accepted by `.swi
 
 #### Retry timeouts
 
-When a retry specifies a `timeout`, a fresh `AbortSignal.timeout()` is created for that attempt. If the original `abortSignal` is still alive, the fresh deadline is composed with it via `AbortSignal.any()` so user cancellation still works. If the original signal is already aborted (a request-level deadline already fired), it is dropped so the retry runs against the fresh deadline alone.
+When a retry specifies a `timeout`, a fresh `AbortSignal.timeout()` is created for that attempt. If the original `abortSignal` is still alive, the fresh deadline is composed with it so user cancellation still works, while a request-level deadline (`TimeoutError`) firing later is ignored. If the original signal already fired as a deadline, it is dropped so the retry runs against the fresh deadline alone.
 
-If the original `abortSignal` is already aborted at the time of retry and the retry does **not** supply a `timeout`, `ai-retry` re-throws the original error rather than firing a misleading retry against the dead signal. `onError` still fires for observability; `onRetry` is skipped. Setting `timeout` is the explicit opt-in for retrying past an aborted signal.
+If the original `abortSignal` is already aborted at the time of retry and the retry does **not** supply a `timeout`, `ai-retry` re-throws the original error rather than firing a misleading retry against the dead signal. `onError` still fires for observability; `onRetry` is skipped. Setting `timeout` is the explicit opt-in for retrying past a request-level deadline. A cancellation (any other abort reason, such as a plain `controller.abort()`) is never retried past, `timeout` or not.
+
+An abort of the request is surfaced as it is: after a failover, the caller gets the `AbortError`, not a `RetryError` wrapping it, and a stream rejects with it rather than carrying it as an error part. So `streamText` reports it through `onAbort`, the same as without a retryable model.
 
 ```typescript
 import { createRetryableModel, timeout } from 'ai-retry/language-model';
@@ -867,11 +869,11 @@ In both tables below, "Outcome" is what a retryable model can do about that dead
 
 **Which deadline fires when under `generateText`**
 
-| Deadline             | Clock                           | Outcome  |
-| -------------------- | ------------------------------- | -------- |
-| `timeout.totalMs`    | the whole call, from call start | recovers |
-| `timeout.stepMs`     | one step, from step start       | recovers |
-| caller `abortSignal` | whenever the caller aborts      | recovers |
+| Deadline             | Clock                           | Outcome                                                                                                |
+| -------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `timeout.totalMs`    | the whole call, from call start | recovers                                                                                               |
+| `timeout.stepMs`     | one step, from step start       | recovers                                                                                               |
+| caller `abortSignal` | whenever the caller aborts      | recovers a deadline (`AbortSignal.timeout()`) when the retry sets its own `timeout`; a cancel does not |
 
 **Which deadline fires when under `streamText`**
 
@@ -905,13 +907,13 @@ A `streamText` deadline is still useful as a hard ceiling on the call. Recoverin
 
 Each takes the arguments its SDK entry point takes, plus a `retry` field. The model stays a normal argument and is swapped per attempt. The signature differs from the SDK's in two places, both covered under [Deadlines](#deadlines): `retryableStreamText` returns a promise where `streamText` does not, and the embedding and image functions take a `timeout` the SDK does not give them.
 
-| function                               | wraps           | import from               | model family |
-| -------------------------------------- | --------------- | ------------------------- | ------------ |
-| `experimental_retryableGenerateText`   | `generateText`  | `ai-retry/generate-text`  | language     |
-| `experimental_retryableStreamText`     | `streamText`    | `ai-retry/stream-text`    | language     |
-| `experimental_retryableEmbed`          | `embed`         | `ai-retry/embed`          | embedding    |
-| `experimental_retryableEmbedMany`      | `embedMany`     | `ai-retry/embed-many`     | embedding    |
-| `experimental_retryableGenerateImage`  | `generateImage` | `ai-retry/generate-image` | image        |
+| function                              | wraps           | import from               | model family |
+| ------------------------------------- | --------------- | ------------------------- | ------------ |
+| `experimental_retryableGenerateText`  | `generateText`  | `ai-retry/generate-text`  | language     |
+| `experimental_retryableStreamText`    | `streamText`    | `ai-retry/stream-text`    | language     |
+| `experimental_retryableEmbed`         | `embed`         | `ai-retry/embed`          | embedding    |
+| `experimental_retryableEmbedMany`     | `embedMany`     | `ai-retry/embed-many`     | embedding    |
+| `experimental_retryableGenerateImage` | `generateImage` | `ai-retry/generate-image` | image        |
 
 Everything else works as at the model layer: the same `Retry` fields (`maxAttempts`, `delay`, `backoffFactor`, `timeout`, `options`), the same `RetryError` when every attempt fails, and conditions with the same names imported from `ai-retry/<function>/conditions`. Only `result()` behaves differently, as described under [Conditions](#conditions-1).
 
@@ -1001,9 +1003,11 @@ const embeddings = await retryableEmbedMany({
   values: ['sunny day at the beach', 'rainy afternoon in the city'],
   retry: [
     /** A degenerate embedding is not an error, so nothing throws to catch. */
-    result((res) => res.embeddings.some((e) => e.every((v) => v === 0))).switch({
-      model: openai.textEmbedding('text-embedding-3-large'),
-    }),
+    result((res) => res.embeddings.some((e) => e.every((v) => v === 0))).switch(
+      {
+        model: openai.textEmbedding('text-embedding-3-large'),
+      },
+    ),
   ],
 });
 ```
@@ -1177,19 +1181,22 @@ const result = await retryableStreamText({
   timeout: { totalMs: 30_000, firstChunkMs: 5_000 },
   retry: [
     /** This attempt gets firstChunkMs 2s, and keeps totalMs 30s. */
-    timeout().switch({ model: fallbackModel, timeout: { firstChunkMs: 2_000 } }),
+    timeout().switch({
+      model: fallbackModel,
+      timeout: { firstChunkMs: 2_000 },
+    }),
   ],
 });
 ```
 
 **Which `timeout` shape a retry accepts depends on the entry point it is used with**, because each entry point can only measure some of the windows:
 
-| Retry lands in                            | `timeout` accepts                              |
-| ----------------------------------------- | ---------------------------------------------- |
-| `createRetryableModel`                    | `number`                                       |
-| `embed`, `embedMany`, `generateImage`     | `number \| { totalMs }`                        |
-| `generateText`                            | `number \| { totalMs, stepMs, toolMs, tools }` |
-| `streamText`                              | the above plus `{ firstChunkMs, chunkMs }`     |
+| Retry lands in                        | `timeout` accepts                              |
+| ------------------------------------- | ---------------------------------------------- |
+| `createRetryableModel`                | `number`                                       |
+| `embed`, `embedMany`, `generateImage` | `number \| { totalMs }`                        |
+| `generateText`                        | `number \| { totalMs, stepMs, toolMs, tools }` |
+| `streamText`                          | the above plus `{ firstChunkMs, chunkMs }`     |
 
 Naming a window the destination cannot measure is a **type error** rather than a deadline that never fires. So `{ chunkMs: 100 }` on a `generateText` retry is rejected, where the SDK's own `timeout` argument would accept it on the same call and then never read it (see [Timeouts](#timeouts)). Below a model the deadline can only be a plain number: a retryable model builds an `AbortSignal`, and a signal carries a wall-clock budget and nothing else.
 
@@ -1239,12 +1246,12 @@ const result = await retryableGenerateText({
 
 `attempts` always holds **every** attempt, the terminal one included, so `outcome` and `attempts.length` distinguish the four cases:
 
-| | `outcome` | `attempts.length` |
-| ---------------------- | --------- | ----------------- |
-| succeeded, no retry    | `success` | 1                 |
-| succeeded after a retry | `success` | > 1              |
-| failed, no retry       | `failure` | 1                 |
-| failed after retrying  | `failure` | > 1               |
+|                         | `outcome` | `attempts.length` |
+| ----------------------- | --------- | ----------------- |
+| succeeded, no retry     | `success` | 1                 |
+| succeeded after a retry | `success` | > 1               |
+| failed, no retry        | `failure` | 1                 |
+| failed after retrying   | `failure` | > 1               |
 
 The event also carries `model` (the one that settled it, or the one whose failure ended the loop), `result` on success and `error` on failure. Each entry in `attempts` says how it ended: `error`, `result` (judged, then retried) or `success`.
 
@@ -1254,12 +1261,12 @@ It stays silent in two cases, both the absence of a call to report rather than a
 
 **It mirrors the operation span**, so a metric built on the hook and one built on [telemetry](#telemetry) agree by construction:
 
-| span attribute           | `onSettled`         |
-| ------------------------ | ------------------- |
-| `ai_retry.outcome`       | `outcome`           |
-| `ai_retry.attempts`      | `attempts.length`   |
-| `ai_retry.model.final`   | `model`             |
-| `ai_retry.error`         | `error`             |
+| span attribute         | `onSettled`       |
+| ---------------------- | ----------------- |
+| `ai_retry.outcome`     | `outcome`         |
+| `ai_retry.attempts`    | `attempts.length` |
+| `ai_retry.model.final` | `model`           |
+| `ai_retry.error`       | `error`           |
 
 #### Your own stream callbacks belong to one attempt
 

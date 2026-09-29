@@ -1,7 +1,8 @@
 import { findRetryModel, type RetriesLike } from './find-retry-model.js';
 import type { GatewayResolver } from './resolve-model.js';
+import { isCallAbort } from './retry-signal.js';
 import { prepareRetryError } from './prepare-retry-error.js';
-import type { AnyModel, ResolvedModel, Retry } from '../types.js';
+import type { AnyModel, ResolvedModel, Retry, RetryTimeout } from '../types.js';
 import type { RetryContextLike } from './find-retry-model.js';
 
 /**
@@ -28,7 +29,9 @@ export type ErrorAttemptLike<MODEL, OPTIONS> = {
  * append `attempt` to its history, then either fail over to `retryModel` or, if
  * none matched, surface `finalError` (throw it, or enqueue it as a stream error
  * part). `finalError` is `undefined` when a retry matched, the original error on
- * the first attempt, and a `RetryError` wrapping all attempts thereafter.
+ * the first attempt, and a `RetryError` wrapping all attempts thereafter. The
+ * exception is the call being aborted: its abort error is the final error
+ * however many attempts came before, as it would be without retries.
  */
 export async function evaluateError<
   MODEL extends AnyModel,
@@ -56,6 +59,18 @@ export async function evaluateError<
    * resolver; defaults to the language-model resolver when omitted.
    */
   resolve?: GatewayResolver;
+  /**
+   * The call's inbound signal, not the attempt's. Only a cancel of the call
+   * itself makes an abort error the call's outcome; an attempt's own deadline
+   * firing is a failure like any other.
+   */
+  abortSignal?: AbortSignal;
+  /**
+   * The retry the failed attempt ran under, if any. Its own deadline replaces
+   * an inbound deadline, so a retry that times out on it has failed, and the
+   * call was not aborted.
+   */
+  currentRetry?: { timeout?: RetryTimeout };
 }): Promise<{
   retryModel: Retry<ResolvedModel<MODEL>, INPUT> | undefined;
   attempt: ErrorAttemptLike<MODEL, OPTIONS>;
@@ -85,7 +100,8 @@ export async function evaluateError<
 
   const finalError = retryModel
     ? undefined
-    : updatedAttempts.length > 1
+    : updatedAttempts.length > 1 &&
+        !isCallAbort(input.error, input.abortSignal, input.currentRetry)
       ? prepareRetryError(
           input.error,
           updatedAttempts as ReadonlyArray<{ type: string }>,

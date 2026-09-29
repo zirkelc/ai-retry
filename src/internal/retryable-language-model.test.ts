@@ -5181,3 +5181,943 @@ describe('streamText onSuccess and the commit boundary', () => {
     expect(onSuccessSpy).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('streamText abort passthrough', () => {
+  /**
+   * A model stream that emits `parts` and then fails the way a provider's
+   * fetch body does when the call is aborted: the stream rejects with the
+   * signal's reason, an `AbortError` for a cancel and a `TimeoutError` for a
+   * deadline. `afterParts` runs once the parts are enqueued, so a test can
+   * abort before any content reaches the consumer.
+   */
+  const abortableModel = (
+    parts: Array<LanguageModelStreamPart>,
+    afterParts?: () => void,
+  ) =>
+    MockLanguageModel.from({
+      doStream: async (opts: LanguageModelCallOptions) => ({
+        stream: new ReadableStream<LanguageModelStreamPart>({
+          start(controller) {
+            for (const part of parts) controller.enqueue(part);
+            const onAbort = () => controller.error(opts.abortSignal?.reason);
+            if (opts.abortSignal?.aborted) onAbort();
+            else
+              opts.abortSignal?.addEventListener('abort', onAbort, {
+                once: true,
+              });
+            afterParts?.();
+          },
+        }),
+      }),
+    });
+
+  const contentParts: Array<LanguageModelStreamPart> = [
+    Language.streamStart(),
+    { type: 'text-start', id: '0' },
+    { type: 'text-delta', id: '0', delta: 'Hello' },
+  ];
+
+  /**
+   * Read the full stream and abort the call once the first text delta
+   * arrives, i.e. after the attempt has committed.
+   */
+  const consumeAndAbortOnContent = async (
+    fullStream: AsyncIterable<{ type: string }>,
+    controller: AbortController,
+    reason?: unknown,
+  ) => {
+    const types: Array<string> = [];
+    for await (const part of fullStream) {
+      types.push(part.type);
+      if (part.type === 'text-delta') controller.abort(reason);
+    }
+    return types;
+  };
+
+  /**
+   * Read a model stream to its end, recording each part type in `types` and
+   * aborting the call once the first text delta arrives. Rejects when the
+   * stream does.
+   */
+  const readModelStream = async (
+    stream: ReadableStream<LanguageModelStreamPart>,
+    types: Array<string>,
+    controller?: AbortController,
+    reason?: unknown,
+  ) => {
+    for await (const part of stream) {
+      types.push(part.type);
+      if (part.type === 'text-delta') controller?.abort(reason);
+    }
+  };
+
+  /** The reason a deadline aborts with, as `AbortSignal.timeout()` does. */
+  const timeoutError = () =>
+    new DOMException('The operation timed out.', 'TimeoutError');
+
+  const callOptions = (
+    abortSignal?: AbortSignal,
+  ): LanguageModelCallOptions => ({
+    prompt: [{ role: 'user', content: [{ type: 'text', text: prompt }] }],
+    abortSignal,
+  });
+
+  /**
+   * A model that streams content and, once the call is aborted, sends an
+   * abort error part. `afterAbortPart` runs after that part is enqueued, so a
+   * test can make the model keep going. Like a real provider, the model stops
+   * once its stream is cancelled, which `isCancelled` reports.
+   */
+  const abortPartModel = (
+    afterAbortPart: (
+      controller: ReadableStreamDefaultController,
+      isCancelled: () => boolean,
+    ) => void,
+  ) =>
+    MockLanguageModel.from({
+      doStream: async (opts: LanguageModelCallOptions) => {
+        let cancelled = false;
+        return {
+          stream: new ReadableStream<LanguageModelStreamPart>({
+            cancel() {
+              cancelled = true;
+            },
+            start(controller) {
+              for (const part of contentParts) controller.enqueue(part);
+              opts.abortSignal?.addEventListener(
+                'abort',
+                () => {
+                  controller.enqueue({
+                    type: 'error',
+                    error: new DOMException(
+                      'The operation was aborted.',
+                      'AbortError',
+                    ),
+                  });
+                  afterAbortPart(controller, () => cancelled);
+                },
+                { once: true },
+              );
+            },
+          }),
+        };
+      },
+    });
+
+  describe('wrapped model stream', () => {
+    it('should reject with the abort error when the call aborts after content has streamed', async () => {
+      // Arrange
+      const controller = new AbortController();
+      const model = createRetryableModel({
+        model: abortableModel(contentParts),
+        retries: [MockLanguageModel.from({ doStream: mockStreamChunks })],
+      });
+      const types: Array<string> = [];
+
+      // Act
+      const { stream } = await model.doStream(callOptions(controller.signal));
+      const result = readModelStream(stream, types, controller);
+
+      // Assert
+      await expect(result).rejects.toMatchObject({ name: 'AbortError' });
+      expect(types.includes('error')).toBe(false);
+    });
+
+    it('should reject with the abort error when the call aborts before content and no retry matches', async () => {
+      // Arrange
+      const controller = new AbortController();
+      const model = createRetryableModel({
+        model: abortableModel([Language.streamStart()], () =>
+          controller.abort(),
+        ),
+        retries: [],
+      });
+      const types: Array<string> = [];
+
+      // Act
+      const { stream } = await model.doStream(callOptions(controller.signal));
+      const result = readModelStream(stream, types);
+
+      // Assert
+      await expect(result).rejects.toMatchObject({ name: 'AbortError' });
+      expect(types.includes('error')).toBe(false);
+    });
+
+    it('should reject with the abort error, not a RetryError, when the call aborts after a failover', async () => {
+      // Arrange
+      const controller = new AbortController();
+      const baseModel = MockLanguageModel.from({
+        doStream: async () => {
+          throw retryableError;
+        },
+      });
+      const fallbackModel = abortableModel([Language.streamStart()], () =>
+        controller.abort(),
+      );
+      const onFailure = vi.fn<OnFailure>();
+      const model = createRetryableModel({
+        model: baseModel,
+        retries: [fallbackModel],
+        onFailure,
+      });
+      const types: Array<string> = [];
+
+      // Act
+      const { stream } = await model.doStream(callOptions(controller.signal));
+      const result = readModelStream(stream, types);
+
+      // Assert
+      await expect(result).rejects.toMatchObject({ name: 'AbortError' });
+      expect(types.includes('error')).toBe(false);
+      expect(fallbackModel.doStream).toHaveBeenCalledTimes(1);
+      const [failure] = onFailure.mock.calls[0]!;
+      expect(failure.attempts.length).toBe(2);
+      expect(failure.error).toMatchObject({ name: 'AbortError' });
+    });
+
+    it('should reject with the abort error when the call aborts before content and the retry would die on the aborted signal', async () => {
+      // Arrange
+      const controller = new AbortController();
+      const fallbackModel = MockLanguageModel.from({
+        doStream: mockStreamChunks,
+      });
+      const model = createRetryableModel({
+        model: abortableModel([Language.streamStart()], () =>
+          controller.abort(),
+        ),
+        retries: [fallbackModel],
+      });
+      const types: Array<string> = [];
+
+      // Act
+      const { stream } = await model.doStream(callOptions(controller.signal));
+      const result = readModelStream(stream, types);
+
+      // Assert
+      await expect(result).rejects.toMatchObject({ name: 'AbortError' });
+      expect(types.includes('error')).toBe(false);
+      expect(fallbackModel.doStream).toHaveBeenCalledTimes(0);
+    });
+
+    it('should reject with the abort error when the model forwards an abort error part after content', async () => {
+      // Arrange
+      const controller = new AbortController();
+      const model = createRetryableModel({
+        model: abortPartModel((streamController) => streamController.close()),
+        retries: [],
+      });
+      const types: Array<string> = [];
+
+      // Act
+      const { stream } = await model.doStream(callOptions(controller.signal));
+      const result = readModelStream(stream, types, controller);
+
+      // Assert
+      await expect(result).rejects.toMatchObject({ name: 'AbortError' });
+      expect(types.includes('error')).toBe(false);
+    });
+
+    it('should reject with the abort error part at once, even when the model keeps streaming and then fails', async () => {
+      // Arrange
+      const controller = new AbortController();
+      const model = createRetryableModel({
+        model: abortPartModel((streamController, isCancelled) => {
+          setTimeout(() => {
+            if (isCancelled()) return;
+            streamController.enqueue({
+              type: 'text-delta',
+              id: '0',
+              delta: 'late',
+            });
+            streamController.error(new TypeError('terminated'));
+          }, 0);
+        }),
+        retries: [],
+      });
+      const types: Array<string> = [];
+
+      // Act
+      const { stream } = await model.doStream(callOptions(controller.signal));
+      const result = readModelStream(stream, types, controller);
+
+      // Assert
+      await expect(result).rejects.toMatchObject({ name: 'AbortError' });
+      expect(types.filter((type) => type === 'text-delta').length).toBe(1);
+      expect(types.includes('error')).toBe(false);
+    });
+
+    it('should reject with the timeout error when the call deadline fires after content has streamed', async () => {
+      // Arrange
+      const controller = new AbortController();
+      const model = createRetryableModel({
+        model: abortableModel(contentParts),
+        retries: [],
+      });
+      const types: Array<string> = [];
+
+      // Act
+      const { stream } = await model.doStream(callOptions(controller.signal));
+      const result = readModelStream(stream, types, controller, timeoutError());
+
+      // Assert
+      await expect(result).rejects.toMatchObject({ name: 'TimeoutError' });
+      expect(types.includes('error')).toBe(false);
+    });
+
+    it('should reject with the timeout error when the call deadline fires before content and no retry matches', async () => {
+      // Arrange
+      const controller = new AbortController();
+      const model = createRetryableModel({
+        model: abortableModel([Language.streamStart()], () =>
+          controller.abort(timeoutError()),
+        ),
+        retries: [],
+      });
+      const types: Array<string> = [];
+
+      // Act
+      const { stream } = await model.doStream(callOptions(controller.signal));
+      const result = readModelStream(stream, types);
+
+      // Assert
+      await expect(result).rejects.toMatchObject({ name: 'TimeoutError' });
+      expect(types.includes('error')).toBe(false);
+    });
+
+    it('should forward a non-abort error after content as an error part', async () => {
+      // Arrange
+      const baseModel = MockLanguageModel.from({
+        doStream: async () => ({
+          stream: new ReadableStream<LanguageModelStreamPart>({
+            start(controller) {
+              for (const part of contentParts) controller.enqueue(part);
+              controller.error(new Error('connection reset'));
+            },
+          }),
+        }),
+      });
+      const model = createRetryableModel({ model: baseModel, retries: [] });
+      const types: Array<string> = [];
+
+      // Act
+      const { stream } = await model.doStream(callOptions());
+      const result = readModelStream(stream, types);
+
+      // Assert
+      await expect(result).resolves.toBe(undefined);
+      expect(types.at(-1)).toBe('error');
+    });
+  });
+
+  it('should call only onAbort for the unwrapped model (baseline)', async () => {
+    // Arrange
+    const controller = new AbortController();
+    const onError = vi.fn();
+    const onAbort = vi.fn();
+
+    // Act
+    const result = streamText({
+      model: abortableModel(contentParts),
+      prompt,
+      abortSignal: controller.signal,
+      onError,
+      onAbort,
+    });
+    const types = await consumeAndAbortOnContent(result.fullStream, controller);
+
+    // Assert
+    expect(onAbort).toHaveBeenCalledTimes(1);
+    expect(onError).toHaveBeenCalledTimes(0);
+    expect(types.includes('error')).toBe(false);
+  });
+
+  it('should call only onAbort when the call aborts after content has streamed', async () => {
+    // Arrange
+    const controller = new AbortController();
+    const onError = vi.fn();
+    const onAbort = vi.fn();
+    const onFailure = vi.fn<OnFailure>();
+    const fallbackModel = MockLanguageModel.from({
+      doStream: mockStreamChunks,
+    });
+
+    // Act
+    const result = streamText({
+      model: createRetryableModel({
+        model: abortableModel(contentParts),
+        retries: [fallbackModel],
+        onFailure,
+      }),
+      prompt,
+      abortSignal: controller.signal,
+      onError,
+      onAbort,
+    });
+    const types = await consumeAndAbortOnContent(result.fullStream, controller);
+
+    // Assert
+    expect(onAbort).toHaveBeenCalledTimes(1);
+    expect(onError).toHaveBeenCalledTimes(0);
+    expect(types.includes('error')).toBe(false);
+    expect(fallbackModel.doStream).toHaveBeenCalledTimes(0);
+  });
+
+  it('should call only onAbort when the call aborts before content and no retry matches', async () => {
+    // Arrange
+    const controller = new AbortController();
+    const onError = vi.fn();
+    const onAbort = vi.fn();
+    const onFailure = vi.fn<OnFailure>();
+
+    // Act
+    const result = streamText({
+      model: createRetryableModel({
+        model: abortableModel([Language.streamStart()], () =>
+          controller.abort(),
+        ),
+        retries: [],
+        onFailure,
+      }),
+      prompt,
+      abortSignal: controller.signal,
+      onError,
+      onAbort,
+    });
+    const types = await Iterables.toArray(result.fullStream);
+
+    // Assert
+    expect(onAbort).toHaveBeenCalledTimes(1);
+    expect(onError).toHaveBeenCalledTimes(0);
+    expect(types.some((part) => part.type === 'error')).toBe(false);
+    expect(onFailure).toHaveBeenCalledTimes(1);
+  });
+
+  it('should call only onAbort when the call aborts before content and the retry would die on the aborted signal', async () => {
+    // Arrange
+    const controller = new AbortController();
+    const onError = vi.fn();
+    const onAbort = vi.fn();
+    const fallbackModel = MockLanguageModel.from({
+      doStream: mockStreamChunks,
+    });
+
+    // Act
+    const result = streamText({
+      model: createRetryableModel({
+        model: abortableModel([Language.streamStart()], () =>
+          controller.abort(),
+        ),
+        retries: [fallbackModel],
+      }),
+      prompt,
+      abortSignal: controller.signal,
+      onError,
+      onAbort,
+    });
+    const types = await Iterables.toArray(result.fullStream);
+
+    // Assert
+    expect(onAbort).toHaveBeenCalledTimes(1);
+    expect(onError).toHaveBeenCalledTimes(0);
+    expect(types.some((part) => part.type === 'error')).toBe(false);
+    expect(fallbackModel.doStream).toHaveBeenCalledTimes(0);
+  });
+
+  it('should call only onAbort when the model forwards an abort error part after content', async () => {
+    // Arrange
+    const controller = new AbortController();
+    const onError = vi.fn();
+    const onAbort = vi.fn();
+    const abortError = new DOMException(
+      'The operation was aborted.',
+      'AbortError',
+    );
+    const baseModel = MockLanguageModel.from({
+      doStream: async (opts: LanguageModelCallOptions) => ({
+        stream: new ReadableStream<LanguageModelStreamPart>({
+          start(streamController) {
+            for (const part of contentParts) streamController.enqueue(part);
+            opts.abortSignal?.addEventListener(
+              'abort',
+              () => {
+                streamController.enqueue({ type: 'error', error: abortError });
+                streamController.close();
+              },
+              { once: true },
+            );
+          },
+        }),
+      }),
+    });
+
+    // Act
+    const result = streamText({
+      model: createRetryableModel({ model: baseModel, retries: [] }),
+      prompt,
+      abortSignal: controller.signal,
+      onError,
+      onAbort,
+    });
+    const types = await consumeAndAbortOnContent(result.fullStream, controller);
+
+    // Assert
+    expect(onAbort).toHaveBeenCalledTimes(1);
+    expect(onError).toHaveBeenCalledTimes(0);
+    expect(types.includes('error')).toBe(false);
+  });
+
+  it('should still call onError for a non-abort error after content', async () => {
+    // Arrange
+    const onError = vi.fn();
+    const onAbort = vi.fn();
+    const baseModel = MockLanguageModel.from({
+      doStream: async () => ({
+        stream: new ReadableStream<LanguageModelStreamPart>({
+          start(controller) {
+            for (const part of contentParts) controller.enqueue(part);
+            controller.error(new Error('connection reset'));
+          },
+        }),
+      }),
+    });
+
+    // Act
+    const result = streamText({
+      model: createRetryableModel({ model: baseModel, retries: [] }),
+      prompt,
+      onError,
+      onAbort,
+    });
+    const types = await Iterables.toArray(result.fullStream);
+
+    // Assert
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onAbort).toHaveBeenCalledTimes(0);
+    expect(types.some((part) => part.type === 'error')).toBe(true);
+  });
+
+  it('should call only onAbort when the call deadline fires after content has streamed', async () => {
+    // Arrange
+    const controller = new AbortController();
+    const onError = vi.fn();
+    const onAbort = vi.fn();
+
+    // Act
+    const result = streamText({
+      model: createRetryableModel({
+        model: abortableModel(contentParts),
+        retries: [],
+      }),
+      prompt,
+      abortSignal: controller.signal,
+      onError,
+      onAbort,
+    });
+    const types = await consumeAndAbortOnContent(
+      result.fullStream,
+      controller,
+      timeoutError(),
+    );
+
+    // Assert
+    expect(onAbort).toHaveBeenCalledTimes(1);
+    expect(onError).toHaveBeenCalledTimes(0);
+    expect(types.includes('error')).toBe(false);
+  });
+
+  it('should call only onAbort when a streamText timeout fires after content has streamed', async () => {
+    // Arrange: the model streams content and then stalls until the deadline
+    // aborts it.
+    const onError = vi.fn();
+    const onAbort = vi.fn();
+
+    // Act
+    const result = streamText({
+      model: createRetryableModel({
+        model: abortableModel(contentParts),
+        retries: [],
+      }),
+      prompt,
+      timeout: { totalMs: 50 },
+      onError,
+      onAbort,
+    });
+    const types = await Iterables.toArray(result.fullStream);
+
+    // Assert
+    expect(onAbort).toHaveBeenCalledTimes(1);
+    expect(onError).toHaveBeenCalledTimes(0);
+    expect(types.some((part) => part.type === 'error')).toBe(false);
+  });
+
+  it('should still call onError for an abort error while the call signal is not aborted', async () => {
+    // Arrange
+    const onError = vi.fn();
+    const onAbort = vi.fn();
+    const baseModel = MockLanguageModel.from({
+      doStream: async () => ({
+        stream: new ReadableStream<LanguageModelStreamPart>({
+          start(controller) {
+            for (const part of contentParts) controller.enqueue(part);
+            controller.error(
+              new DOMException('The operation timed out.', 'TimeoutError'),
+            );
+          },
+        }),
+      }),
+    });
+
+    // Act
+    const result = streamText({
+      model: createRetryableModel({ model: baseModel, retries: [] }),
+      prompt,
+      onError,
+      onAbort,
+    });
+    const types = await Iterables.toArray(result.fullStream);
+
+    // Assert
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onAbort).toHaveBeenCalledTimes(0);
+    expect(types.some((part) => part.type === 'error')).toBe(true);
+  });
+});
+
+describe('aborts and retries', () => {
+  const abortError = () =>
+    new DOMException('The operation was aborted.', 'AbortError');
+  const timeoutError = () =>
+    new DOMException('The operation timed out.', 'TimeoutError');
+
+  const withSignal = (abortSignal: AbortSignal) => ({
+    ...MockLanguageModel.callOptions(),
+    abortSignal,
+  });
+
+  describe('final error', () => {
+    it('should throw the abort error, not a RetryError, when the call is cancelled after a failover', async () => {
+      // Arrange
+      const controller = new AbortController();
+      const fallbackModel = MockLanguageModel.from({
+        doGenerate: async () => {
+          controller.abort();
+          throw abortError();
+        },
+      });
+      const model = createRetryableModel({
+        model: MockLanguageModel.from(retryableError),
+        retries: [fallbackModel],
+      });
+
+      // Act
+      const result = model.doGenerate(withSignal(controller.signal));
+
+      // Assert
+      await expect(result).rejects.toMatchObject({ name: 'AbortError' });
+      expect(fallbackModel.doGenerate).toHaveBeenCalledTimes(1);
+    });
+
+    it('should reject doStream with the abort error, not a RetryError, when the call is cancelled after a failover', async () => {
+      // Arrange
+      const controller = new AbortController();
+      const fallbackModel = MockLanguageModel.from({
+        doStream: async () => {
+          controller.abort();
+          throw abortError();
+        },
+      });
+      const model = createRetryableModel({
+        model: MockLanguageModel.from({
+          doStream: async () => {
+            throw retryableError;
+          },
+        }),
+        retries: [fallbackModel],
+      });
+
+      // Act
+      const result = model.doStream(withSignal(controller.signal));
+
+      // Assert
+      await expect(result).rejects.toMatchObject({ name: 'AbortError' });
+      expect(fallbackModel.doStream).toHaveBeenCalledTimes(1);
+    });
+
+    it('should still throw a RetryError when a retry times out on its own deadline', async () => {
+      // Arrange: the call itself was never aborted, so the timeout is a
+      // failure of the retry like any other.
+      const controller = new AbortController();
+      const model = createRetryableModel({
+        model: MockLanguageModel.from(retryableError),
+        retries: [
+          MockLanguageModel.from({
+            doGenerate: async () => {
+              throw timeoutError();
+            },
+          }),
+        ],
+      });
+
+      // Act
+      const result = model.doGenerate(withSignal(controller.signal));
+
+      // Assert
+      await expect(result).rejects.toThrow(RetryError);
+    });
+  });
+
+  describe('retry against a cancelled call', () => {
+    it('should not retry after a user cancel, even when the retry has a timeout', async () => {
+      // Arrange
+      const controller = new AbortController();
+      const fallbackModel = MockLanguageModel.from(mockResultText);
+      const onRetry = vi.fn<OnRetry>();
+      const model = createRetryableModel({
+        model: MockLanguageModel.from({
+          doGenerate: async () => {
+            controller.abort();
+            throw abortError();
+          },
+        }),
+        retries: [{ model: fallbackModel, timeout: 30_000 }],
+        onRetry,
+      });
+
+      // Act
+      const result = model.doGenerate(withSignal(controller.signal));
+
+      // Assert
+      await expect(result).rejects.toMatchObject({ name: 'AbortError' });
+      expect(fallbackModel.doGenerate).toHaveBeenCalledTimes(0);
+      expect(onRetry).toHaveBeenCalledTimes(0);
+    });
+
+    it('should still retry after the call timed out when the retry has a timeout', async () => {
+      // Arrange
+      const controller = new AbortController();
+      const fallbackModel = MockLanguageModel.from(mockResultText);
+      const model = createRetryableModel({
+        model: MockLanguageModel.from({
+          doGenerate: async () => {
+            const error = timeoutError();
+            controller.abort(error);
+            throw error;
+          },
+        }),
+        retries: [{ model: fallbackModel, timeout: 30_000 }],
+      });
+
+      // Act
+      const result = await model.doGenerate(withSignal(controller.signal));
+
+      // Assert
+      expect(result.content).toEqual(mockResult.content);
+      expect(fallbackModel.doGenerate).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('retry timing out on its own deadline', () => {
+    it('should throw a RetryError when the retry times out on its own deadline after the call deadline fired', async () => {
+      // Arrange
+      const controller = new AbortController();
+      const model = createRetryableModel({
+        model: MockLanguageModel.from({
+          doGenerate: async () => {
+            const error = timeoutError();
+            controller.abort(error);
+            throw error;
+          },
+        }),
+        retries: [
+          {
+            model: MockLanguageModel.from({
+              doGenerate: async () => {
+                throw timeoutError();
+              },
+            }),
+            timeout: 30_000,
+          },
+        ],
+      });
+
+      // Act
+      const result = model.doGenerate(withSignal(controller.signal));
+
+      // Assert
+      await expect(result).rejects.toThrow(RetryError);
+    });
+
+    it('should forward an error part when a stream retry times out on its own deadline after the call deadline fired', async () => {
+      // Arrange
+      const controller = new AbortController();
+      const model = createRetryableModel({
+        model: MockLanguageModel.from({
+          doStream: async () => {
+            const error = timeoutError();
+            controller.abort(error);
+            throw error;
+          },
+        }),
+        retries: [
+          {
+            model: MockLanguageModel.from({
+              doStream: async () => ({
+                stream: new ReadableStream<LanguageModelStreamPart>({
+                  start(streamController) {
+                    streamController.enqueue(Language.streamStart());
+                    streamController.error(timeoutError());
+                  },
+                }),
+              }),
+            }),
+            timeout: 30_000,
+          },
+        ],
+      });
+
+      // Act
+      const { stream } = await model.doStream(withSignal(controller.signal));
+      const parts = await Streams.toArray(stream);
+
+      // Assert
+      const errorPart = parts.find((part) => part.type === 'error');
+      expect(RetryError.isInstance(errorPart?.error)).toBe(true);
+    });
+  });
+
+  describe('result retry against a cancelled call', () => {
+    it('should return the result instead of retrying when the call is already cancelled', async () => {
+      // Arrange
+      const controller = new AbortController();
+      const fallbackModel = MockLanguageModel.from(mockResultText);
+      const model = createRetryableModel({
+        model: MockLanguageModel.from({
+          doGenerate: async () => {
+            controller.abort();
+            return contentFilterResult;
+          },
+        }),
+        retries: [
+          (context) =>
+            isResultAttempt(context.current)
+              ? { model: fallbackModel, delay: 1_000 }
+              : undefined,
+        ],
+      });
+
+      // Act
+      const result = await model.doGenerate(withSignal(controller.signal));
+
+      // Assert
+      expect(result.finishReason).toEqual(contentFilterResult.finishReason);
+      expect(fallbackModel.doGenerate).toHaveBeenCalledTimes(0);
+    });
+
+    it('should reject without a phantom attempt when the call is cancelled during the delay before a finish retry', async () => {
+      // Arrange
+      const controller = new AbortController();
+      const fallbackModel = MockLanguageModel.from({
+        doStream: mockStreamChunks,
+      });
+      const onError = vi.fn<OnError>();
+      const model = createRetryableModel({
+        model: MockLanguageModel.from({ doStream: contentFilterStreamChunks }),
+        retries: [
+          (context) =>
+            isResultAttempt(context.current)
+              ? { model: fallbackModel, delay: 5_000 }
+              : undefined,
+        ],
+        onError,
+      });
+      setTimeout(() => controller.abort(), 10);
+
+      // Act
+      const { stream } = await model.doStream(withSignal(controller.signal));
+      const result = Streams.toArray(stream);
+
+      // Assert
+      await expect(result).rejects.toMatchObject({ name: 'AbortError' });
+      expect(onError.mock.calls.length).toBe(0);
+      expect(fallbackModel.doStream).toHaveBeenCalledTimes(0);
+    });
+  });
+
+  describe('backoff delay', () => {
+    it('should wait out the delay when the call timed out and the retry has its own deadline', async () => {
+      // Arrange
+      const controller = new AbortController();
+      const fallbackModel = MockLanguageModel.from(mockResultText);
+      const model = createRetryableModel({
+        model: MockLanguageModel.from({
+          doGenerate: async () => {
+            const error = timeoutError();
+            controller.abort(error);
+            throw error;
+          },
+        }),
+        retries: [{ model: fallbackModel, timeout: 30_000, delay: 20 }],
+      });
+
+      // Act
+      const result = await model.doGenerate(withSignal(controller.signal));
+
+      // Assert
+      expect(result.content).toEqual(mockResult.content);
+      expect(fallbackModel.doGenerate).toHaveBeenCalledTimes(1);
+    });
+
+    it('should wait out the delay before a stream retry when the call timed out and the retry has its own deadline', async () => {
+      // Arrange
+      const controller = new AbortController();
+      const fallbackModel = MockLanguageModel.from({
+        doStream: mockStreamChunks,
+      });
+      const model = createRetryableModel({
+        model: MockLanguageModel.from({
+          doStream: async () => ({
+            stream: new ReadableStream<LanguageModelStreamPart>({
+              start(streamController) {
+                streamController.enqueue(Language.streamStart());
+                const error = timeoutError();
+                controller.abort(error);
+                streamController.error(error);
+              },
+            }),
+          }),
+        }),
+        retries: [{ model: fallbackModel, timeout: 30_000, delay: 20 }],
+      });
+
+      // Act
+      const { stream } = await model.doStream(withSignal(controller.signal));
+      const parts = await Streams.toArray(stream);
+
+      // Assert
+      expect(partsToText(parts)).toBe('Hello, world!');
+      expect(fallbackModel.doStream).toHaveBeenCalledTimes(1);
+    });
+
+    it('should end the delay when the user cancels during it', async () => {
+      // Arrange
+      const controller = new AbortController();
+      const fallbackModel = MockLanguageModel.from(mockResultText);
+      const model = createRetryableModel({
+        model: MockLanguageModel.from({
+          doGenerate: async () => {
+            setTimeout(() => controller.abort(), 10);
+            throw retryableError;
+          },
+        }),
+        retries: [{ model: fallbackModel, timeout: 30_000, delay: 5_000 }],
+      });
+
+      // Act
+      const result = model.doGenerate(withSignal(controller.signal));
+
+      // Assert
+      await expect(result).rejects.toMatchObject({ name: 'AbortError' });
+      expect(fallbackModel.doGenerate).toHaveBeenCalledTimes(0);
+    });
+  });
+});

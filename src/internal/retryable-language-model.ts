@@ -1,4 +1,3 @@
-import { delay } from '@ai-sdk/provider-utils';
 import { BaseRetryableModel } from './base-retryable-model.js';
 import { evaluateError } from './evaluate-error.js';
 import { findRetryModel } from './find-retry-model.js';
@@ -6,7 +5,11 @@ import { resolveLanguageModel } from './resolve-model.js';
 import { mergeLanguageModelCallOptions } from './merge-retry-call-options.js';
 import { createRetryTelemetry, type RetryTelemetry } from './telemetry.js';
 import { resolveBackoffDelay } from './resolve-backoff-delay.js';
-import { retryDiesOnAbortedSignal } from './retry-dies-on-aborted-signal.js';
+import {
+  isCallAbort,
+  isRetryCancelled,
+  waitBeforeRetry,
+} from './retry-signal.js';
 import { totalTimeoutMs } from './retry-timeout.js';
 import type {
   LanguageModel,
@@ -64,6 +67,11 @@ export class RetryableLanguageModel
      * the caller once the consumption outcome is known. Undefined otherwise.
      */
     pendingAttempt?: number;
+    /**
+     * For stream results: the retry the returned stream runs under, if it
+     * came from a failover, so the caller judges the stream against it.
+     */
+    currentRetry?: Retry<LanguageModel>;
   }> {
     /**
      * Track all attempts.
@@ -150,7 +158,16 @@ export class RetryableLanguageModel
             retryCallOptions,
           );
 
-          if (retryModel) {
+          /**
+           * If the inbound abort signal is already aborted and the chosen
+           * retry does not supply a fresh deadline, the retry would die
+           * instantly. Unlike the error path there is no error to rethrow:
+           * the result stands, as a finish part does on the stream path.
+           */
+          if (
+            retryModel &&
+            !isRetryCancelled(input.callOptions.abortSignal, retryModel)
+          ) {
             /**
              * Only record the attempt once it is known to be retried. A
              * result that ends the loop is the successful outcome, not a
@@ -167,11 +184,11 @@ export class RetryableLanguageModel
               delayMs: calculatedDelay,
             });
 
-            if (calculatedDelay !== undefined) {
-              await delay(calculatedDelay, {
-                abortSignal: retryCallOptions.abortSignal,
-              });
-            }
+            await waitBeforeRetry(
+              calculatedDelay,
+              input.callOptions.abortSignal,
+              retryModel,
+            );
 
             this.currentModel = retryModel.model;
             currentRetry = retryModel;
@@ -201,12 +218,15 @@ export class RetryableLanguageModel
           attempts,
           callOptions: retryCallOptions,
           pendingAttempt: attemptNumber,
+          currentRetry,
         };
       } catch (error) {
         const { retryModel, attempt, finalError } = await this.handleError(
           error,
           attempts,
           retryCallOptions,
+          input.callOptions.abortSignal,
+          currentRetry,
         );
 
         attempts.push(attempt);
@@ -226,9 +246,7 @@ export class RetryableLanguageModel
          * instantly with the same abort. Rethrow rather than fire a
          * misleading retry against a dead signal.
          */
-        if (
-          retryDiesOnAbortedSignal(input.callOptions.abortSignal, retryModel)
-        ) {
+        if (isRetryCancelled(input.callOptions.abortSignal, retryModel)) {
           input.recorder?.endAttempt({
             attempt: attemptNumber,
             outcome: 'failure',
@@ -246,11 +264,11 @@ export class RetryableLanguageModel
           delayMs: calculatedDelay,
         });
 
-        if (calculatedDelay !== undefined) {
-          await delay(calculatedDelay, {
-            abortSignal: retryCallOptions.abortSignal,
-          });
-        }
+        await waitBeforeRetry(
+          calculatedDelay,
+          input.callOptions.abortSignal,
+          retryModel,
+        );
 
         this.currentModel = retryModel.model;
         currentRetry = retryModel;
@@ -300,14 +318,18 @@ export class RetryableLanguageModel
    * matched, so callers can decide how to surface it: throwing for the
    * generate path, or enqueuing a `{ type: 'error' }` stream part for
    * the stream path. If multiple attempts were made, the original error
-   * is wrapped in a `RetryError`.
+   * is wrapped in a `RetryError`, unless the call was aborted.
    */
   private handleError(
     error: unknown,
     attempts: ReadonlyArray<ModelRetryAttempt<LanguageModel>>,
     callOptions: LanguageModelCallOptions,
+    inboundSignal: AbortSignal | undefined,
+    currentRetry: Retry<LanguageModel> | undefined,
   ) {
     return evaluateError({
+      abortSignal: inboundSignal,
+      currentRetry,
       error,
       model: this.currentModel,
       options: callOptions,
@@ -445,6 +467,11 @@ export class RetryableLanguageModel
      * once its outcome (success, retry, or failure) is known.
      */
     let pendingAttempt: number | undefined;
+    /**
+     * The retry the stream being consumed runs under, for computing its call
+     * options and judging its failures.
+     */
+    let currentRetry: Retry<LanguageModel> | undefined;
     try {
       const initial = await this.withRetry({
         fn: async (retryCallOptions) => {
@@ -458,6 +485,7 @@ export class RetryableLanguageModel
       attempts = initial.attempts;
       finalCallOptions = initial.callOptions;
       pendingAttempt = initial.pendingAttempt;
+      currentRetry = initial.currentRetry;
     } catch (error) {
       /**
        * Every pre-stream attempt failed; record the operation failure before
@@ -471,11 +499,6 @@ export class RetryableLanguageModel
       });
       throw error;
     }
-
-    /**
-     * Track the current retry model for computing call options in the stream handler
-     */
-    let currentRetry: Retry<LanguageModel> | undefined;
 
     /**
      * Wrap the original stream to handle retries if an error occurs during
@@ -500,6 +523,27 @@ export class RetryableLanguageModel
 
         /** Set when the operation ends in failure, for the operation span. */
         let operationError: unknown;
+
+        /**
+         * Hand an unrecovered failure to the consumer. The call being aborted
+         * rejects the stream, as the unwrapped model's stream would. Any other
+         * failure is enqueued as an error part.
+         *
+         * `streamText` treats the two ways a model stream can fail
+         * differently. A rejection with an abort error while its signal is
+         * aborted runs its abort handling alone, and any other rejection
+         * bypasses `onError`. An `error` part always reaches `onError`, so an
+         * abort surfaced as a part reports a stop or a deadline as a failure
+         * as well.
+         */
+        const surfaceError = (error: unknown) => {
+          if (isCallAbort(error, callOptions.abortSignal, currentRetry)) {
+            controller.error(error);
+            return;
+          }
+          controller.enqueue({ type: 'error', error });
+          controller.close();
+        };
         try {
           while (true) {
             /**
@@ -547,6 +591,21 @@ export class RetryableLanguageModel
                 if (value.type === 'error') {
                   if (!isStreaming) {
                     // If no data has been streamed yet, we can retry
+                    throw value.error;
+                  }
+                  /**
+                   * An abort is not forwarded as a part, for the same reason
+                   * a surfaced one is not: it ends the attempt like a
+                   * rejection does. Nothing the model sends after it, a later
+                   * rejection included, may replace the abort.
+                   */
+                  if (
+                    isCallAbort(
+                      value.error,
+                      callOptions.abortSignal,
+                      currentRetry,
+                    )
+                  ) {
                     throw value.error;
                   }
                   /**
@@ -624,10 +683,7 @@ export class RetryableLanguageModel
                      * the error path there is no underlying error to rethrow.
                      */
                     if (
-                      !retryDiesOnAbortedSignal(
-                        callOptions.abortSignal,
-                        retryModel,
-                      )
+                      !isRetryCancelled(callOptions.abortSignal, retryModel)
                     ) {
                       /**
                        * Only record the attempt once it is known to be
@@ -684,11 +740,11 @@ export class RetryableLanguageModel
                   });
                 }
 
-                if (calculatedDelay !== undefined) {
-                  await delay(calculatedDelay, {
-                    abortSignal: callOptions.abortSignal,
-                  });
-                }
+                await waitBeforeRetry(
+                  calculatedDelay,
+                  callOptions.abortSignal,
+                  retryFromFinish,
+                );
 
                 this.currentModel = retryFromFinish.model;
                 currentRetry = retryFromFinish;
@@ -715,6 +771,7 @@ export class RetryableLanguageModel
                 attempts = retriedResult.attempts;
                 finalCallOptions = retriedResult.callOptions;
                 pendingAttempt = retriedResult.pendingAttempt;
+                currentRetry = retriedResult.currentRetry;
 
                 continue;
               }
@@ -739,12 +796,24 @@ export class RetryableLanguageModel
               break;
             } catch (error) {
               /**
+               * A failure while acting on a finish retry, in its backoff wait
+               * or in a re-stream whose own retries ran out, is not this
+               * stream failing. The re-stream has already evaluated and
+               * recorded its attempts, so evaluating it again here would add
+               * an attempt that never ran. Leave it to the outer handler,
+               * which surfaces it.
+               */
+              if (retryFromFinish !== undefined) {
+                throw error;
+              }
+
+              /**
                * Content has already been forwarded downstream, so a retry
-               * would re-stream and duplicate output. Surface the error as a
-               * stream part and stop — the same outcome as an `error` part
-               * arriving after content (which the read loop forwards rather
-               * than retrying). Retry stays possible only before the commit
-               * point; past it the caller owns the partial stream.
+               * would re-stream and duplicate output. Surface the error and
+               * stop, the same outcome as an `error` part arriving after
+               * content (which the read loop forwards rather than retrying).
+               * Retry stays possible only before the commit point; past it the
+               * caller owns the partial stream.
                */
               if (isStreaming) {
                 if (pendingAttempt !== undefined) {
@@ -755,8 +824,14 @@ export class RetryableLanguageModel
                   });
                 }
                 operationError = error;
-                controller.enqueue({ type: 'error', error });
-                controller.close();
+                surfaceError(error);
+                /**
+                 * Stop the model, which may still be sending: an error that
+                 * came as a part leaves its stream open. Cancelling a stream
+                 * that already rejected fails with that rejection, which is
+                 * already surfaced.
+                 */
+                await reader?.cancel(error).catch(() => {});
                 return;
               }
 
@@ -772,7 +847,13 @@ export class RetryableLanguageModel
                * Check if the error from the stream can be retried.
                */
               const { retryModel, attempt, finalError } =
-                await this.handleError(error, attempts, retryCallOptions);
+                await this.handleError(
+                  error,
+                  attempts,
+                  retryCallOptions,
+                  callOptions.abortSignal,
+                  currentRetry,
+                );
 
               /**
                * Save the attempt
@@ -780,10 +861,9 @@ export class RetryableLanguageModel
               attempts.push(attempt);
 
               /**
-               * No retry matched. Surface the error as a stream part so
-               * `streamText`'s `onError` fires for the consumer. Throwing
-               * here would escape `start()` and become a stream rejection,
-               * which silently bypasses `onError`.
+               * No retry matched. Surface the error rather than throw it: a
+               * throw would escape `start()` as a stream rejection, which
+               * bypasses `streamText`'s `onError` for anything but an abort.
                */
               if (!retryModel) {
                 if (pendingAttempt !== undefined) {
@@ -795,8 +875,7 @@ export class RetryableLanguageModel
                 }
                 operationError = finalError;
                 this.emitFailure(attempts, finalError);
-                controller.enqueue({ type: 'error', error: finalError });
-                controller.close();
+                surfaceError(finalError);
                 return;
               }
 
@@ -806,9 +885,7 @@ export class RetryableLanguageModel
                * instantly with the same abort. Surface the error rather than
                * fire a misleading retry against a dead signal.
                */
-              if (
-                retryDiesOnAbortedSignal(callOptions.abortSignal, retryModel)
-              ) {
+              if (isRetryCancelled(callOptions.abortSignal, retryModel)) {
                 if (pendingAttempt !== undefined) {
                   recorder?.endAttempt({
                     attempt: pendingAttempt,
@@ -818,8 +895,7 @@ export class RetryableLanguageModel
                 }
                 operationError = error;
                 this.emitFailure(attempts, error);
-                controller.enqueue({ type: 'error', error });
-                controller.close();
+                surfaceError(error);
                 return;
               }
 
@@ -834,11 +910,11 @@ export class RetryableLanguageModel
                 });
               }
 
-              if (calculatedDelay !== undefined) {
-                await delay(calculatedDelay, {
-                  abortSignal: retryCallOptions.abortSignal,
-                });
-              }
+              await waitBeforeRetry(
+                calculatedDelay,
+                callOptions.abortSignal,
+                retryModel,
+              );
 
               this.currentModel = retryModel.model;
               currentRetry = retryModel;
@@ -870,6 +946,7 @@ export class RetryableLanguageModel
               attempts = retriedResult.attempts;
               finalCallOptions = retriedResult.callOptions;
               pendingAttempt = retriedResult.pendingAttempt;
+              currentRetry = retriedResult.currentRetry;
             } finally {
               reader?.releaseLock();
             }
@@ -908,13 +985,11 @@ export class RetryableLanguageModel
            * terminal branches — most notably a re-stream whose own retries
            * are exhausted. Letting it escape `start()` would reject the
            * stream, which bypasses the consumer's `onError` entirely, so it
-           * is surfaced as an error part like every other unrecovered
-           * failure.
+           * is surfaced like every other unrecovered failure.
            */
           operationError = error;
           this.emitFailure(attempts, error);
-          controller.enqueue({ type: 'error', error });
-          controller.close();
+          surfaceError(error);
         } finally {
           recorder?.endOperation({
             provider: this.currentModel.provider,

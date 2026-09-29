@@ -10,7 +10,7 @@ import type {
   ProviderOptions,
   Retry,
 } from '../types.js';
-import { isTimeoutError } from './guards.js';
+import { retryCancelSignal } from './retry-signal.js';
 import { totalTimeoutMs } from './retry-timeout.js';
 
 /**
@@ -49,13 +49,10 @@ function resolveProviderOptions<MODEL extends AnyModel>(
  * Resolve `abortSignal` for the upcoming attempt.
  *
  * If `currentRetry.timeout` names a total budget, a fresh
- * `AbortSignal.timeout(...)` is created for it. When the base signal is still
- * alive, the fresh deadline is composed with the base so user cancellation
- * still propagates mid-retry, but a base `TimeoutError` (`AbortSignal.timeout`
- * used as a wall-clock budget) is ignored so it cannot truncate the retry's own
- * deadline. When the base is already aborted with a `TimeoutError`, it is
- * dropped; with any other reason it propagates. Without a retry deadline, the
- * base is preserved unchanged.
+ * `AbortSignal.timeout(...)` is created for it and composed with what can
+ * still cancel the retry ({@link retryCancelSignal}), so user cancellation
+ * still propagates mid-retry while an inbound deadline cannot truncate the
+ * retry's own. Without a retry deadline, the base is preserved unchanged.
  *
  * A retry beneath a model states its deadline as a plain number, since a signal
  * is the only thing there is to enforce it with. The total is read through a
@@ -72,27 +69,16 @@ export function resolveAbortSignal<MODEL extends AnyModel>(
   }
 
   const fresh = AbortSignal.timeout(totalMs);
-  if (base === undefined) {
+  const cancel = retryCancelSignal(base, currentRetry);
+  if (cancel === undefined) {
     return fresh;
   }
 
-  if (base.aborted) {
-    return isTimeoutError(base.reason) ? fresh : base;
+  if (cancel.aborted) {
+    return cancel;
   }
 
-  const controller = new AbortController();
-  fresh.addEventListener('abort', () => controller.abort(fresh.reason), {
-    once: true,
-  });
-  base.addEventListener(
-    'abort',
-    () => {
-      if (isTimeoutError(base.reason)) return;
-      controller.abort(base.reason);
-    },
-    { once: true },
-  );
-  return controller.signal;
+  return AbortSignal.any([fresh, cancel]);
 }
 
 /**

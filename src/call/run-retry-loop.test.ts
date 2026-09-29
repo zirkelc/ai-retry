@@ -95,6 +95,30 @@ describe('fail-over', () => {
     await expect(result).rejects.toThrow(RetryError);
   });
 
+  it('should throw the abort, not a RetryError, when the caller cancels after a fail-over', async () => {
+    // Arrange
+    const controller = new AbortController();
+    const primary = MockLanguageModel.from(retryableError);
+    const fallback = MockLanguageModel.from({
+      doGenerate: async () => {
+        controller.abort();
+        throw new DOMException('The operation was aborted.', 'AbortError');
+      },
+    });
+
+    // Act
+    const result = retryableGenerateText({
+      model: primary,
+      prompt,
+      abortSignal: controller.signal,
+      retry: [fallback],
+    });
+
+    // Assert: the same error the caller gets from a cancel without retries.
+    await expect(result).rejects.toMatchObject({ name: 'AbortError' });
+    expect(fallback.doGenerate.mock.calls.length).toBe(1);
+  });
+
   it('should throw the original error when no retry matched', async () => {
     // Arrange
     const primary = MockLanguageModel.from(nonRetryableError);
