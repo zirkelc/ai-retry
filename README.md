@@ -735,14 +735,12 @@ const retryableModel = createRetryableModel({
 
 `onSuccess` and `onFailure` are counterparts: exactly one of them is invoked per request once its final outcome is known. `onFailure` fires when the error could not be recovered by a retry, whether because no retryable matched, all retries were exhausted, the retry itself failed, a stream failed after its content had started flowing, or the call was aborted. `context.error` is the error surfaced to the caller (a [`RetryError`](#all-retries-failed) wrapping every attempt error when more than one attempt was made, otherwise the original error; an aborted call surfaces its abort error as it is), and `context.current` is the final failed attempt. Neither callback fires when retries are disabled.
 
-##### Aborts
-
-`context.aborted` tells an abort apart from a failure: it is `true` when the caller cancelled the call or a deadline on the call itself fired, and `false` when the attempts failed. A deadline surfaces a `TimeoutError`, so the error's `name` tells the two kinds of abort apart. For alerting, skip the cancels:
+The `aborted` flag tells an abort apart from a failure: it is `true` when the caller cancelled the call or a deadline on the call itself fired, and `false` when the attempts failed. A deadline surfaces a `TimeoutError`, so the error's `name` tells the two kinds of abort apart. For alerting, skip the cancels:
 
 ```typescript
 onFailure: ({ aborted, error }) => {
-  if (aborted && (error as Error).name !== 'TimeoutError') return; // a user cancel
-  alert(error);
+  if (aborted && error.name !== 'TimeoutError') return; // a user cancel
+  console.error(error);
 },
 ```
 
