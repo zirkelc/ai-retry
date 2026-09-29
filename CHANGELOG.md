@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.5.0](https://github.com/zirkelc/ai-retry/compare/v2.4.1...v2.5.0) (2026-09-29)
+
+
+### Features
+
+* report every terminal failure to onFailure and flag aborts ([#82](https://github.com/zirkelc/ai-retry/issues/82)) ([ae6f207](https://github.com/zirkelc/ai-retry/commit/ae6f20788128f70d3b073088c1f7500e3496f7be))
+
 ## [2.4.1](https://github.com/zirkelc/ai-retry/compare/v2.4.0...v2.4.1) (2026-09-29)
 
 
