@@ -95,16 +95,26 @@ export async function waitBeforeRetry(
   if (delayMs === undefined) return;
 
   let signal = base;
-  let detach = () => {};
+  let removeListener = () => {};
   if (hasOwnDeadline(retry) && base !== undefined) {
+    /**
+     * The retry replaces an inbound deadline, so the wait cannot listen to the
+     * inbound signal directly: a deadline that already fired would end it at
+     * once. Its own signal follows only the aborts that still apply.
+     */
     const controller = new AbortController();
     const onAbort = () => {
       if (isRetryCancelled(base, retry)) controller.abort(base.reason);
     };
+    /** A signal aborted before the listener is added never fires it. */
     onAbort();
     base.addEventListener('abort', onAbort);
     signal = controller.signal;
-    detach = () => base.removeEventListener('abort', onAbort);
+    /**
+     * Without this, every wait leaves its listener, and the controller it
+     * holds, on the inbound signal until that signal aborts.
+     */
+    removeListener = () => base.removeEventListener('abort', onAbort);
   }
 
   try {
@@ -113,7 +123,7 @@ export async function waitBeforeRetry(
     const reason: unknown = signal?.reason;
     throw signal?.aborted && isSdkAbortError(reason) ? reason : error;
   } finally {
-    detach();
+    removeListener();
   }
 }
 
