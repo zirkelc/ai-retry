@@ -1,15 +1,12 @@
-import { BaseRetryableModel } from './base-retryable-model.js';
+import { isAbortError as isSdkAbortError } from '@ai-sdk/provider-utils';
+import { BaseRetryableModel, type RetryStop } from './base-retryable-model.js';
 import { evaluateError } from './evaluate-error.js';
 import { findRetryModel } from './find-retry-model.js';
 import { resolveLanguageModel } from './resolve-model.js';
 import { mergeLanguageModelCallOptions } from './merge-retry-call-options.js';
 import { createRetryTelemetry, type RetryTelemetry } from './telemetry.js';
 import { resolveBackoffDelay } from './resolve-backoff-delay.js';
-import {
-  isCallAbort,
-  isRetryCancelled,
-  waitBeforeRetry,
-} from './retry-signal.js';
+import { isCallAbort, isRetryCancelled } from './retry-signal.js';
 import { totalTimeoutMs } from './retry-timeout.js';
 import type {
   LanguageModel,
@@ -23,11 +20,7 @@ import type {
   ModelRetryContext,
   ModelRetryResultAttempt,
 } from '../types.js';
-import {
-  isErrorAttempt,
-  isGenerateResult,
-  isStreamContentPart,
-} from './guards.js';
+import { isGenerateResult, isStreamContentPart } from './guards.js';
 
 export class RetryableLanguageModel
   extends BaseRetryableModel<LanguageModel>
@@ -58,6 +51,8 @@ export class RetryableLanguageModel
     attempts?: Array<ModelRetryAttempt<LanguageModel>>;
     currentRetry?: Retry<LanguageModel>;
     recorder?: RetryTelemetry;
+    /** Filled in with why the loop stopped, when it throws. */
+    stop: RetryStop;
   }): Promise<{
     result: RESULT;
     attempts: Array<ModelRetryAttempt<LanguageModel>>;
@@ -137,11 +132,13 @@ export class RetryableLanguageModel
       });
 
       /**
-       * Set while waiting before a result retry. That wait sits inside the
-       * attempt's `try`, but a cancel during it is not the attempt failing:
-       * the attempt already ended as a retry.
+       * The retry a result asked for. Waiting for it happens after the `try`,
+       * which covers only the attempt: a cancel during the wait is not the
+       * attempt failing, the attempt already ended as a retry.
        */
-      let waitingBeforeRetry = false;
+      let resultRetry:
+        | { retry: Retry<LanguageModel>; delayMs?: number }
+        | undefined;
 
       try {
         /**
@@ -191,54 +188,31 @@ export class RetryableLanguageModel
               delayMs: calculatedDelay,
             });
 
-            waitingBeforeRetry = true;
-            await waitBeforeRetry(
-              calculatedDelay,
-              input.callOptions.abortSignal,
-              retryModel,
-            );
-            waitingBeforeRetry = false;
-
-            this.currentModel = retryModel.model;
-            currentRetry = retryModel;
-
-            /**
-             * Continue to the next iteration to retry
-             */
-            continue;
+            resultRetry = { retry: retryModel, delayMs: calculatedDelay };
+          } else {
+            input.recorder?.endAttempt({
+              attempt: attemptNumber,
+              outcome: 'success',
+              finishReason: result.finishReason.unified,
+            });
+            return { result, attempts, callOptions: retryCallOptions };
           }
-
-          input.recorder?.endAttempt({
-            attempt: attemptNumber,
-            outcome: 'success',
-            finishReason: result.finishReason.unified,
-          });
-          return { result, attempts, callOptions: retryCallOptions };
+        } else {
+          /**
+           * Stream results are not terminal here: the outcome depends on
+           * consumption (the stream may still error or hit a retryable finish
+           * before content flows). Leave the attempt span open and hand its
+           * number back so the stream wrapper can close it once known.
+           */
+          return {
+            result,
+            attempts,
+            callOptions: retryCallOptions,
+            pendingAttempt: attemptNumber,
+            currentRetry,
+          };
         }
-
-        /**
-         * Stream results are not terminal here: the outcome depends on
-         * consumption (the stream may still error or hit a retryable finish
-         * before content flows). Leave the attempt span open and hand its
-         * number back so the stream wrapper can close it once known.
-         */
-        return {
-          result,
-          attempts,
-          callOptions: retryCallOptions,
-          pendingAttempt: attemptNumber,
-          currentRetry,
-        };
       } catch (error) {
-        /**
-         * Evaluating it would record an attempt that never ran and run
-         * `onError` and the retry conditions against the cancel. Let it
-         * propagate to the caller, which reports the failure.
-         */
-        if (waitingBeforeRetry) {
-          throw error;
-        }
-
         const { retryModel, attempt, finalError } = await this.handleError(
           error,
           attempts,
@@ -250,6 +224,11 @@ export class RetryableLanguageModel
         attempts.push(attempt);
 
         if (!retryModel) {
+          input.stop.aborted = isCallAbort(
+            error,
+            input.callOptions.abortSignal,
+            currentRetry,
+          );
           input.recorder?.endAttempt({
             attempt: attemptNumber,
             outcome: 'failure',
@@ -262,9 +241,11 @@ export class RetryableLanguageModel
          * If the inbound abort signal is already aborted and the chosen
          * retry does not supply a fresh deadline, the retry would die
          * instantly with the same abort. Rethrow rather than fire a
-         * misleading retry against a dead signal.
+         * misleading retry against a dead signal. The loop stops because the
+         * call was aborted, whatever the attempt failed with.
          */
         if (isRetryCancelled(input.callOptions.abortSignal, retryModel)) {
+          input.stop.aborted = true;
           input.recorder?.endAttempt({
             attempt: attemptNumber,
             outcome: 'failure',
@@ -282,15 +263,29 @@ export class RetryableLanguageModel
           delayMs: calculatedDelay,
         });
 
-        await waitBeforeRetry(
+        await this.waitBeforeNextAttempt(
           calculatedDelay,
           input.callOptions.abortSignal,
           retryModel,
+          attempts,
+          input.stop,
         );
 
         this.currentModel = retryModel.model;
         currentRetry = retryModel;
+        continue;
       }
+
+      await this.waitBeforeNextAttempt(
+        resultRetry.delayMs,
+        input.callOptions.abortSignal,
+        resultRetry.retry,
+        attempts,
+        input.stop,
+      );
+
+      this.currentModel = resultRetry.retry.model;
+      currentRetry = resultRetry.retry;
     }
   }
 
@@ -358,35 +353,6 @@ export class RetryableLanguageModel
     });
   }
 
-  /**
-   * Fire the `onFailure` callback for a terminally failed operation. The
-   * final attempt (last entry of `attempts`) is surfaced as `current`.
-   *
-   * An operation can also end between attempts: cancelled during the wait
-   * before a result retry, the last attempt is the result that asked for the
-   * retry. The failure is then recorded against that attempt's model and
-   * options, as the error attempt `onFailure` reports.
-   */
-  private emitFailure(
-    attempts: Array<ModelRetryAttempt<LanguageModel>>,
-    error: unknown,
-    aborted: boolean,
-  ) {
-    if (!this.options.onFailure) return;
-    const last = attempts.at(-1);
-    if (!last) return;
-    const current = isErrorAttempt(last)
-      ? last
-      : {
-          type: 'error' as const,
-          error,
-          model: last.model,
-          options: last.options,
-        };
-    if (current !== last) attempts.push(current);
-    this.options.onFailure({ current, attempts, error, aborted });
-  }
-
   async doGenerate(
     callOptions: LanguageModelCallOptions,
   ): Promise<LanguageModelResult> {
@@ -424,6 +390,7 @@ export class RetryableLanguageModel
      */
     let result: LanguageModelResult;
     let finalCallOptions: LanguageModelCallOptions;
+    const stop: RetryStop = { aborted: false };
     try {
       const retried = await this.withRetry({
         fn: async (retryCallOptions) => {
@@ -432,16 +399,13 @@ export class RetryableLanguageModel
         callOptions: callOptions,
         attempts,
         recorder,
+        stop,
       });
       result = retried.result;
       finalCallOptions = retried.callOptions;
     } catch (error) {
       operationError = error;
-      this.emitFailure(
-        attempts,
-        error,
-        isCallAbort(error, callOptions.abortSignal),
-      );
+      this.emitFailure(attempts, error, stop);
       throw error;
     } finally {
       recorder?.endOperation({
@@ -509,6 +473,8 @@ export class RetryableLanguageModel
      * options and judging its failures.
      */
     let currentRetry: Retry<LanguageModel> | undefined;
+    /** Why the operation stopped, filled in wherever it stops. */
+    const stop: RetryStop = { aborted: false };
     try {
       const initial = await this.withRetry({
         fn: async (retryCallOptions) => {
@@ -517,6 +483,7 @@ export class RetryableLanguageModel
         callOptions: callOptions,
         attempts,
         recorder,
+        stop,
       });
       result = initial.result;
       attempts = initial.attempts;
@@ -528,11 +495,7 @@ export class RetryableLanguageModel
        * Every pre-stream attempt failed; record the operation failure before
        * the error propagates to the caller.
        */
-      this.emitFailure(
-        attempts,
-        error,
-        isCallAbort(error, callOptions.abortSignal),
-      );
+      this.emitFailure(attempts, error, stop);
       recorder?.endOperation({
         provider: this.currentModel.provider,
         modelId: this.currentModel.modelId,
@@ -568,8 +531,7 @@ export class RetryableLanguageModel
 
         /**
          * Whether `error` is the call being aborted, judged against the retry
-         * the failing attempt ran under. Decides both how a failure reaches
-         * the consumer and what `onFailure` reports, so the two agree.
+         * the failing attempt ran under.
          */
         const isAborted = (error: unknown) =>
           isCallAbort(error, callOptions.abortSignal, currentRetry);
@@ -577,16 +539,17 @@ export class RetryableLanguageModel
         /**
          * Fail the operation on an error after content was forwarded. The
          * committed attempt never failed as far as the retry loop saw, so it
-         * is recorded here as the error attempt `onFailure` reports.
+         * is recorded here as the failed attempt the failure reports.
          */
-        const failCommitted = (error: unknown) => {
+        const failCommitted = (error: unknown, aborted: boolean) => {
+          stop.aborted = aborted;
           attempts.push({
             type: 'error',
             error,
             model: this.currentModel,
             options: finalCallOptions,
           });
-          this.emitFailure(attempts, error, isAborted(error));
+          this.emitFailure(attempts, error, stop);
         };
 
         /**
@@ -599,10 +562,11 @@ export class RetryableLanguageModel
          * aborted runs its abort handling alone, and any other rejection
          * bypasses `onError`. An `error` part always reaches `onError`, so an
          * abort surfaced as a part reports a stop or a deadline as a failure
-         * as well.
+         * as well. `aborted` is why the operation stopped; only an abort error
+         * can be passed on as one.
          */
-        const surfaceError = (error: unknown) => {
-          if (isAborted(error)) {
+        const surfaceError = (error: unknown, aborted: boolean) => {
+          if (aborted && isSdkAbortError(error)) {
             controller.error(error);
             return;
           }
@@ -799,10 +763,12 @@ export class RetryableLanguageModel
                   });
                 }
 
-                await waitBeforeRetry(
+                await this.waitBeforeNextAttempt(
                   calculatedDelay,
                   callOptions.abortSignal,
                   retryFromFinish,
+                  attempts,
+                  stop,
                 );
 
                 this.currentModel = retryFromFinish.model;
@@ -816,6 +782,7 @@ export class RetryableLanguageModel
                   attempts,
                   currentRetry,
                   recorder,
+                  stop,
                 });
 
                 /**
@@ -883,16 +850,21 @@ export class RetryableLanguageModel
                * caller owns the partial stream.
                */
               if (isStreaming) {
+                /**
+                 * An error part the consumer already saw is the failure; a
+                 * later rejection only ends the stream it already failed.
+                 */
+                const failure = forwardedError ? forwardedError.error : error;
                 if (pendingAttempt !== undefined) {
                   recorder?.endAttempt({
                     attempt: pendingAttempt,
                     outcome: 'failure',
-                    error,
+                    error: failure,
                   });
                 }
-                operationError = error;
-                failCommitted(error);
-                surfaceError(error);
+                operationError = failure;
+                failCommitted(failure, !forwardedError && isAborted(error));
+                surfaceError(error, isAborted(error));
                 /**
                  * Stop the model, which may still be sending: an error that
                  * came as a part leaves its stream open. Cancelling a stream
@@ -942,8 +914,9 @@ export class RetryableLanguageModel
                   });
                 }
                 operationError = finalError;
-                this.emitFailure(attempts, finalError, isAborted(finalError));
-                surfaceError(finalError);
+                stop.aborted = isAborted(error);
+                this.emitFailure(attempts, finalError, stop);
+                surfaceError(finalError, stop.aborted);
                 return;
               }
 
@@ -962,8 +935,9 @@ export class RetryableLanguageModel
                   });
                 }
                 operationError = error;
-                this.emitFailure(attempts, error, isAborted(error));
-                surfaceError(error);
+                stop.aborted = true;
+                this.emitFailure(attempts, error, stop);
+                surfaceError(error, true);
                 return;
               }
 
@@ -978,10 +952,12 @@ export class RetryableLanguageModel
                 });
               }
 
-              await waitBeforeRetry(
+              await this.waitBeforeNextAttempt(
                 calculatedDelay,
                 callOptions.abortSignal,
                 retryModel,
+                attempts,
+                stop,
               );
 
               this.currentModel = retryModel.model;
@@ -999,6 +975,7 @@ export class RetryableLanguageModel
                 attempts,
                 currentRetry,
                 recorder,
+                stop,
               });
 
               /**
@@ -1028,15 +1005,16 @@ export class RetryableLanguageModel
            *
            * A stream that forwarded an error part reached this point too: it
            * closed normally, carrying the failure as cargo. That is not a
-           * success but a failure after content, so it fails the operation.
+           * success but a failure after content, so it fails the operation
+           * and, like any failure, leaves the sticky model alone.
            */
-          this.updateStickyModel(startModel);
-
           if (forwardedError) {
             operationError = forwardedError.error;
-            failCommitted(forwardedError.error);
+            failCommitted(forwardedError.error, false);
             return;
           }
+
+          this.updateStickyModel(startModel);
 
           this.options.onSuccess?.({
             current: {
@@ -1056,8 +1034,8 @@ export class RetryableLanguageModel
            * is surfaced like every other unrecovered failure.
            */
           operationError = error;
-          this.emitFailure(attempts, error, isAborted(error));
-          surfaceError(error);
+          this.emitFailure(attempts, error, stop);
+          surfaceError(error, stop.aborted);
         } finally {
           recorder?.endOperation({
             provider: this.currentModel.provider,

@@ -1,13 +1,9 @@
-import { BaseRetryableModel } from './base-retryable-model.js';
+import { BaseRetryableModel, type RetryStop } from './base-retryable-model.js';
 import { evaluateError } from './evaluate-error.js';
 import { resolveEmbeddingModel } from './resolve-model.js';
 import { mergeEmbeddingModelCallOptions } from './merge-retry-call-options.js';
 import { resolveBackoffDelay } from './resolve-backoff-delay.js';
-import {
-  isCallAbort,
-  isRetryCancelled,
-  waitBeforeRetry,
-} from './retry-signal.js';
+import { isCallAbort, isRetryCancelled } from './retry-signal.js';
 import { totalTimeoutMs } from './retry-timeout.js';
 import { createRetryTelemetry, type RetryTelemetry } from './telemetry.js';
 import type {
@@ -49,6 +45,8 @@ export class RetryableEmbeddingModel
     callOptions: EmbeddingModelCallOptions;
     attempts?: Array<ModelRetryErrorAttempt<EmbeddingModel>>;
     recorder?: RetryTelemetry;
+    /** Filled in with why the loop stopped, when it throws. */
+    stop: RetryStop;
   }): Promise<{
     result: RESULT;
     attempts: Array<ModelRetryErrorAttempt<EmbeddingModel>>;
@@ -154,6 +152,11 @@ export class RetryableEmbeddingModel
          * surfaced error.
          */
         if (!retryModel) {
+          input.stop.aborted = isCallAbort(
+            error,
+            input.callOptions.abortSignal,
+            currentRetry,
+          );
           input.recorder?.endAttempt({
             attempt: attemptNumber,
             outcome: 'failure',
@@ -166,9 +169,11 @@ export class RetryableEmbeddingModel
          * If the inbound abort signal is already aborted and the chosen
          * retry does not supply a fresh deadline, the retry would die
          * instantly with the same abort. Rethrow rather than fire a
-         * misleading retry against a dead signal.
+         * misleading retry against a dead signal. The loop stops because the
+         * call was aborted, whatever the attempt failed with.
          */
         if (isRetryCancelled(input.callOptions.abortSignal, retryModel)) {
+          input.stop.aborted = true;
           input.recorder?.endAttempt({
             attempt: attemptNumber,
             outcome: 'failure',
@@ -186,10 +191,12 @@ export class RetryableEmbeddingModel
           delayMs: calculatedDelay,
         });
 
-        await waitBeforeRetry(
+        await this.waitBeforeNextAttempt(
           calculatedDelay,
           input.callOptions.abortSignal,
           retryModel,
+          attempts,
+          input.stop,
         );
 
         this.currentModel = retryModel.model;
@@ -221,21 +228,6 @@ export class RetryableEmbeddingModel
     });
   }
 
-  /**
-   * Fire the `onFailure` callback for a terminally failed operation. The
-   * final attempt (last entry of `attempts`) is surfaced as `current`.
-   */
-  private emitFailure(
-    attempts: Array<ModelRetryErrorAttempt<EmbeddingModel>>,
-    error: unknown,
-    aborted: boolean,
-  ) {
-    if (!this.options.onFailure) return;
-    const current = attempts.at(-1);
-    if (!current) return;
-    this.options.onFailure({ current, attempts, error, aborted });
-  }
-
   async doEmbed(
     callOptions: EmbeddingModelCallOptions,
   ): Promise<EmbeddingModelEmbed> {
@@ -265,6 +257,7 @@ export class RetryableEmbeddingModel
      */
     const attempts: Array<ModelRetryErrorAttempt<EmbeddingModel>> = [];
     let operationError: unknown;
+    const stop: RetryStop = { aborted: false };
     try {
       const { result, callOptions: finalCallOptions } = await this.withRetry({
         fn: async (retryCallOptions) => {
@@ -273,6 +266,7 @@ export class RetryableEmbeddingModel
         callOptions: callOptions,
         attempts,
         recorder,
+        stop,
       });
 
       this.updateStickyModel(startModel);
@@ -290,11 +284,7 @@ export class RetryableEmbeddingModel
       return result;
     } catch (error) {
       operationError = error;
-      this.emitFailure(
-        attempts,
-        error,
-        isCallAbort(error, callOptions.abortSignal),
-      );
+      this.emitFailure(attempts, error, stop);
       throw error;
     } finally {
       recorder?.endOperation({

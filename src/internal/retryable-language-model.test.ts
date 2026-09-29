@@ -6454,3 +6454,286 @@ describe('onFailure and aborts', () => {
     });
   });
 });
+
+describe('why an operation stopped', () => {
+  const timeoutError = () =>
+    new DOMException('The operation timed out.', 'TimeoutError');
+
+  const withSignal = (abortSignal?: AbortSignal) => ({
+    ...MockLanguageModel.callOptions(),
+    abortSignal,
+  });
+
+  /** Read a stream to its end, ignoring whether it rejects. */
+  const drain = async (stream: ReadableStream<LanguageModelStreamPart>) => {
+    try {
+      for await (const _ of stream) {
+      }
+    } catch {}
+  };
+
+  /** A model whose stream fails with `error` before any content. */
+  const failingBeforeContent = (error: () => unknown) =>
+    MockLanguageModel.from({
+      doStream: async () => ({
+        stream: new ReadableStream<LanguageModelStreamPart>({
+          start(controller) {
+            controller.enqueue(Language.streamStart());
+            controller.error(error());
+          },
+        }),
+      }),
+    });
+
+  describe('a retry that cannot run against the call signal', () => {
+    it('should flag doGenerate as aborted when no retry can run after the call deadline', async () => {
+      // Arrange: the call deadline fires, the retry with its own deadline
+      // times out too, and the next retry has no deadline to run under.
+      const controller = new AbortController();
+      const onFailure = vi.fn<OnFailure>();
+      const model = createRetryableModel({
+        model: MockLanguageModel.from({
+          doGenerate: async () => {
+            const error = timeoutError();
+            controller.abort(error);
+            throw error;
+          },
+        }),
+        retries: [
+          {
+            model: MockLanguageModel.from({
+              doGenerate: async () => {
+                throw timeoutError();
+              },
+            }),
+            timeout: 30_000,
+          },
+          MockLanguageModel.from(mockResultText),
+        ],
+        onFailure,
+      });
+
+      // Act
+      const result = model.doGenerate(withSignal(controller.signal));
+      await expect(result).rejects.toThrow();
+
+      // Assert
+      expect(onFailure.mock.calls[0]![0].aborted).toBe(true);
+    });
+
+    it('should flag a stream as aborted when no retry can run after the call deadline', async () => {
+      // Arrange
+      const controller = new AbortController();
+      const onFailure = vi.fn<OnFailure>();
+      const model = createRetryableModel({
+        model: MockLanguageModel.from({
+          doStream: async () => {
+            const error = timeoutError();
+            controller.abort(error);
+            throw error;
+          },
+        }),
+        retries: [
+          { model: failingBeforeContent(timeoutError), timeout: 30_000 },
+          MockLanguageModel.from({ doStream: mockStreamChunks }),
+        ],
+        onFailure,
+      });
+
+      // Act
+      const { stream } = await model.doStream(withSignal(controller.signal));
+      await drain(stream);
+
+      // Assert
+      expect(onFailure.mock.calls.length).toBe(1);
+      expect(onFailure.mock.calls[0]![0].aborted).toBe(true);
+    });
+
+    it('should flag a stream as not aborted when its last retry times out on its own deadline', async () => {
+      // Arrange
+      const controller = new AbortController();
+      const onFailure = vi.fn<OnFailure>();
+      const model = createRetryableModel({
+        model: MockLanguageModel.from({
+          doStream: async () => {
+            const error = timeoutError();
+            controller.abort(error);
+            throw error;
+          },
+        }),
+        retries: [
+          { model: failingBeforeContent(timeoutError), timeout: 30_000 },
+        ],
+        onFailure,
+      });
+
+      // Act
+      const { stream } = await model.doStream(withSignal(controller.signal));
+      await drain(stream);
+
+      // Assert
+      expect(onFailure.mock.calls.length).toBe(1);
+      expect(onFailure.mock.calls[0]![0].aborted).toBe(false);
+    });
+
+    it('should flag a cancel as aborted even when the attempt failed with another error', async () => {
+      // Arrange: the user stops while the provider answers with a 429.
+      const controller = new AbortController();
+      const onFailure = vi.fn<OnFailure>();
+      const model = createRetryableModel({
+        model: MockLanguageModel.from({
+          doGenerate: async () => {
+            controller.abort();
+            throw retryableError;
+          },
+        }),
+        retries: [MockLanguageModel.from(mockResultText)],
+        onFailure,
+      });
+
+      // Act
+      const result = model.doGenerate(withSignal(controller.signal));
+      await expect(result).rejects.toBe(retryableError);
+
+      // Assert
+      expect(onFailure.mock.calls[0]![0].aborted).toBe(true);
+    });
+  });
+
+  describe('a cancel during the wait before a retry', () => {
+    it('should report the cancel as the current attempt after an error', async () => {
+      // Arrange
+      const controller = new AbortController();
+      const baseModel = MockLanguageModel.from(retryableError);
+      const onFailure = vi.fn<OnFailure>();
+      const model = createRetryableModel({
+        model: baseModel,
+        retries: [
+          { model: MockLanguageModel.from(mockResultText), delay: 5_000 },
+        ],
+        onFailure,
+      });
+      setTimeout(() => controller.abort(), 10);
+
+      // Act
+      const result = model.doGenerate(withSignal(controller.signal));
+      await expect(result).rejects.toMatchObject({ name: 'AbortError' });
+
+      // Assert
+      const [failure] = onFailure.mock.calls[0]!;
+      expect(failure.aborted).toBe(true);
+      expect(failure.current.error).toBe(failure.error);
+      expect(failure.current.model).toBe(baseModel);
+      expect(failure.attempts.length).toBe(2);
+    });
+
+    it('should surface a call deadline during the wait as its TimeoutError', async () => {
+      // Arrange
+      const controller = new AbortController();
+      const onFailure = vi.fn<OnFailure>();
+      const model = createRetryableModel({
+        model: MockLanguageModel.from(retryableError),
+        retries: [
+          { model: MockLanguageModel.from(mockResultText), delay: 5_000 },
+        ],
+        onFailure,
+      });
+      setTimeout(() => controller.abort(timeoutError()), 10);
+
+      // Act
+      const result = model.doGenerate(withSignal(controller.signal));
+
+      // Assert
+      await expect(result).rejects.toMatchObject({ name: 'TimeoutError' });
+      expect(onFailure.mock.calls[0]![0].aborted).toBe(true);
+    });
+  });
+
+  describe('a handler that throws', () => {
+    it('should not report a throwing onRetry after a result as a failure of the model', async () => {
+      // Arrange
+      const onFailure = vi.fn<OnFailure>();
+      const model = createRetryableModel({
+        model: MockLanguageModel.from(contentFilterResult),
+        retries: [
+          (context) =>
+            isResultAttempt(context.current)
+              ? { model: MockLanguageModel.from(mockResultText) }
+              : undefined,
+        ],
+        onRetry: () => {
+          throw new TypeError('handler bug');
+        },
+        onFailure,
+      });
+
+      // Act
+      const result = model.doGenerate(withSignal());
+      await expect(result).rejects.toThrow(TypeError);
+
+      // Assert
+      expect(onFailure.mock.calls.length).toBe(0);
+    });
+  });
+
+  describe('a stream that fails after content', () => {
+    it('should not make the fallback sticky when it fails after content', async () => {
+      // Arrange
+      const baseModel = MockLanguageModel.from({
+        doStream: errorStreamChunks(retryableError),
+      });
+      const fallbackModel = MockLanguageModel.from({
+        doStream: [
+          Language.streamStart(),
+          ...Language.streamText('Hel', { id: '1' }),
+          Language.streamError(new Error('overloaded')),
+        ],
+      });
+      const model = createRetryableModel({
+        model: baseModel,
+        retries: [fallbackModel],
+        reset: 'after-2-requests',
+      });
+
+      // Act
+      const first = await model.doStream(withSignal());
+      await drain(first.stream);
+      await model.doStream(withSignal());
+
+      // Assert
+      expect(baseModel.doStream).toHaveBeenCalledTimes(2);
+    });
+
+    it('should report the first error the consumer saw', async () => {
+      // Arrange
+      const first = new Error('first');
+      const later = new Error('later');
+      const onFailure = vi.fn<OnFailure>();
+      const model = createRetryableModel({
+        model: MockLanguageModel.from({
+          doStream: async () => ({
+            stream: new ReadableStream<LanguageModelStreamPart>({
+              start(controller) {
+                controller.enqueue(Language.streamStart());
+                controller.enqueue({ type: 'text-start', id: '0' });
+                controller.enqueue({ type: 'text-delta', id: '0', delta: 'a' });
+                controller.enqueue({ type: 'error', error: first });
+                setTimeout(() => controller.error(later), 0);
+              },
+            }),
+          }),
+        }),
+        retries: [],
+        onFailure,
+      });
+
+      // Act
+      const { stream } = await model.doStream(withSignal());
+      await drain(stream);
+
+      // Assert
+      expect(onFailure.mock.calls.length).toBe(1);
+      expect(onFailure.mock.calls[0]![0].error).toBe(first);
+    });
+  });
+});

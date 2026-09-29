@@ -642,8 +642,9 @@ describe('createRetryableCall', () => {
     });
 
     it('should call onFailure when the caller aborts during the backoff delay', async () => {
-      // Arrange — the abort lands while the retry is waiting out its delay,
-      // after the failed attempt has already been recorded.
+      // Arrange: the abort lands while the retry is waiting out its delay,
+      // after the failed attempt has already been recorded. The cancel is then
+      // recorded as the attempt the operation stopped on.
       const primary = MockLanguageModel.from();
       const fallback = MockLanguageModel.from();
       const controller = new AbortController();
@@ -668,7 +669,10 @@ describe('createRetryableCall', () => {
       expect(fn).toHaveBeenCalledTimes(1);
       expect(onComplete).toHaveBeenCalledTimes(0);
       expect(onFailure).toHaveBeenCalledTimes(1);
-      expect(onFailure.mock.calls[0]![0].attempts.length).toBe(1);
+      const [failure] = onFailure.mock.calls[0]!;
+      expect(failure.attempts.length).toBe(2);
+      expect(failure.aborted).toBe(true);
+      expect(failure.current.error).toBe(failure.error);
     });
 
     it('should call onFailure when an onRetry handler throws', async () => {

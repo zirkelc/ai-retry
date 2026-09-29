@@ -1,6 +1,5 @@
-import { delay } from '@ai-sdk/provider-utils';
 import { evaluateError } from '../internal/evaluate-error.js';
-import { isCallAbort } from '../internal/retry-signal.js';
+import { isCallAbort, waitBeforeRetry } from '../internal/retry-signal.js';
 import { findRetryModel } from '../internal/find-retry-model.js';
 import { resolveBackoffDelay } from '../internal/resolve-backoff-delay.js';
 import { totalTimeoutMs } from '../internal/retry-timeout.js';
@@ -251,6 +250,21 @@ export async function runRetryLoop<
 
   let operationError: unknown;
   /**
+   * Why the loop stopped, decided where it stops rather than guessed from the
+   * error it throws: a cancel stops it whatever the last attempt failed with.
+   * Undefined when it stopped some other way, such as a callback throwing.
+   */
+  let aborted: boolean | undefined;
+  /** The backoff wait, where a cancel stops the loop between attempts. */
+  const waitBeforeNextAttempt = async (backoff: number | undefined) => {
+    try {
+      await waitBeforeRetry(backoff, callerSignal, undefined);
+    } catch (error) {
+      aborted = true;
+      throw error;
+    }
+  };
+  /**
    * The most recent attempt's result, kept so a terminal failure can still
    * release what that attempt held back. Undefined when the failing call never
    * returned one.
@@ -336,6 +350,7 @@ export async function runRetryLoop<
          * more than one attempt was made and the caller did not cancel.
          */
         if (!evaluation.retryModel) {
+          aborted = isCallAbort(error, callerSignal);
           recorder?.endAttempt({
             attempt: attemptNumber,
             outcome: 'failure',
@@ -350,6 +365,7 @@ export async function runRetryLoop<
          * retry.
          */
         if (callerSignal?.aborted) {
+          aborted = true;
           recorder?.endAttempt({
             attempt: attemptNumber,
             outcome: 'failure',
@@ -371,9 +387,7 @@ export async function runRetryLoop<
           delayMs: backoff,
         });
 
-        if (backoff !== undefined) {
-          await delay(backoff, { abortSignal: callerSignal });
-        }
+        await waitBeforeNextAttempt(backoff);
 
         currentModel = retryModel.model;
         currentRetry = retryModel;
@@ -417,9 +431,7 @@ export async function runRetryLoop<
             delayMs: backoff,
           });
 
-          if (backoff !== undefined) {
-            await delay(backoff, { abortSignal: callerSignal });
-          }
+          await waitBeforeNextAttempt(backoff);
 
           currentModel = retryModel.model;
           currentRetry = retryModel;
@@ -477,7 +489,7 @@ export async function runRetryLoop<
           CallSettledAttempt<MODEL, RESULT, COMMIT>
         >,
         error,
-        aborted: isCallAbort(error, callerSignal),
+        aborted: aborted ?? false,
       });
     }
     /**
