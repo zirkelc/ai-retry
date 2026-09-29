@@ -21,8 +21,8 @@ describe('createRetryableModel', () => {
 
   it('should return ImageModel for a gateway string', () => {
     const retryable = createRetryableModel({
-      model: 'google/imagen-4.0-generate-001',
-      retries: ['google/imagen-4.0-fast-generate-001'],
+      model: 'openai/gpt-image-1',
+      retries: ['openai/gpt-image-1-mini'],
     });
 
     assertType<ImageModel>(retryable);
