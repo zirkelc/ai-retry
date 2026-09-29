@@ -700,7 +700,7 @@ You can use the following callbacks to log retry attempts and errors:
 - `onError` is invoked if an error occurs.
 - `onRetry` is invoked before attempting a retry.
 - `onSuccess` is invoked after a successful request with the model that handled it.
-- `onFailure` is invoked when the request ultimately fails and no retry could recover it.
+- `onFailure` is invoked when the request ultimately fails and no retry could recover it, including when the call is aborted.
 
 ```typescript
 const retryableModel = createRetryableModel({
@@ -733,7 +733,16 @@ const retryableModel = createRetryableModel({
 });
 ```
 
-`onSuccess` and `onFailure` are counterparts: exactly one of them is invoked per request once its final outcome is known. `onFailure` fires when the error could not be recovered by a retry, whether because no retryable matched, all retries were exhausted, or the retry itself failed. `context.error` is the error surfaced to the caller (a [`RetryError`](#all-retries-failed) wrapping every attempt error when more than one attempt was made, otherwise the original error), and `context.current` is the final failed attempt. Neither callback fires when retries are disabled.
+`onSuccess` and `onFailure` are counterparts: exactly one of them is invoked per request once its final outcome is known. `onFailure` fires when the error could not be recovered by a retry, whether because no retryable matched, all retries were exhausted, the retry itself failed, a stream failed after its content had started flowing, or the call was aborted. `context.error` is the error surfaced to the caller (a [`RetryError`](#all-retries-failed) wrapping every attempt error when more than one attempt was made, otherwise the original error; an aborted call surfaces its abort error as it is), and `context.current` is the final failed attempt. Neither callback fires when retries are disabled.
+
+The `aborted` flag tells an abort apart from a failure: it is `true` when the caller cancelled the call or a deadline on the call itself fired, and `false` when the attempts failed. A deadline surfaces a `TimeoutError`, so the error's `name` tells the two kinds of abort apart. For alerting, skip the cancels:
+
+```typescript
+onFailure: ({ aborted, error }) => {
+  if (aborted && error.name !== 'TimeoutError') return; // a user cancel
+  console.error(error);
+},
+```
 
 #### Reset
 
@@ -1253,7 +1262,7 @@ const result = await retryableGenerateText({
 | failed, no retry        | `failure` | 1                 |
 | failed after retrying   | `failure` | > 1               |
 
-The event also carries `model` (the one that settled it, or the one whose failure ended the loop), `result` on success and `error` on failure. Each entry in `attempts` says how it ended: `error`, `result` (judged, then retried) or `success`.
+The event also carries `model` (the one that settled it, or the one whose failure ended the loop), `result` on success, and `error` and `aborted` on failure. `aborted` is `true` when the caller cancelled the call through its `abortSignal`, so a cancel can be kept out of a failure metric. Each entry in `attempts` says how it ended: `error`, `result` (judged, then retried) or `success`.
 
 **For `streamText` it settles at the commit point**, the first content part, not at the end of the stream. A stream that commits and then dies is beyond the reach of a retry, so it counts as a success here. It also means a stream you never consume still settles. For end-to-end stream health, use `streamText`'s own `onFinish` and `onError` on the same call.
 
@@ -1350,7 +1359,7 @@ interface RetryableModelOptions<
 - `onError` — fires when an error occurs.
 - `onRetry` — fires before a retry attempt. May return `OnRetryOverrides` (or a promise of one) to override `options.*` for that attempt only. See [Dynamic call options](#dynamic-call-options).
 - `onSuccess` — fires after a successful request.
-- `onFailure` — fires when the request ultimately fails and no retry recovered it (no condition matched, retries exhausted, or the retry itself failed).
+- `onFailure` — fires when the request ultimately fails and no retry recovered it (no condition matched, retries exhausted, the retry itself failed, a stream failed after content, or the call was aborted; see `aborted`).
 
 #### `createRetryable(options)` (deprecated)
 
@@ -1446,13 +1455,14 @@ interface ModelRetryContext<MODEL> {
 
 #### `ModelFailureContext`
 
-The `ModelFailureContext` object is passed to the `onFailure` callback when a request ultimately fails. `current` is the final failed attempt (an error attempt, see [`ModelRetryAttempt`](#modelretryattempt)) and `error` is the error surfaced to the caller, a [`RetryError`](#all-retries-failed) wrapping every attempt error when more than one attempt was made, otherwise the original error.
+The `ModelFailureContext` object is passed to the `onFailure` callback when a request ultimately fails. `current` is the final failed attempt (an error attempt, see [`ModelRetryAttempt`](#modelretryattempt)) and `error` is the error surfaced to the caller, a [`RetryError`](#all-retries-failed) wrapping every attempt error when more than one attempt was made, otherwise the original error. An aborted call surfaces its abort error as it is. `aborted` is `true` when the operation ended because the call was aborted (a cancel, or a deadline on the call itself), not because its attempts failed.
 
 ```typescript
 interface FailureContext {
   current: RetryErrorAttempt;
   attempts: Array<RetryAttempt>;
   error: unknown;
+  aborted: boolean;
 }
 ```
 

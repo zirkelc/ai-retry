@@ -1,9 +1,11 @@
-import { delay } from '@ai-sdk/provider-utils';
-import { BaseRetryableModel } from '../../internal/base-retryable-model.js';
+import {
+  BaseRetryableModel,
+  type RetryStop,
+} from '../../internal/base-retryable-model.js';
 import { evaluateError } from '../../internal/evaluate-error.js';
-import { isErrorAttempt } from '../../internal/guards.js';
 import { resolveBackoffDelay } from '../../internal/resolve-backoff-delay.js';
 import { resolveModel } from '../../internal/resolve-model.js';
+import { isCallAbort } from '../../internal/retry-signal.js';
 import { totalTimeoutMs } from '../../internal/retry-timeout.js';
 import { createRetryTelemetry } from '../../internal/telemetry.js';
 import type {
@@ -253,7 +255,7 @@ class RetryableCall<MODEL extends AnyModel> extends BaseRetryableModel<MODEL> {
   /**
    * Fire the `onComplete` callback for a call that returned.
    *
-   * No cast, unlike {@link RetryableCall.emitFailure}: the complete context is
+   * No cast, unlike the failure report: the complete context is
    * declared over `MODEL` directly, whereas the shared contexts are declared
    * over `ResolvedModel<MODEL>` — the same type at runtime, but not provably so
    * for a generic `MODEL`.
@@ -263,24 +265,6 @@ class RetryableCall<MODEL extends AnyModel> extends BaseRetryableModel<MODEL> {
     attempts: Array<ModelRetryAttempt<MODEL>>,
   ) {
     this.callOptions.onComplete?.({ current, attempts });
-  }
-
-  /**
-   * Fire the `onFailure` callback for a terminally failed call. The final
-   * attempt (last entry of `attempts`) is surfaced as `current`.
-   */
-  private emitFailure(
-    attempts: Array<ModelRetryAttempt<MODEL>>,
-    error: unknown,
-  ) {
-    if (!this.callOptions.onFailure) return;
-    const current = attempts.at(-1);
-    if (!current || !isErrorAttempt(current)) return;
-    this.callOptions.onFailure({
-      current,
-      attempts,
-      error,
-    } as unknown as ModelFailureContext<MODEL>);
   }
 
   async run<RESULT>(
@@ -328,6 +312,7 @@ class RetryableCall<MODEL extends AnyModel> extends BaseRetryableModel<MODEL> {
      */
     let currentRetry: Retry<MODEL> | undefined;
 
+    const stop: RetryStop = { aborted: false };
     let operationError: unknown;
     try {
       while (true) {
@@ -420,6 +405,7 @@ class RetryableCall<MODEL extends AnyModel> extends BaseRetryableModel<MODEL> {
            * when more than one attempt was made and the caller did not cancel.
            */
           if (!retryModel) {
+            stop.aborted = isCallAbort(error, runOptions?.abortSignal);
             recorder?.endAttempt({
               attempt: attemptNumber,
               outcome: 'failure',
@@ -434,6 +420,7 @@ class RetryableCall<MODEL extends AnyModel> extends BaseRetryableModel<MODEL> {
            * surface the error rather than fire a doomed retry.
            */
           if (runOptions?.abortSignal?.aborted) {
+            stop.aborted = true;
             recorder?.endAttempt({
               attempt: attemptNumber,
               outcome: 'failure',
@@ -451,11 +438,13 @@ class RetryableCall<MODEL extends AnyModel> extends BaseRetryableModel<MODEL> {
             delayMs: calculatedDelay,
           });
 
-          if (calculatedDelay !== undefined) {
-            await delay(calculatedDelay, {
-              abortSignal: runOptions?.abortSignal,
-            });
-          }
+          await this.waitBeforeNextAttempt(
+            calculatedDelay,
+            runOptions?.abortSignal,
+            undefined,
+            attempts,
+            stop,
+          );
 
           this.currentModel = retryModel.model;
           currentRetry = retryModel;
@@ -478,7 +467,7 @@ class RetryableCall<MODEL extends AnyModel> extends BaseRetryableModel<MODEL> {
        * telling `onFailure` and the operation span about it.
        */
       operationError = error;
-      this.emitFailure(attempts, error);
+      this.emitFailure(attempts, error, stop, this.callOptions.onFailure);
       throw error;
     } finally {
       recorder?.endOperation({

@@ -386,6 +386,113 @@ describe('hooks', () => {
       expect(event.attempts.length).toBe(2);
     });
 
+    it('should flag a failure as not aborted and a success without the flag', async () => {
+      // Arrange
+      const onSettled = vi.fn();
+
+      // Act
+      await retryableGenerateText({
+        model: MockLanguageModel.from(mockResultText),
+        prompt,
+        retry: { retries: [], onSettled },
+      });
+      await retryableGenerateText({
+        model: MockLanguageModel.from(nonRetryableError),
+        prompt,
+        retry: { retries: [], onSettled },
+      }).catch(() => {});
+
+      // Assert
+      expect(onSettled.mock.calls[0]![0].aborted).toBe(undefined);
+      expect(onSettled.mock.calls[1]![0].aborted).toBe(false);
+    });
+
+    it('should flag a caller cancel after a fail-over as aborted', async () => {
+      // Arrange
+      const controller = new AbortController();
+      const onSettled = vi.fn();
+
+      // Act
+      const result = retryableGenerateText({
+        model: MockLanguageModel.from(retryableError),
+        prompt,
+        abortSignal: controller.signal,
+        retry: {
+          retries: [
+            MockLanguageModel.from({
+              doGenerate: async () => {
+                controller.abort();
+                throw new DOMException(
+                  'The operation was aborted.',
+                  'AbortError',
+                );
+              },
+            }),
+          ],
+          onSettled,
+        },
+      });
+
+      // Assert
+      await expect(result).rejects.toMatchObject({ name: 'AbortError' });
+      const event = onSettled.mock.calls[0]![0];
+      expect(event.outcome).toBe('failure');
+      expect(event.aborted).toBe(true);
+    });
+
+    it('should flag a caller cancel as aborted even when the attempt failed with another error', async () => {
+      // Arrange: the caller stops while the provider answers with a 429.
+      const controller = new AbortController();
+      const onSettled = vi.fn();
+
+      // Act
+      const result = retryableGenerateText({
+        model: MockLanguageModel.from({
+          doGenerate: async () => {
+            controller.abort();
+            throw retryableError;
+          },
+        }),
+        prompt,
+        abortSignal: controller.signal,
+        retry: { retries: [MockLanguageModel.from(mockResultText)], onSettled },
+      });
+
+      // Assert
+      await expect(result).rejects.toBe(retryableError);
+      expect(onSettled.mock.calls[0]![0].aborted).toBe(true);
+    });
+
+    it('should surface a caller deadline during the backoff as its TimeoutError', async () => {
+      // Arrange
+      const controller = new AbortController();
+      const onSettled = vi.fn();
+      setTimeout(
+        () =>
+          controller.abort(
+            new DOMException('The operation timed out.', 'TimeoutError'),
+          ),
+        10,
+      );
+
+      // Act
+      const result = retryableGenerateText({
+        model: MockLanguageModel.from(retryableError),
+        prompt,
+        abortSignal: controller.signal,
+        retry: {
+          retries: [
+            { model: MockLanguageModel.from(mockResultText), delay: 5_000 },
+          ],
+          onSettled,
+        },
+      });
+
+      // Assert
+      await expect(result).rejects.toMatchObject({ name: 'TimeoutError' });
+      expect(onSettled.mock.calls[0]![0].aborted).toBe(true);
+    });
+
     it('should fire exactly once, whichever way the call goes', async () => {
       // Arrange
       const onSettled = vi.fn();

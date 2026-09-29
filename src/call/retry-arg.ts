@@ -76,9 +76,15 @@ export type CallSettledEvent<
   result?: RESULT;
   /**
    * What the call rejects with, on failure: a `RetryError` wrapping every
-   * attempt's error when more than one was made, otherwise the original.
+   * attempt's error when more than one was made, otherwise the original. A
+   * cancelled call rejects with its abort error as it is.
    */
   error?: unknown;
+  /**
+   * On failure: whether the caller aborted the call through its
+   * `abortSignal`, rather than its attempts failing. Undefined on success.
+   */
+  aborted?: boolean;
 };
 
 /**

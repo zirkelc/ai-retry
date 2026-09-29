@@ -257,8 +257,9 @@ export type ModelSuccessContext<MODEL extends AnyResolvableModel> = {
 };
 
 /**
- * The context provided to onFailure when an operation terminally fails
- * (no retry matched, retries exhausted, or the retry itself failed).
+ * The context provided to onFailure when an operation terminally fails: no
+ * retry matched, retries were exhausted, the retry itself failed, a stream
+ * failed after content had already been forwarded, or the call was aborted.
  */
 export type ModelFailureContext<MODEL extends AnyResolvableModel> = {
   /**
@@ -272,9 +273,18 @@ export type ModelFailureContext<MODEL extends AnyResolvableModel> = {
   /**
    * The error surfaced to the caller. When more than one attempt was made,
    * this is a `RetryError` wrapping every attempt error; otherwise the raw
-   * error.
+   * error. An aborted call surfaces its abort error as it is, however many
+   * attempts came before.
    */
   error: unknown;
+  /**
+   * Whether the operation ended because the call was aborted, not because its
+   * attempts failed: the caller cancelled it, or a deadline on the call itself
+   * fired. Tell the two apart by the error, a deadline being a
+   * `TimeoutError`. A retry timing out on its own `timeout` is a failure, not
+   * an abort.
+   */
+  aborted: boolean;
 };
 
 /**
@@ -362,7 +372,9 @@ export interface RetryableModelOptions<MODEL extends AnyModel> {
   /**
    * Called once when an operation terminally fails and the error could not
    * be recovered by a retry: no retry matched, all retries were exhausted,
-   * or the retry itself failed. The counterpart to `onSuccess`.
+   * the retry itself failed, a stream failed after content had already been
+   * forwarded, or the call was aborted (see `aborted`). The counterpart to
+   * `onSuccess`: an operation calls exactly one of the two.
    *
    * Not called when retries are disabled.
    */

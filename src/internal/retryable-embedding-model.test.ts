@@ -682,6 +682,52 @@ describe('embed', () => {
   });
 
   describe('onFailure', () => {
+    it('should flag a failure as not aborted', async () => {
+      // Arrange
+      const onFailureSpy = vi.fn<OnFailure>();
+
+      // Act
+      const result = embed({
+        model: createRetryableModel({
+          model: MockEmbeddingModel.from(nonRetryableError),
+          retries: [],
+          onFailure: onFailureSpy,
+        }),
+        value: 'Hello!',
+      });
+      await expect(result).rejects.toThrow();
+
+      // Assert
+      expect(onFailureSpy.mock.calls[0]![0].aborted).toBe(false);
+    });
+
+    it('should flag a cancel as aborted', async () => {
+      // Arrange
+      const controller = new AbortController();
+      const baseModel = MockEmbeddingModel.from();
+      baseModel.doEmbed.mockImplementation(async () => {
+        controller.abort();
+        throw new DOMException('The operation was aborted.', 'AbortError');
+      });
+      const onFailureSpy = vi.fn<OnFailure>();
+
+      // Act
+      const result = embed({
+        model: createRetryableModel({
+          model: baseModel,
+          retries: [],
+          onFailure: onFailureSpy,
+        }),
+        value: 'Hello!',
+        abortSignal: controller.signal,
+        maxRetries: 0,
+      });
+      await expect(result).rejects.toMatchObject({ name: 'AbortError' });
+
+      // Assert
+      expect(onFailureSpy.mock.calls.length).toBe(1);
+      expect(onFailureSpy.mock.calls[0]![0].aborted).toBe(true);
+    });
     it('should call onFailure with raw error when no retry is available', async () => {
       // Arrange
       const baseModel = MockEmbeddingModel.from(nonRetryableError);

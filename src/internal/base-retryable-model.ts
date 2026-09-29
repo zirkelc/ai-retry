@@ -1,5 +1,25 @@
 import { type ParsedReset, parseReset } from './parse-reset.js';
-import type { AnyModel, RetryableModelOptions } from '../types.js';
+import { isErrorAttempt } from './guards.js';
+import { waitBeforeRetry } from './retry-signal.js';
+import type {
+  AnyModel,
+  ModelFailureContext,
+  ModelRetryAttempt,
+  RetryableModelOptions,
+  RetryTimeout,
+} from '../types.js';
+
+/**
+ * Why an operation stopped, decided where its retry loop stopped rather than
+ * guessed afterwards from the error it throws. Only that point knows whether
+ * the loop gave up because the call was aborted: a retry that would run
+ * against a dead signal, or a cancel while waiting for one, stops the loop
+ * whatever error the last attempt failed with.
+ */
+export type RetryStop = {
+  /** Whether the operation ended because the call was aborted. */
+  aborted: boolean;
+};
 
 export abstract class BaseRetryableModel<MODEL extends AnyModel> {
   protected baseModel: MODEL;
@@ -67,6 +87,61 @@ export abstract class BaseRetryableModel<MODEL extends AnyModel> {
    */
   protected get telemetrySettings(): RetryableModelOptions<MODEL>['telemetry'] {
     return this.options.telemetry ?? this.options.experimental_telemetry;
+  }
+
+  /**
+   * Report a terminally failed operation. The final attempt (last entry of
+   * `attempts`) is surfaced as `current`, so it has to be an error attempt: an
+   * operation that ended some other way, such as a callback throwing, has no
+   * failed attempt to report and reports nothing.
+   */
+  protected emitFailure(
+    attempts: Array<ModelRetryAttempt<MODEL>>,
+    error: unknown,
+    stop: RetryStop,
+    onFailure:
+      | ((context: ModelFailureContext<MODEL>) => void)
+      | undefined = this.options.onFailure,
+  ): void {
+    if (!onFailure) return;
+    const current = attempts.at(-1);
+    if (!current || !isErrorAttempt(current)) return;
+    onFailure({
+      current,
+      attempts,
+      error,
+      aborted: stop.aborted,
+    } as unknown as ModelFailureContext<MODEL>);
+  }
+
+  /**
+   * Wait out the backoff delay before the next attempt. A cancel during the
+   * wait stops the operation between attempts, so it is recorded here: as the
+   * reason the loop stopped, and as an error attempt against the model and
+   * options of the attempt it followed, which the failure then reports.
+   */
+  protected async waitBeforeNextAttempt(
+    delayMs: number | undefined,
+    inboundSignal: AbortSignal | undefined,
+    retry: { timeout?: RetryTimeout } | undefined,
+    attempts: Array<ModelRetryAttempt<MODEL>>,
+    stop: RetryStop,
+  ): Promise<void> {
+    try {
+      await waitBeforeRetry(delayMs, inboundSignal, retry);
+    } catch (error) {
+      stop.aborted = true;
+      const last = attempts.at(-1);
+      if (last) {
+        attempts.push({
+          type: 'error',
+          error,
+          model: last.model,
+          options: last.options,
+        } as ModelRetryAttempt<MODEL>);
+      }
+      throw error;
+    }
   }
 
   /**

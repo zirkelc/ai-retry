@@ -80,6 +80,12 @@ export function retryCancelSignal(
  * still cancel the retry, not on the failed attempt's signal: a deadline the
  * retry replaces must not end it before it starts. The listener it adds to the
  * inbound signal is removed once the wait is over.
+ *
+ * Ended early, it rejects with the signal's reason when that is an abort error
+ * by the SDK's check, so a deadline stays a `TimeoutError` and a cancel keeps
+ * its own error. Any other reason is replaced by a plain `AbortError`, which is
+ * what keeps the rejection an abort for a consumer that tells aborts apart by
+ * that check.
  */
 export async function waitBeforeRetry(
   delayMs: number | undefined,
@@ -88,21 +94,36 @@ export async function waitBeforeRetry(
 ): Promise<void> {
   if (delayMs === undefined) return;
 
-  if (!hasOwnDeadline(retry) || base === undefined) {
-    await delay(delayMs, { abortSignal: base });
-    return;
+  let signal = base;
+  let removeListener = () => {};
+  if (hasOwnDeadline(retry) && base !== undefined) {
+    /**
+     * The retry replaces an inbound deadline, so the wait cannot listen to the
+     * inbound signal directly: a deadline that already fired would end it at
+     * once. Its own signal follows only the aborts that still apply.
+     */
+    const controller = new AbortController();
+    const onAbort = () => {
+      if (isRetryCancelled(base, retry)) controller.abort(base.reason);
+    };
+    /** A signal aborted before the listener is added never fires it. */
+    onAbort();
+    base.addEventListener('abort', onAbort);
+    signal = controller.signal;
+    /**
+     * Without this, every wait leaves its listener, and the controller it
+     * holds, on the inbound signal until that signal aborts.
+     */
+    removeListener = () => base.removeEventListener('abort', onAbort);
   }
 
-  const controller = new AbortController();
-  const onAbort = () => {
-    if (isRetryCancelled(base, retry)) controller.abort(base.reason);
-  };
-  onAbort();
-  base.addEventListener('abort', onAbort);
   try {
-    await delay(delayMs, { abortSignal: controller.signal });
+    await delay(delayMs, { abortSignal: signal });
+  } catch (error) {
+    const reason: unknown = signal?.reason;
+    throw signal?.aborted && isSdkAbortError(reason) ? reason : error;
   } finally {
-    base.removeEventListener('abort', onAbort);
+    removeListener();
   }
 }
 

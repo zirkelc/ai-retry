@@ -238,6 +238,32 @@ describe('waitBeforeRetry', () => {
     );
   });
 
+  it('should reject with the signal reason when it is an abort error', async () => {
+    // Arrange
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(timeoutError()), 10);
+
+    // Act
+    const result = waitBeforeRetry(5_000, controller.signal, undefined);
+
+    // Assert
+    await expect(result).rejects.toMatchObject({ name: 'TimeoutError' });
+  });
+
+  it('should reject with an abort error when the signal reason is not one', async () => {
+    // Arrange
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(new Error('custom stop')), 10);
+
+    // Act
+    const result = waitBeforeRetry(5_000, controller.signal, {
+      timeout: 1_000,
+    });
+
+    // Assert
+    await expect(result).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
   it('should not wait without a delay', async () => {
     // Arrange
     const base = AbortSignal.abort();
