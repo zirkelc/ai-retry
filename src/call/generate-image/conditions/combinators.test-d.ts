@@ -15,7 +15,7 @@ describe('top-level combinators (call/generate-image)', () => {
 
     expectTypeOf(
       and(httpStatus(503), error.message('temporary')).switch({
-        model: 'google/imagen-4.0-generate-001',
+        model: 'openai/gpt-image-1',
       }),
     ).toEqualTypeOf<CallRetryable<ResolvableImageModel>>();
 

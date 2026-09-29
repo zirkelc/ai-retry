@@ -432,6 +432,70 @@ describe('telemetry', () => {
         `mock-provider/${fallbackModel.modelId}`,
       );
     });
+
+    it('should record a failed attempt and operation when the model forwards an abort error part after content', async () => {
+      // Arrange
+      const controller = new AbortController();
+      const abortError = new DOMException(
+        'The operation was aborted.',
+        'AbortError',
+      );
+      const baseModel = MockLanguageModel.from({
+        doStream: async (opts: { abortSignal?: AbortSignal }) => ({
+          stream: new ReadableStream({
+            start(streamController) {
+              streamController.enqueue({ type: 'stream-start', warnings: [] });
+              streamController.enqueue({ type: 'text-start', id: '0' });
+              streamController.enqueue({
+                type: 'text-delta',
+                id: '0',
+                delta: 'Hello',
+              });
+              opts.abortSignal?.addEventListener(
+                'abort',
+                () => {
+                  streamController.enqueue({
+                    type: 'error',
+                    error: abortError,
+                  });
+                  streamController.close();
+                },
+                { once: true },
+              );
+            },
+          }),
+        }),
+      });
+      const model = createRetryableModel({
+        model: baseModel,
+        retries: [],
+        telemetry: { isEnabled: true, tracer },
+      });
+
+      // Act
+      const { stream } = await model.doStream({
+        ...MockLanguageModel.callOptions(),
+        abortSignal: controller.signal,
+      });
+      const result = (async () => {
+        for await (const part of stream) {
+          if (part.type === 'text-delta') controller.abort();
+        }
+      })();
+      await expect(result).rejects.toMatchObject({ name: 'AbortError' });
+
+      // Assert
+      const attempts = attemptSpans(exporter);
+      expect(attempts.length).toBe(1);
+      expect(attempts[0]!.attributes['ai_retry.attempt.outcome']).toBe(
+        'failure',
+      );
+      expect(attempts[0]!.attributes['ai_retry.attempt.error.name']).toBe(
+        'AbortError',
+      );
+      const operation = findSpan(exporter, 'ai_retry.doStream');
+      expect(operation.attributes['ai_retry.outcome']).toBe('failure');
+    });
   });
 
   describe('embed', () => {

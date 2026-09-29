@@ -407,6 +407,7 @@ class RetryableCall<MODEL extends AnyModel> extends BaseRetryableModel<MODEL> {
             attempts,
             retries: this.options.retries,
             onError: this.callOptions.onError,
+            abortSignal: runOptions?.abortSignal,
           });
 
           const retryModel = evaluation.retryModel as Retry<MODEL> | undefined;
@@ -416,7 +417,7 @@ class RetryableCall<MODEL extends AnyModel> extends BaseRetryableModel<MODEL> {
 
           /**
            * No retry matched. Surface the error, wrapped in a `RetryError`
-           * when more than one attempt was made.
+           * when more than one attempt was made and the caller did not cancel.
            */
           if (!retryModel) {
             recorder?.endAttempt({

@@ -122,15 +122,29 @@ export const isStreamContentPart = (
 };
 
 /**
+ * An `Error`, or a `DOMException`, which is what an aborted signal carries and
+ * which not every runtime makes an `Error` subclass. Accepting both keeps these
+ * checks in agreement with the SDK's own abort check.
+ */
+const isErrorLike = (error: unknown): error is Error | DOMException =>
+  error instanceof Error ||
+  (typeof DOMException === 'function' && error instanceof DOMException);
+
+/**
  * Check if an error is a user-initiated abort error (manual controller.abort()).
  * This is distinct from TimeoutError which is thrown by AbortSignal.timeout().
+ *
+ * Deliberately narrower than the SDK's own abort check, which also counts a
+ * `TimeoutError` as an abort. This one tells a cancel apart from a deadline,
+ * for conditions that treat the two differently. To decide whether a consumer
+ * sees a failure as an abort, use the SDK's check instead.
  */
 export const isAbortError = (error: unknown): boolean =>
-  error instanceof Error && error.name === 'AbortError';
+  isErrorLike(error) && error.name === 'AbortError';
 
 /**
  * Check if an error is a timeout error from AbortSignal.timeout().
  * This is distinct from AbortError which is thrown by manual controller.abort().
  */
 export const isTimeoutError = (error: unknown): boolean =>
-  error instanceof Error && error.name === 'TimeoutError';
+  isErrorLike(error) && error.name === 'TimeoutError';

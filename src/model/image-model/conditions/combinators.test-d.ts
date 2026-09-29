@@ -20,7 +20,7 @@ describe('top-level combinators (image-model)', () => {
 
     // gateway image string is accepted as a switch target
     expectTypeOf(
-      noImage().switch({ model: 'google/imagen-4.0-generate-001' }),
+      noImage().switch({ model: 'openai/gpt-image-1' }),
     ).toEqualTypeOf<ModelRetryable<ResolvableImageModel, never>>();
   });
 });

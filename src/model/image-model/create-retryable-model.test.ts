@@ -25,13 +25,13 @@ describe('createRetryableModel', () => {
   it('should resolve a gateway string base model to a gateway image model', () => {
     // Arrange + Act
     const retryable = createRetryableModel({
-      model: 'google/imagen-4.0-generate-001',
-      retries: ['google/imagen-4.0-fast-generate-001'],
+      model: 'openai/gpt-image-1',
+      retries: ['openai/gpt-image-1-mini'],
     });
 
     // Assert
     expect(retryable).toBeInstanceOf(RetryableImageModel);
     expect(retryable.provider).toBe('gateway');
-    expect(retryable.modelId).toBe('google/imagen-4.0-generate-001');
+    expect(retryable.modelId).toBe('openai/gpt-image-1');
   });
 });
