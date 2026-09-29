@@ -3,7 +3,11 @@ import { evaluateError } from './evaluate-error.js';
 import { resolveEmbeddingModel } from './resolve-model.js';
 import { mergeEmbeddingModelCallOptions } from './merge-retry-call-options.js';
 import { resolveBackoffDelay } from './resolve-backoff-delay.js';
-import { isRetryCancelled, waitBeforeRetry } from './retry-signal.js';
+import {
+  isCallAbort,
+  isRetryCancelled,
+  waitBeforeRetry,
+} from './retry-signal.js';
 import { totalTimeoutMs } from './retry-timeout.js';
 import { createRetryTelemetry, type RetryTelemetry } from './telemetry.js';
 import type {
@@ -224,11 +228,12 @@ export class RetryableEmbeddingModel
   private emitFailure(
     attempts: Array<ModelRetryErrorAttempt<EmbeddingModel>>,
     error: unknown,
+    aborted: boolean,
   ) {
     if (!this.options.onFailure) return;
     const current = attempts.at(-1);
     if (!current) return;
-    this.options.onFailure({ current, attempts, error });
+    this.options.onFailure({ current, attempts, error, aborted });
   }
 
   async doEmbed(
@@ -285,7 +290,11 @@ export class RetryableEmbeddingModel
       return result;
     } catch (error) {
       operationError = error;
-      this.emitFailure(attempts, error);
+      this.emitFailure(
+        attempts,
+        error,
+        isCallAbort(error, callOptions.abortSignal),
+      );
       throw error;
     } finally {
       recorder?.endOperation({

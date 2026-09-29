@@ -448,6 +448,52 @@ describe('generateImage', () => {
   });
 
   describe('onFailure', () => {
+    it('should flag a failure as not aborted', async () => {
+      // Arrange
+      const onFailureSpy = vi.fn<OnFailure>();
+
+      // Act
+      const result = generateImage({
+        model: createRetryableModel({
+          model: MockImageModel.from(nonRetryableError),
+          retries: [],
+          onFailure: onFailureSpy,
+        }),
+        prompt: 'A beautiful sunset',
+      });
+      await expect(result).rejects.toThrow();
+
+      // Assert
+      expect(onFailureSpy.mock.calls[0]![0].aborted).toBe(false);
+    });
+
+    it('should flag a cancel as aborted', async () => {
+      // Arrange
+      const controller = new AbortController();
+      const baseModel = MockImageModel.from();
+      baseModel.doGenerate.mockImplementation(async () => {
+        controller.abort();
+        throw new DOMException('The operation was aborted.', 'AbortError');
+      });
+      const onFailureSpy = vi.fn<OnFailure>();
+
+      // Act
+      const result = generateImage({
+        model: createRetryableModel({
+          model: baseModel,
+          retries: [],
+          onFailure: onFailureSpy,
+        }),
+        prompt: 'A beautiful sunset',
+        abortSignal: controller.signal,
+        maxRetries: 0,
+      });
+      await expect(result).rejects.toMatchObject({ name: 'AbortError' });
+
+      // Assert
+      expect(onFailureSpy.mock.calls.length).toBe(1);
+      expect(onFailureSpy.mock.calls[0]![0].aborted).toBe(true);
+    });
     it('should call onFailure with raw error when no retry is available', async () => {
       // Arrange
       const baseModel = MockImageModel.from(nonRetryableError);

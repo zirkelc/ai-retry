@@ -433,6 +433,40 @@ describe('telemetry', () => {
       );
     });
 
+    it('should record a failed attempt and operation when the model sends an error part after content', async () => {
+      // Arrange
+      const error = new Error('overloaded');
+      const baseModel = MockLanguageModel.from({
+        doStream: [
+          { type: 'stream-start', warnings: [] },
+          { type: 'text-start', id: '0' },
+          { type: 'text-delta', id: '0', delta: 'Hello' },
+          { type: 'error', error },
+        ],
+      });
+      const model = createRetryableModel({
+        model: baseModel,
+        retries: [],
+        telemetry: { isEnabled: true, tracer },
+      });
+
+      // Act
+      const { stream } = await model.doStream(MockLanguageModel.callOptions());
+      await Streams.toArray(stream);
+
+      // Assert
+      const attempts = attemptSpans(exporter);
+      expect(attempts.length).toBe(1);
+      expect(attempts[0]!.attributes['ai_retry.attempt.outcome']).toBe(
+        'failure',
+      );
+      expect(attempts[0]!.attributes['ai_retry.attempt.error.message']).toBe(
+        'overloaded',
+      );
+      const operation = findSpan(exporter, 'ai_retry.doStream');
+      expect(operation.attributes['ai_retry.outcome']).toBe('failure');
+    });
+
     it('should record a failed attempt and operation when the model forwards an abort error part after content', async () => {
       // Arrange
       const controller = new AbortController();

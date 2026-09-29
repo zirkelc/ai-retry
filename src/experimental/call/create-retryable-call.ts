@@ -4,6 +4,7 @@ import { evaluateError } from '../../internal/evaluate-error.js';
 import { isErrorAttempt } from '../../internal/guards.js';
 import { resolveBackoffDelay } from '../../internal/resolve-backoff-delay.js';
 import { resolveModel } from '../../internal/resolve-model.js';
+import { isCallAbort } from '../../internal/retry-signal.js';
 import { totalTimeoutMs } from '../../internal/retry-timeout.js';
 import { createRetryTelemetry } from '../../internal/telemetry.js';
 import type {
@@ -272,6 +273,7 @@ class RetryableCall<MODEL extends AnyModel> extends BaseRetryableModel<MODEL> {
   private emitFailure(
     attempts: Array<ModelRetryAttempt<MODEL>>,
     error: unknown,
+    aborted: boolean,
   ) {
     if (!this.callOptions.onFailure) return;
     const current = attempts.at(-1);
@@ -280,6 +282,7 @@ class RetryableCall<MODEL extends AnyModel> extends BaseRetryableModel<MODEL> {
       current,
       attempts,
       error,
+      aborted,
     } as unknown as ModelFailureContext<MODEL>);
   }
 
@@ -478,7 +481,11 @@ class RetryableCall<MODEL extends AnyModel> extends BaseRetryableModel<MODEL> {
        * telling `onFailure` and the operation span about it.
        */
       operationError = error;
-      this.emitFailure(attempts, error);
+      this.emitFailure(
+        attempts,
+        error,
+        isCallAbort(error, runOptions?.abortSignal),
+      );
       throw error;
     } finally {
       recorder?.endOperation({

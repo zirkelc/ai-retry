@@ -1,4 +1,5 @@
 import { describe, expectTypeOf, it } from 'vitest';
+import type { CallSettledEvent } from './call/retry-arg.js';
 import type {
   CallOptions,
   EmbeddingModel,
@@ -85,5 +86,19 @@ describe('deprecated aliases', () => {
     expectTypeOf<Retries<EmbeddingModel>>().toEqualTypeOf<
       ModelRetries<EmbeddingModel, ModelRetryCallOptions<EmbeddingModel>>
     >();
+  });
+});
+
+describe('failure flags', () => {
+  it('should tell every model-level failure whether the call was aborted', () => {
+    expectTypeOf<
+      ModelFailureContext<LanguageModel>['aborted']
+    >().toEqualTypeOf<boolean>();
+  });
+
+  it('should flag a call-level settlement as aborted only on failure', () => {
+    expectTypeOf<
+      CallSettledEvent<LanguageModel, unknown>['aborted']
+    >().toEqualTypeOf<boolean | undefined>();
   });
 });

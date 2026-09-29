@@ -347,11 +347,12 @@ export class RetryableLanguageModel
   private emitFailure(
     attempts: Array<ModelRetryAttempt<LanguageModel>>,
     error: unknown,
+    aborted: boolean,
   ) {
     if (!this.options.onFailure) return;
     const current = attempts.at(-1);
     if (!current || !isErrorAttempt(current)) return;
-    this.options.onFailure({ current, attempts, error });
+    this.options.onFailure({ current, attempts, error, aborted });
   }
 
   async doGenerate(
@@ -404,7 +405,11 @@ export class RetryableLanguageModel
       finalCallOptions = retried.callOptions;
     } catch (error) {
       operationError = error;
-      this.emitFailure(attempts, error);
+      this.emitFailure(
+        attempts,
+        error,
+        isCallAbort(error, callOptions.abortSignal),
+      );
       throw error;
     } finally {
       recorder?.endOperation({
@@ -491,7 +496,11 @@ export class RetryableLanguageModel
        * Every pre-stream attempt failed; record the operation failure before
        * the error propagates to the caller.
        */
-      this.emitFailure(attempts, error);
+      this.emitFailure(
+        attempts,
+        error,
+        isCallAbort(error, callOptions.abortSignal),
+      );
       recorder?.endOperation({
         provider: this.currentModel.provider,
         modelId: this.currentModel.modelId,
@@ -512,17 +521,41 @@ export class RetryableLanguageModel
           | undefined;
         let isStreaming = false;
         /**
-         * Whether a failure was forwarded to the consumer as a stream part.
+         * The first failure forwarded to the consumer as a stream part, if
+         * any.
          *
          * A stream that carries an `error` part still closes normally, so
          * completing the loop says nothing about whether the generation
          * succeeded. Without this the consumer sees a failure while
          * `onSuccess` reports a success.
          */
-        let forwardedError = false;
+        let forwardedError: { error: unknown } | undefined;
 
         /** Set when the operation ends in failure, for the operation span. */
         let operationError: unknown;
+
+        /**
+         * Whether `error` is the call being aborted, judged against the retry
+         * the failing attempt ran under. Decides both how a failure reaches
+         * the consumer and what `onFailure` reports, so the two agree.
+         */
+        const isAborted = (error: unknown) =>
+          isCallAbort(error, callOptions.abortSignal, currentRetry);
+
+        /**
+         * Fail the operation on an error after content was forwarded. The
+         * committed attempt never failed as far as the retry loop saw, so it
+         * is recorded here as the error attempt `onFailure` reports.
+         */
+        const failCommitted = (error: unknown) => {
+          attempts.push({
+            type: 'error',
+            error,
+            model: this.currentModel,
+            options: finalCallOptions,
+          });
+          this.emitFailure(attempts, error, isAborted(error));
+        };
 
         /**
          * Hand an unrecovered failure to the consumer. The call being aborted
@@ -537,7 +570,7 @@ export class RetryableLanguageModel
          * as well.
          */
         const surfaceError = (error: unknown) => {
-          if (isCallAbort(error, callOptions.abortSignal, currentRetry)) {
+          if (isAborted(error)) {
             controller.error(error);
             return;
           }
@@ -599,13 +632,7 @@ export class RetryableLanguageModel
                    * rejection does. Nothing the model sends after it, a later
                    * rejection included, may replace the abort.
                    */
-                  if (
-                    isCallAbort(
-                      value.error,
-                      callOptions.abortSignal,
-                      currentRetry,
-                    )
-                  ) {
+                  if (isAborted(value.error)) {
                     throw value.error;
                   }
                   /**
@@ -613,7 +640,7 @@ export class RetryableLanguageModel
                    * consumer's stream and cannot be retried, but it is still a
                    * failure and must not be reported as a success.
                    */
-                  forwardedError = true;
+                  forwardedError ??= { error: value.error };
                 }
 
                 /**
@@ -777,11 +804,19 @@ export class RetryableLanguageModel
               }
 
               if (pendingAttempt !== undefined) {
-                recorder?.endAttempt({
-                  attempt: pendingAttempt,
-                  outcome: 'success',
-                  finishReason: streamFinishReason,
-                });
+                recorder?.endAttempt(
+                  forwardedError
+                    ? {
+                        attempt: pendingAttempt,
+                        outcome: 'failure',
+                        error: forwardedError.error,
+                      }
+                    : {
+                        attempt: pendingAttempt,
+                        outcome: 'success',
+                        finishReason: streamFinishReason,
+                      },
+                );
               }
               /**
                * A stream that completes with no content part still has its
@@ -824,6 +859,7 @@ export class RetryableLanguageModel
                   });
                 }
                 operationError = error;
+                failCommitted(error);
                 surfaceError(error);
                 /**
                  * Stop the model, which may still be sending: an error that
@@ -874,7 +910,7 @@ export class RetryableLanguageModel
                   });
                 }
                 operationError = finalError;
-                this.emitFailure(attempts, finalError);
+                this.emitFailure(attempts, finalError, isAborted(finalError));
                 surfaceError(finalError);
                 return;
               }
@@ -894,7 +930,7 @@ export class RetryableLanguageModel
                   });
                 }
                 operationError = error;
-                this.emitFailure(attempts, error);
+                this.emitFailure(attempts, error, isAborted(error));
                 surfaceError(error);
                 return;
               }
@@ -953,20 +989,20 @@ export class RetryableLanguageModel
           }
 
           /**
-           * Stream finished — finalize sticky model and, if it finished
+           * Stream finished: finalize sticky model and, if it finished
            * *well*, fire onSuccess. Deferred to here (rather than after the
            * initial withRetry resolves) so the final model and full attempts
            * list are observed, including any mid-stream retries.
            *
            * A stream that forwarded an error part reached this point too: it
            * closed normally, carrying the failure as cargo. That is not a
-           * success, and neither is it an attempt failure the retry loop can
-           * report — the consumer already has it, through `streamText`'s own
-           * `onError`. So nothing fires.
+           * success but a failure after content, so it fails the operation.
            */
           this.updateStickyModel(startModel);
 
           if (forwardedError) {
+            operationError = forwardedError.error;
+            failCommitted(forwardedError.error);
             return;
           }
 
@@ -988,7 +1024,7 @@ export class RetryableLanguageModel
            * is surfaced like every other unrecovered failure.
            */
           operationError = error;
-          this.emitFailure(attempts, error);
+          this.emitFailure(attempts, error, isAborted(error));
           surfaceError(error);
         } finally {
           recorder?.endOperation({

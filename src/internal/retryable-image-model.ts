@@ -3,7 +3,11 @@ import { evaluateError } from './evaluate-error.js';
 import { resolveImageModel } from './resolve-model.js';
 import { mergeImageModelCallOptions } from './merge-retry-call-options.js';
 import { resolveBackoffDelay } from './resolve-backoff-delay.js';
-import { isRetryCancelled, waitBeforeRetry } from './retry-signal.js';
+import {
+  isCallAbort,
+  isRetryCancelled,
+  waitBeforeRetry,
+} from './retry-signal.js';
 import { totalTimeoutMs } from './retry-timeout.js';
 import { createRetryTelemetry, type RetryTelemetry } from './telemetry.js';
 import type {
@@ -220,11 +224,12 @@ export class RetryableImageModel
   private emitFailure(
     attempts: Array<ModelRetryErrorAttempt<ImageModel>>,
     error: unknown,
+    aborted: boolean,
   ) {
     if (!this.options.onFailure) return;
     const current = attempts.at(-1);
     if (!current) return;
-    this.options.onFailure({ current, attempts, error });
+    this.options.onFailure({ current, attempts, error, aborted });
   }
 
   async doGenerate(
@@ -281,7 +286,11 @@ export class RetryableImageModel
       return result;
     } catch (error) {
       operationError = error;
-      this.emitFailure(attempts, error);
+      this.emitFailure(
+        attempts,
+        error,
+        isCallAbort(error, callOptions.abortSignal),
+      );
       throw error;
     } finally {
       recorder?.endOperation({

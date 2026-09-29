@@ -1,5 +1,6 @@
 import { delay } from '@ai-sdk/provider-utils';
 import { evaluateError } from '../internal/evaluate-error.js';
+import { isCallAbort } from '../internal/retry-signal.js';
 import { findRetryModel } from '../internal/find-retry-model.js';
 import { resolveBackoffDelay } from '../internal/resolve-backoff-delay.js';
 import { totalTimeoutMs } from '../internal/retry-timeout.js';
@@ -476,6 +477,7 @@ export async function runRetryLoop<
           CallSettledAttempt<MODEL, RESULT, COMMIT>
         >,
         error,
+        aborted: isCallAbort(error, callerSignal),
       });
     }
     /**
