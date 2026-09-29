@@ -6286,6 +6286,82 @@ describe('onFailure and aborts', () => {
     });
   });
 
+  describe('cancel during the wait before a result retry', () => {
+    it('should call onFailure, aborted, in doGenerate', async () => {
+      // Arrange
+      const controller = new AbortController();
+      const baseModel = MockLanguageModel.from(contentFilterResult);
+      const fallbackModel = MockLanguageModel.from(mockResultText);
+      const onFailure = vi.fn<OnFailure>();
+      const onSuccess = vi.fn<OnSuccess>();
+      const onError = vi.fn<OnError>();
+      const model = createRetryableModel({
+        model: baseModel,
+        retries: [
+          (context) =>
+            isResultAttempt(context.current)
+              ? { model: fallbackModel, delay: 5_000 }
+              : undefined,
+        ],
+        onFailure,
+        onSuccess,
+        onError,
+      });
+      setTimeout(() => controller.abort(), 10);
+
+      // Act
+      const result = model.doGenerate(withSignal(controller.signal));
+      await expect(result).rejects.toMatchObject({ name: 'AbortError' });
+
+      // Assert
+      expect(onSuccess.mock.calls.length).toBe(0);
+      expect(onFailure.mock.calls.length).toBe(1);
+      const [failure] = onFailure.mock.calls[0]!;
+      expect(failure.aborted).toBe(true);
+      expect(failure.current.type).toBe('error');
+      expect(failure.current.model).toBe(baseModel);
+      expect(failure.attempts.map((attempt) => attempt.type)).toEqual([
+        'result',
+        'error',
+      ]);
+      expect(fallbackModel.doGenerate).toHaveBeenCalledTimes(0);
+      expect(onError.mock.calls.length).toBe(0);
+    });
+
+    it('should call onFailure, aborted, before a finish retry in a stream', async () => {
+      // Arrange
+      const controller = new AbortController();
+      const fallbackModel = MockLanguageModel.from({
+        doStream: mockStreamChunks,
+      });
+      const onFailure = vi.fn<OnFailure>();
+      const model = createRetryableModel({
+        model: MockLanguageModel.from({ doStream: contentFilterStreamChunks }),
+        retries: [
+          (context) =>
+            isResultAttempt(context.current)
+              ? { model: fallbackModel, delay: 5_000 }
+              : undefined,
+        ],
+        onFailure,
+      });
+      setTimeout(() => controller.abort(), 10);
+
+      // Act
+      const { stream } = await model.doStream(withSignal(controller.signal));
+      await drain(stream);
+
+      // Assert
+      expect(onFailure.mock.calls.length).toBe(1);
+      const [failure] = onFailure.mock.calls[0]!;
+      expect(failure.aborted).toBe(true);
+      expect(failure.attempts.map((attempt) => attempt.type)).toEqual([
+        'result',
+        'error',
+      ]);
+    });
+  });
+
   describe('before content and in doGenerate', () => {
     it('should flag a stream error before content as not aborted', async () => {
       // Arrange

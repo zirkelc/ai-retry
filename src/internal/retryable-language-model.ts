@@ -136,6 +136,13 @@ export class RetryableLanguageModel
         timeoutMs: totalTimeoutMs(currentRetry?.timeout),
       });
 
+      /**
+       * Set while waiting before a result retry. That wait sits inside the
+       * attempt's `try`, but a cancel during it is not the attempt failing:
+       * the attempt already ended as a retry.
+       */
+      let waitingBeforeRetry = false;
+
       try {
         /**
          * Call the function that may need to be retried, with the attempt as
@@ -184,11 +191,13 @@ export class RetryableLanguageModel
               delayMs: calculatedDelay,
             });
 
+            waitingBeforeRetry = true;
             await waitBeforeRetry(
               calculatedDelay,
               input.callOptions.abortSignal,
               retryModel,
             );
+            waitingBeforeRetry = false;
 
             this.currentModel = retryModel.model;
             currentRetry = retryModel;
@@ -221,6 +230,15 @@ export class RetryableLanguageModel
           currentRetry,
         };
       } catch (error) {
+        /**
+         * Evaluating it would record an attempt that never ran and run
+         * `onError` and the retry conditions against the cancel. Let it
+         * propagate to the caller, which reports the failure.
+         */
+        if (waitingBeforeRetry) {
+          throw error;
+        }
+
         const { retryModel, attempt, finalError } = await this.handleError(
           error,
           attempts,
@@ -343,6 +361,11 @@ export class RetryableLanguageModel
   /**
    * Fire the `onFailure` callback for a terminally failed operation. The
    * final attempt (last entry of `attempts`) is surfaced as `current`.
+   *
+   * An operation can also end between attempts: cancelled during the wait
+   * before a result retry, the last attempt is the result that asked for the
+   * retry. The failure is then recorded against that attempt's model and
+   * options, as the error attempt `onFailure` reports.
    */
   private emitFailure(
     attempts: Array<ModelRetryAttempt<LanguageModel>>,
@@ -350,8 +373,17 @@ export class RetryableLanguageModel
     aborted: boolean,
   ) {
     if (!this.options.onFailure) return;
-    const current = attempts.at(-1);
-    if (!current || !isErrorAttempt(current)) return;
+    const last = attempts.at(-1);
+    if (!last) return;
+    const current = isErrorAttempt(last)
+      ? last
+      : {
+          type: 'error' as const,
+          error,
+          model: last.model,
+          options: last.options,
+        };
+    if (current !== last) attempts.push(current);
     this.options.onFailure({ current, attempts, error, aborted });
   }
 
