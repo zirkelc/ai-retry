@@ -1,6 +1,8 @@
 import { RetryError } from 'ai';
 import { describe, expect, it } from 'vitest';
+import { AiRetryError } from './ai-retry-error.js';
 import { prepareRetryError } from './prepare-retry-error.js';
+import { MockLanguageModel } from './test-utils.js';
 
 const first = new Error('first');
 const last = new Error('last');
@@ -102,5 +104,22 @@ describe('prepareRetryError', () => {
     expect(retryError.errors[0]).toBe(
       'Result with finishReason: content-filter',
     );
+  });
+
+  it('should carry the attempts', () => {
+    // Arrange
+    const primary = MockLanguageModel.from();
+    const fallback = MockLanguageModel.from();
+    const attempts = [
+      { type: 'result', finishReason: 'content-filter', model: primary },
+      { type: 'error', error: last, model: fallback },
+    ];
+
+    // Act
+    const retryError = prepareRetryError(last, attempts);
+
+    // Assert
+    expect(AiRetryError.isInstance(retryError)).toBe(true);
+    expect(retryError.attempts).toBe(attempts);
   });
 });

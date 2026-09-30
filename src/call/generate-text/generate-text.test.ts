@@ -1,13 +1,16 @@
-import { generateText, tool } from 'ai';
-import { describe, expect, it } from 'vitest';
+import { generateText, RetryError, tool } from 'ai';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import {
+  createRetryableModel,
   MockLanguageModel,
   mockResult,
   mockResultText,
   nonRetryableError,
   retryableError,
 } from '../../internal/test-utils.js';
+import { AiRetryError } from '../../internal/ai-retry-error.js';
+import { error } from '../../model/language-model/conditions/index.js';
 import type { LanguageModel } from '../../types.js';
 import { finishReason, result as resultCondition } from './conditions/index.js';
 import { retryableGenerateText } from './generate-text.js';
@@ -244,6 +247,126 @@ describe('retryableGenerateText', () => {
       // Assert
       expect(result.finishReason).toBe('length');
       expect(fallback.doGenerate.mock.calls.length).toBe(0);
+    });
+  });
+
+  describe('with a model-level retryable model', () => {
+    /**
+     * The model level switches a failed attempt from its primary to its own
+     * fallback. The call level must count both models, whatever the wrapper
+     * reports as its own identity once it is done.
+     */
+    const wrap = (primary: MockLanguageModel, fallback: MockLanguageModel) =>
+      createRetryableModel({
+        model: primary,
+        retries: [error.isRetryable(true).switch({ model: fallback })],
+      });
+
+    it('should not re-run a fallback the model level already tried', async () => {
+      // Arrange
+      const primary = MockLanguageModel.from(retryableError);
+      const fallback = MockLanguageModel.from(retryableError);
+
+      // Act
+      const result = retryableGenerateText({
+        model: wrap(primary, fallback),
+        prompt,
+        retry: [fallback],
+      });
+
+      // Assert
+      await expect(result).rejects.toThrow(RetryError);
+      expect(primary.doGenerate.mock.calls.length).toBe(1);
+      expect(fallback.doGenerate.mock.calls.length).toBe(1);
+    });
+
+    it('should run a different fallback once after the model level failed', async () => {
+      // Arrange
+      const primary = MockLanguageModel.from(retryableError);
+      const fallback = MockLanguageModel.from(retryableError);
+      const other = MockLanguageModel.from(mockResultText);
+
+      // Act
+      const result = await retryableGenerateText({
+        model: wrap(primary, fallback),
+        prompt,
+        retry: [fallback, other],
+      });
+
+      // Assert
+      expect(result.text).toBe(mockResultText);
+      expect(fallback.doGenerate.mock.calls.length).toBe(1);
+      expect(other.doGenerate.mock.calls.length).toBe(1);
+    });
+
+    it('should not re-run the primary the model level started on', async () => {
+      // Arrange
+      const primary = MockLanguageModel.from(retryableError);
+      const fallback = MockLanguageModel.from(retryableError);
+      const other = MockLanguageModel.from(mockResultText);
+
+      // Act
+      const result = await retryableGenerateText({
+        model: wrap(primary, fallback),
+        prompt,
+        retry: [primary, other],
+      });
+
+      // Assert
+      expect(result.text).toBe(mockResultText);
+      expect(primary.doGenerate.mock.calls.length).toBe(1);
+      expect(other.doGenerate.mock.calls.length).toBe(1);
+    });
+
+    it('should give the hooks the attempts the model level made', async () => {
+      // Arrange
+      const primary = MockLanguageModel.from(retryableError);
+      const fallback = MockLanguageModel.from(retryableError);
+      const other = MockLanguageModel.from(mockResultText);
+      const onError = vi.fn();
+      const onSettled = vi.fn();
+
+      // Act
+      await retryableGenerateText({
+        model: wrap(primary, fallback),
+        prompt,
+        retry: { retries: [other], onError, onSettled },
+      });
+
+      // Assert
+      const inner = onError.mock.calls[0]![0].current.error as AiRetryError;
+      expect(inner.attempts.map((a) => a.model)).toEqual([primary, fallback]);
+      expect(onSettled.mock.calls[0]![0].attempts[0].error).toBe(inner);
+    });
+
+    it('should add no attempts when the call is aborted inside the wrapper', async () => {
+      // Arrange
+      const controller = new AbortController();
+      const primary = MockLanguageModel.from(retryableError);
+      const fallback = MockLanguageModel.from({
+        doGenerate: async () => {
+          controller.abort();
+          throw new DOMException('The operation was aborted.', 'AbortError');
+        },
+      });
+      const other = MockLanguageModel.from(mockResultText);
+      const onSettled = vi.fn();
+
+      // Act
+      const result = retryableGenerateText({
+        model: wrap(primary, fallback),
+        prompt,
+        abortSignal: controller.signal,
+        retry: { retries: [other], onSettled },
+      });
+
+      // Assert
+      await expect(result).rejects.toMatchObject({ name: 'AbortError' });
+      expect(RetryError.isInstance(await result.catch((e) => e))).toBe(false);
+      expect(other.doGenerate.mock.calls.length).toBe(0);
+      const event = onSettled.mock.calls[0]![0];
+      expect(event.aborted).toBe(true);
+      expect(event.attempts.length).toBe(1);
     });
   });
 });

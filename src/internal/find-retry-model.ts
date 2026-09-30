@@ -1,4 +1,5 @@
-import { getModelKey } from './get-model-key.js';
+import type { AiRetryErrorAttempt } from './ai-retry-error.js';
+import { countModelAttempts } from './count-model-attempts.js';
 import { type GatewayResolver, resolveModel } from './resolve-model.js';
 import type { CallRetries } from '../call/types.js';
 import type {
@@ -91,15 +92,13 @@ export async function findRetryModel<
       const resolvedModel = resolveModel(modelValue, resolve);
 
       /**
-       * The model key uniquely identifies a model instance (provider + modelId)
+       * Count the attempts on the same model. An attempt through a retryable
+       * model counts every model that retryable model tried, so a fallback
+       * it already ran is not run again.
        */
-      const retryModelKey = getModelKey(resolvedModel);
-
-      /**
-       * Find all attempts with the same model
-       */
-      const retryAttempts = context.attempts.filter(
-        (a) => getModelKey(a.model) === retryModelKey,
+      const retryAttempts = countModelAttempts<AnyModel>(
+        resolvedModel,
+        context.attempts as ReadonlyArray<AiRetryErrorAttempt>,
       );
 
       const maxAttempts = retryModel.maxAttempts ?? 1;
@@ -107,7 +106,7 @@ export async function findRetryModel<
       /**
        * Check if the model can still be retried based on maxAttempts
        */
-      if (retryAttempts.length < maxAttempts) {
+      if (retryAttempts < maxAttempts) {
         // Type assertion needed because TypeScript can't prove that
         // `MODEL extends LanguageModel` implies `ResolvedModel<MODEL> extends LanguageModel`
         // for the conditional `options` type, even though they are equivalent at runtime
