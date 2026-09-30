@@ -6737,3 +6737,154 @@ describe('why an operation stopped', () => {
     });
   });
 });
+
+/**
+ * Kept at the end of the file: inline snapshots above include the auto-numbered
+ * id of each mock model, so mocks created earlier would shift them.
+ */
+describe(`reset: never`, () => {
+  it(`should use sticky model for every later request`, async () => {
+    // Arrange
+    const baseModel = MockLanguageModel.from({
+      doGenerate: retryableError,
+    });
+    const fallbackModel = MockLanguageModel.from({
+      doGenerate: mockResult,
+    });
+
+    const retryableModel = createRetryableModel({
+      model: baseModel,
+      retries: [{ model: fallbackModel, maxAttempts: 1 }],
+      reset: `never`,
+    });
+
+    // Act — request 1: base fails, fallback succeeds → sticky set
+    await generateText({ model: retryableModel, prompt });
+
+    // Act — requests 2..10: sticky (fallback) used directly, base never called
+    for (let i = 0; i < 9; i++) {
+      await generateText({ model: retryableModel, prompt });
+    }
+
+    // Assert
+    expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
+    expect(fallbackModel.doGenerate).toHaveBeenCalledTimes(10);
+  });
+
+  it(`should use sticky model for every later request in a stream`, async () => {
+    // Arrange
+    const baseModel = MockLanguageModel.from({
+      doStream: retryableError,
+    });
+    const fallbackModel = MockLanguageModel.from({
+      doStream: mockStreamChunks,
+    });
+
+    const retryableModel = createRetryableModel({
+      model: baseModel,
+      retries: [{ model: fallbackModel, maxAttempts: 1 }],
+      reset: `never`,
+    });
+
+    // Act — request 1 fails over, requests 2..5 start on the fallback
+    for (let i = 0; i < 5; i++) {
+      const result = streamText({ model: retryableModel, prompt });
+      await result.consumeStream();
+    }
+
+    // Assert
+    expect(baseModel.doStream).toHaveBeenCalledTimes(1);
+    expect(fallbackModel.doStream).toHaveBeenCalledTimes(5);
+  });
+
+  it.each([`never`, `after-1000-requests`] as const)(
+    `should retry from the sticky model when it fails later (%s)`,
+    async (reset) => {
+      // Arrange
+      let fallback1CallCount = 0;
+      const baseModel = MockLanguageModel.from({
+        doGenerate: retryableError,
+      });
+      const fallbackModel1 = MockLanguageModel.from({
+        doGenerate: async () => {
+          fallback1CallCount++;
+          /** Fail on second use (when used as sticky on request 2) */
+          if (fallback1CallCount >= 2) throw retryableError;
+          return mockResult;
+        },
+      });
+      const fallbackModel2 = MockLanguageModel.from({
+        doGenerate: mockResult,
+      });
+
+      const retryableModel = createRetryableModel({
+        model: baseModel,
+        retries: [
+          { model: fallbackModel1, maxAttempts: 1 },
+          { model: fallbackModel2, maxAttempts: 1 },
+        ],
+        reset,
+      });
+
+      // Act — request 1: base fails → fallback1 succeeds → sticky = fallback1
+      await generateText({ model: retryableModel, prompt });
+
+      // Act — request 2: sticky (fallback1) fails → fallback2 succeeds → sticky = fallback2
+      await generateText({ model: retryableModel, prompt });
+
+      // Act — requests 3..5: sticky (fallback2) used directly
+      for (let i = 0; i < 3; i++) {
+        await generateText({ model: retryableModel, prompt });
+      }
+
+      // Assert — base is not tried again, the chain starts at the sticky model
+      expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
+      expect(fallbackModel1.doGenerate).toHaveBeenCalledTimes(2);
+      expect(fallbackModel2.doGenerate).toHaveBeenCalledTimes(4);
+    },
+  );
+
+  it.each([`never`, `after-1000-requests`] as const)(
+    `should keep the sticky model after it fails with no retry left (%s)`,
+    async (reset) => {
+      // Arrange
+      let fallbackCallCount = 0;
+      const baseModel = MockLanguageModel.from({
+        doGenerate: retryableError,
+      });
+      const fallbackModel = MockLanguageModel.from({
+        doGenerate: async () => {
+          fallbackCallCount++;
+          /** Fail only on request 2 */
+          if (fallbackCallCount === 2) throw retryableError;
+          return mockResult;
+        },
+      });
+
+      const retryableModel = createRetryableModel({
+        model: baseModel,
+        retries: [{ model: fallbackModel, maxAttempts: 1 }],
+        reset,
+      });
+
+      // Act — request 1: base fails → fallback succeeds → sticky = fallback
+      await generateText({ model: retryableModel, prompt });
+
+      // Act — request 2: sticky (fallback) fails, fallback already tried → error
+      const failed = generateText({
+        model: retryableModel,
+        prompt,
+        maxRetries: 0,
+      });
+      await expect(failed).rejects.toThrow();
+
+      // Act — request 3: still starts on the sticky model
+      const result3 = await generateText({ model: retryableModel, prompt });
+
+      // Assert
+      expect(result3.text).toBe(mockResultText);
+      expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
+      expect(fallbackModel.doGenerate).toHaveBeenCalledTimes(3);
+    },
+  );
+});

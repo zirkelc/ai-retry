@@ -753,6 +753,7 @@ By default, every new request starts with the base model, even if a previous req
 | `after-request`    | Reset immediately after the next request (default)           |
 | `after-N-requests` | Keep the retry model for the next **N** requests, then reset |
 | `after-N-seconds`  | Keep the retry model for **N** seconds, then reset           |
+| `never`            | Keep the retry model for as long as the wrapper lives        |
 
 ```typescript
 const retryableModel = createRetryableModel({
@@ -761,6 +762,18 @@ const retryableModel = createRetryableModel({
   reset: 'after-5-requests',
 });
 ```
+
+`never` ties the sticky model to the lifetime of the wrapper instance. Create the wrapper for the scope that should stay on one provider, for example once per chat turn, and every step of that turn continues on the fallback after the first failover:
+
+```typescript
+const retryableModel = createRetryableModel({
+  model: azure('gpt-4o'),
+  retries: [openai('gpt-4o')],
+  reset: 'never',
+});
+```
+
+While a model is sticky, each request starts on it and the retries apply from there. The base model is tried again only when a retry names it. If a retry succeeds on another model, that model becomes the sticky one. If the request fails, the sticky model stays in place. `never` behaves exactly like `after-N-requests` with an **N** that is never reached.
 
 ### Telemetry
 
@@ -1376,7 +1389,8 @@ import { createRetryable } from 'ai-retry';
 type Reset =
   | 'after-request'
   | `after-${number}-requests`
-  | `after-${number}-seconds`;
+  | `after-${number}-seconds`
+  | 'never';
 ```
 
 #### `Condition<MODEL, LAYER>`

@@ -1227,5 +1227,39 @@ describe('createRetryableCall', () => {
         vi.useRealTimers();
       });
     });
+
+    describe('never', () => {
+      it('should stick to the recovered model for every later request', async () => {
+        // Arrange
+        const primary = MockLanguageModel.from();
+        const fallback = MockLanguageModel.from();
+        const models: Array<MockLanguageModel> = [];
+        const fn = vi.fn(async ({ model }: RetryCallAttempt) => {
+          models.push(model as MockLanguageModel);
+          if (model === primary) throw new Error('primary failed');
+          return 'OK';
+        });
+        const run = createRetryableCall({
+          model: primary,
+          retries: [fallback],
+          reset: 'never',
+        });
+
+        // Act — run 1 recovers on fallback (sticky), runs 2-5 reuse it directly.
+        for (let i = 0; i < 5; i++) {
+          await run(fn);
+        }
+
+        // Assert
+        expect(models).toEqual([
+          primary,
+          fallback,
+          fallback,
+          fallback,
+          fallback,
+          fallback,
+        ]);
+      });
+    });
   });
 });

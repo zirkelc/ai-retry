@@ -78,6 +78,7 @@ const retryableModel = createRetryableModel({
   // - after-request (default): every new request starts with the base model
   // - after-N-requests: retry model stays sticky for the next N requests
   // - after-N-seconds: retry model stays sticky for N seconds
+  // - never: retry model stays sticky for the lifetime of this wrapper
   reset: `after-2-requests`,
   onRetry: ({ current }) => {
     console.log(`  ⟳ retrying with: ${current.model.modelId}`);

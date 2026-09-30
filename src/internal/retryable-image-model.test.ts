@@ -601,6 +601,34 @@ describe('generateImage', () => {
     });
   });
 
+  describe('reset', () => {
+    describe('never', () => {
+      it('should use sticky model for every later request', async () => {
+        // Arrange
+        const baseModel = MockImageModel.from(retryableError);
+        const fallbackModel = MockImageModel.from(mockImageResult);
+
+        const retryableModel = createRetryableModel({
+          model: baseModel,
+          retries: [{ model: fallbackModel, maxAttempts: 1 }],
+          reset: `never`,
+        });
+
+        // Act — request 1 fails over, requests 2..5 start on the fallback
+        for (let i = 0; i < 5; i++) {
+          await generateImage({
+            model: retryableModel,
+            prompt: `A beautiful sunset`,
+          });
+        }
+
+        // Assert
+        expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
+        expect(fallbackModel.doGenerate).toHaveBeenCalledTimes(5);
+      });
+    });
+  });
+
   describe('RetryableOptions', () => {
     describe('maxAttempts', () => {
       it('should respect maxAttempts per model', async () => {

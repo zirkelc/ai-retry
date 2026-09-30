@@ -1445,5 +1445,28 @@ describe('embed', () => {
         vi.useRealTimers();
       });
     });
+
+    describe(`never`, () => {
+      it(`should use sticky model for every later request`, async () => {
+        // Arrange
+        const baseModel = MockEmbeddingModel.from(retryableError);
+        const fallbackModel = MockEmbeddingModel.from(mockEmbeddings);
+
+        const retryableModel = createRetryableModel({
+          model: baseModel,
+          retries: [{ model: fallbackModel, maxAttempts: 1 }],
+          reset: `never`,
+        });
+
+        // Act — request 1 fails over, requests 2..5 start on the fallback
+        for (let i = 0; i < 5; i++) {
+          await embed({ model: retryableModel, value: `Hello!` });
+        }
+
+        // Assert
+        expect(baseModel.doEmbed).toHaveBeenCalledTimes(1);
+        expect(fallbackModel.doEmbed).toHaveBeenCalledTimes(5);
+      });
+    });
   });
 });
