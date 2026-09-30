@@ -51,6 +51,10 @@ export abstract class BaseRetryableModel<MODEL extends AnyModel> {
       return this.baseModel;
     }
 
+    if (this.parsedReset.type === `never`) {
+      return this.stickyState.model;
+    }
+
     if (this.parsedReset.type === `requests`) {
       if (this.stickyState.requestsRemaining > 0) {
         this.stickyState.requestsRemaining--;

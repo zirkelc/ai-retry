@@ -545,11 +545,18 @@ export type RetryableOptions<MODEL extends AnyResolvableModel> = Partial<
  * - `'after-request'` — reset after each request (default, current behavior)
  * - `` `after-${number}-requests` `` — use the retry model for the next N requests
  * - `` `after-${number}-seconds` `` — use the retry model for the next N seconds
+ * - `'never'` — use the retry model for every later request of this wrapper
+ *
+ * While a retry model is sticky, each request starts on it and the retries
+ * apply from there. The base model is tried again only when a retry names it.
+ * A retry that succeeds on another model makes that model the sticky one; a
+ * failed request leaves the sticky model in place.
  */
 export type Reset =
   | 'after-request'
   | `after-${number}-requests`
-  | `after-${number}-seconds`;
+  | `after-${number}-seconds`
+  | 'never';
 
 export type LanguageModelGenerate = Awaited<
   ReturnType<LanguageModel['doGenerate']>

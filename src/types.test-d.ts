@@ -20,6 +20,7 @@ import type {
   ModelRetryResultAttempt,
   ModelSuccessAttempt,
   ModelSuccessContext,
+  Reset,
   Result,
   Retries,
   Retryable,
@@ -100,5 +101,19 @@ describe('failure flags', () => {
     expectTypeOf<
       CallSettledEvent<LanguageModel, unknown>['aborted']
     >().toEqualTypeOf<boolean | undefined>();
+  });
+});
+
+describe('Reset', () => {
+  it('should accept every reset policy', () => {
+    expectTypeOf<'after-request'>().toExtend<Reset>();
+    expectTypeOf<'after-5-requests'>().toExtend<Reset>();
+    expectTypeOf<'after-30-seconds'>().toExtend<Reset>();
+    expectTypeOf<'never'>().toExtend<Reset>();
+  });
+
+  it('should reject an unknown reset policy', () => {
+    expectTypeOf<'always'>().not.toExtend<Reset>();
+    expectTypeOf<'after-forever'>().not.toExtend<Reset>();
   });
 });
