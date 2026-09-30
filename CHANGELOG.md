@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.6.0](https://github.com/zirkelc/ai-retry/compare/v2.5.0...v2.6.0) (2026-09-30)
+
+
+### Features
+
+* skip models a wrapped retryable model already tried ([#84](https://github.com/zirkelc/ai-retry/issues/84)) ([55f73dd](https://github.com/zirkelc/ai-retry/commit/55f73dd7a456fe0470230aff00b2507d5fec06b9))
+
 ## [2.5.0](https://github.com/zirkelc/ai-retry/compare/v2.4.1...v2.5.0) (2026-09-29)
 
 
