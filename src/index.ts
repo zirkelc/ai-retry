@@ -5,6 +5,15 @@ export * from './types.js';
 export { isErrorAttempt, isResultAttempt } from './internal/guards.js';
 
 /**
+ * The `RetryError` both retry layers fail with after more than one attempt,
+ * carrying the attempts. Detect it with `AiRetryError.isInstance`.
+ */
+export {
+  AiRetryError,
+  type AiRetryErrorAttempt,
+} from './internal/ai-retry-error.js';
+
+/**
  * The call-level retry context and the shape of the `retry` argument. A
  * different type from the model-level `ModelRetryContext` on purpose: the two
  * layers see different results and different call arguments, and keeping them

@@ -1,5 +1,5 @@
 import { getErrorMessage } from '@ai-sdk/provider';
-import { RetryError } from 'ai';
+import { AiRetryError, type AiRetryErrorAttempt } from './ai-retry-error.js';
 
 /**
  * The parts of an attempt this reads: whether it failed, and — for one that did
@@ -31,19 +31,21 @@ function describeResult(attempt: AttemptLike): string {
 
 /**
  * Prepare a RetryError that includes all errors from previous attempts.
+ * The attempts themselves are kept on it too.
  */
 export function prepareRetryError(
   error: unknown,
   attempts: ReadonlyArray<AttemptLike>,
-) {
+): AiRetryError {
   const errorMessage = getErrorMessage(error);
   const errors = attempts.map((a) =>
     a.type === 'error' ? a.error : describeResult(a),
   );
 
-  return new RetryError({
+  return new AiRetryError({
     message: `Failed after ${attempts.length} attempts. Last error: ${errorMessage}`,
     reason: 'maxRetriesExceeded',
     errors,
+    attempts: attempts as ReadonlyArray<AiRetryErrorAttempt>,
   });
 }

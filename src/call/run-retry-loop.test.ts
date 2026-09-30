@@ -21,6 +21,7 @@ import { retryableGenerateImage } from './generate-image/generate-image.js';
 import { aborted, finishReason } from './generate-text/conditions/index.js';
 import { retryableGenerateText } from './generate-text/generate-text.js';
 import { retryableStreamText } from './stream-text/stream-text.js';
+import { AiRetryError } from '../internal/ai-retry-error.js';
 
 /**
  * The retry loop is shared by every call-level entry point, so its behavior is
@@ -117,6 +118,27 @@ describe('fail-over', () => {
     // Assert: the same error the caller gets from a cancel without retries.
     await expect(result).rejects.toMatchObject({ name: 'AbortError' });
     expect(fallback.doGenerate.mock.calls.length).toBe(1);
+  });
+
+  it('should throw an AiRetryError carrying the attempts when its retries run out', async () => {
+    // Arrange
+    const primary = MockLanguageModel.from(retryableError);
+    const fallback = MockLanguageModel.from(retryableError);
+
+    // Act
+    const error = await retryableGenerateText({
+      model: primary,
+      prompt,
+      retry: [fallback],
+    }).catch((e: unknown) => e);
+
+    // Assert
+    expect(RetryError.isInstance(error)).toBe(true);
+    expect(AiRetryError.isInstance(error)).toBe(true);
+    expect((error as AiRetryError).attempts.map((a) => a.model)).toEqual([
+      primary,
+      fallback,
+    ]);
   });
 
   it('should throw the original error when no retry matched', async () => {
