@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.7.0](https://github.com/zirkelc/ai-retry/compare/v2.6.0...v2.7.0) (2026-09-30)
+
+
+### Features
+
+* add reset 'never' to keep the fallback model for the wrapper's lifetime ([#86](https://github.com/zirkelc/ai-retry/issues/86)) ([ca7549e](https://github.com/zirkelc/ai-retry/commit/ca7549e976098294572cc89c247bc0ce165f91ad))
+
 ## [2.6.0](https://github.com/zirkelc/ai-retry/compare/v2.5.0...v2.6.0) (2026-09-30)
 
 
