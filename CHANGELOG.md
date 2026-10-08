@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.7.1](https://github.com/zirkelc/ai-retry/compare/v2.7.0...v2.7.1) (2026-10-08)
+
+
+### Bug Fixes
+
+* match finishReason() on SDK errors carrying a failure finish reason ([#88](https://github.com/zirkelc/ai-retry/issues/88)) ([54bb298](https://github.com/zirkelc/ai-retry/commit/54bb298be45da95aeb6143e878df2b841e087b41))
+
 ## [2.7.0](https://github.com/zirkelc/ai-retry/compare/v2.6.0...v2.7.0) (2026-09-30)
 
 
