@@ -1,6 +1,8 @@
-import { generateText } from 'ai';
+import { generateText, Output } from 'ai';
 import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
 import {
+  contentFilterRefusalResult,
   createRetryableModel,
   MockLanguageModel,
   mockResultText,
@@ -43,6 +45,34 @@ describe('finishReason', () => {
       expect(baseModel.doGenerate).toHaveBeenCalledTimes(1);
       expect(retryModel.doGenerate).toHaveBeenCalledTimes(1);
       expect(out.text).toBe(mockResultText);
+    });
+
+    it('should switch on a content-filter refusal of a structured output', async () => {
+      // Arrange: the refusal is text the requested object cannot be parsed
+      // from. Below the model the finish reason is judged before any parsing
+      // happens, so the fallback answers and nothing throws.
+      const baseModel = MockLanguageModel.from({
+        doGenerate: contentFilterRefusalResult,
+      });
+      const retryModel = MockLanguageModel.from('{"summary":"ok"}');
+
+      // Act
+      const out = await generateText({
+        model: createRetryableModel({
+          model: baseModel,
+          retries: [
+            finishReason('content-filter').switch({ model: retryModel }),
+          ],
+        }),
+        prompt: 'Hello!',
+        output: Output.object({ schema: z.object({ summary: z.string() }) }),
+        maxRetries: 0,
+      });
+
+      // Assert
+      expect(out.output).toEqual({ summary: 'ok' });
+      expect(baseModel.doGenerate.mock.calls.length).toBe(1);
+      expect(retryModel.doGenerate.mock.calls.length).toBe(1);
     });
 
     it('should not switch when finish reason does not match', async () => {

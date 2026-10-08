@@ -4,6 +4,10 @@ import { findRetryModel } from '../internal/find-retry-model.js';
 import { resolveBackoffDelay } from '../internal/resolve-backoff-delay.js';
 import { totalTimeoutMs } from '../internal/retry-timeout.js';
 import {
+  errorFinishReason,
+  resultFinishReason,
+} from './conditions/finish-reason.js';
+import {
   type GatewayResolver,
   resolveModel,
 } from '../internal/resolve-model.js';
@@ -21,7 +25,6 @@ import type {
 } from '../types.js';
 import type {
   CallArgs,
-  CallFinishReason,
   CallRetryAttempt,
   CallRetryContext,
   CallRetryResultAttempt,
@@ -120,13 +123,6 @@ export type EntryPoint<
 /** Whether the `disabled` switch is on for this call. */
 const isDisabled = (disabled: boolean | (() => boolean) | undefined): boolean =>
   typeof disabled === 'function' ? disabled() : disabled === true;
-
-/**
- * The finish reason a result carries, where the operation has one. Embeddings
- * and images do not, and report nothing rather than a placeholder.
- */
-const finishReasonOf = (result: unknown): CallFinishReason | undefined =>
-  (result as { finishReason?: CallFinishReason }).finishReason;
 
 /**
  * Resolve the argument overrides for the upcoming attempt.
@@ -354,6 +350,7 @@ export async function runRetryLoop<
           recorder?.endAttempt({
             attempt: attemptNumber,
             outcome: 'failure',
+            finishReason: errorFinishReason(error),
             error,
           });
           throw evaluation.finalError;
@@ -369,6 +366,7 @@ export async function runRetryLoop<
           recorder?.endAttempt({
             attempt: attemptNumber,
             outcome: 'failure',
+            finishReason: errorFinishReason(error),
             error,
           });
           throw error;
@@ -383,6 +381,7 @@ export async function runRetryLoop<
         recorder?.endAttempt({
           attempt: attemptNumber,
           outcome: 'retry',
+          finishReason: errorFinishReason(error),
           error,
           delayMs: backoff,
         });
@@ -399,7 +398,7 @@ export async function runRetryLoop<
        * conditions still get a say and fail-over is still possible.
        */
       if (settled.type === 'result') {
-        const finishReason = finishReasonOf(settled.result);
+        const finishReason = resultFinishReason(settled.result);
 
         const resultAttempt: CallRetryResultAttempt<MODEL, COMMIT> = {
           type: 'result',

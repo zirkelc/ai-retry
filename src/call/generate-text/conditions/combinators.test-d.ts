@@ -14,6 +14,7 @@ import {
   or,
   result,
 } from './index.js';
+import type { FinishReasonCommitResult } from './index.js';
 
 describe('top-level combinators (call/generate-text)', () => {
   it('or/and/not infer the family and finalize to a call retryable', () => {
@@ -38,11 +39,12 @@ describe('top-level combinators (call/generate-text)', () => {
   it('carries the entry point commit result into the result-side retryables', () => {
     // Where an error condition leaves the result at `unknown` and fits any
     // entry point, a result condition names the one it can judge — which is
-    // what makes it rejected anywhere else.
+    // what makes it rejected anywhere else. `finishReason` names only the
+    // field it reads, so it does not pin the call's tools or output.
     expectTypeOf(
       finishReason('content-filter').switch({ model: openai('gpt-4o') }),
     ).toEqualTypeOf<
-      CallRetryable<ResolvableLanguageModel, never, GenerateTextCommitResult>
+      CallRetryable<ResolvableLanguageModel, never, FinishReasonCommitResult>
     >();
 
     expectTypeOf(

@@ -14,6 +14,7 @@ import {
   or,
   result,
 } from './index.js';
+import type { FinishReasonCommitResult } from './index.js';
 
 describe('top-level combinators (call/stream-text)', () => {
   it('or/and/not infer the family and finalize to a call retryable', () => {
@@ -36,10 +37,11 @@ describe('top-level combinators (call/stream-text)', () => {
   });
 
   it('carries the entry point commit result into the result-side retryables', () => {
+    // `finishReason` names only the field it reads.
     expectTypeOf(
       finishReason('content-filter').switch({ model: openai('gpt-4o') }),
     ).toEqualTypeOf<
-      CallRetryable<ResolvableLanguageModel, never, StreamTextCommitResult>
+      CallRetryable<ResolvableLanguageModel, never, FinishReasonCommitResult>
     >();
 
     expectTypeOf(

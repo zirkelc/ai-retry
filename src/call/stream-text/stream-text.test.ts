@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { RetryError } from 'ai';
+import { RetryError, tool } from 'ai';
+import { z } from 'zod';
 import {
   chunksToText,
   contentFilterStreamChunks,
@@ -10,10 +11,12 @@ import {
   mockStreamChunks,
   retryableError,
   Streams,
+  testUsage,
 } from '../../internal/test-utils.js';
 import { AiRetryError } from '../../internal/ai-retry-error.js';
-import { error } from '../../model/language-model/conditions/index.js';
+import { error as modelError } from '../../model/language-model/conditions/index.js';
 import {
+  error,
   finishReason,
   result as resultCondition,
   timeout,
@@ -453,6 +456,58 @@ describe('retryableStreamText', () => {
       expect(chunksToText(chunks)).toBe('Hello, world!');
     });
 
+    it('should fall over on a contentless content-filter finish of an enforced tool choice', async () => {
+      // Arrange: no tool call was made where one is required, so the SDK
+      // emits an error part before any content. The finish reason survives
+      // only on that error.
+      const primary = MockLanguageModel.from({
+        doStream: contentFilterStreamChunks,
+      });
+      const answering = MockLanguageModel.from({
+        doStream: [
+          { type: 'stream-start', warnings: [] },
+          {
+            type: 'tool-call',
+            toolCallId: '1',
+            toolName: 'lookup',
+            input: '{"city":"Berlin"}',
+          },
+          {
+            type: 'finish',
+            finishReason: { unified: 'tool-calls', raw: undefined },
+            usage: testUsage,
+          },
+        ],
+      });
+      const otherRefusing = MockLanguageModel.from({
+        doStream: contentFilterStreamChunks,
+      });
+      const tools = {
+        lookup: tool({
+          description: 'look a city up',
+          inputSchema: z.object({ city: z.string() }),
+        }),
+      };
+
+      // Act
+      const result = await retryableStreamText({
+        model: primary,
+        prompt,
+        tools,
+        toolChoice: 'required',
+        retry: [
+          finishReason('content-filter').switch({ model: answering }),
+          error(() => true).switch({ model: otherRefusing }),
+        ],
+      });
+      const toolCalls = await result.toolCalls;
+
+      // Assert
+      expect(toolCalls.length).toBe(1);
+      expect(answering.doStream.mock.calls.length).toBe(1);
+      expect(otherRefusing.doStream.mock.calls.length).toBe(0);
+    });
+
     it('should report a stream judged before any content as a stream result', async () => {
       // Arrange — nothing was generated, so there is genuinely nothing to see,
       // and the reported result declares no content at all.
@@ -498,7 +553,7 @@ describe('retryableStreamText', () => {
     const wrap = (primary: MockLanguageModel, fallback: MockLanguageModel) =>
       createRetryableModel({
         model: primary,
-        retries: [error.isRetryable(true).switch({ model: fallback })],
+        retries: [modelError.isRetryable(true).switch({ model: fallback })],
       });
 
     it('should not re-run a fallback the model level already tried', async () => {

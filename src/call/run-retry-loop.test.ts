@@ -1,7 +1,9 @@
-import { RetryError } from 'ai';
+import { Output, RetryError } from 'ai';
+import { z } from 'zod';
 import { describe, expect, it, vi } from 'vitest';
 import {
   attemptSpans,
+  contentFilterRefusalResult,
   createSpanExporter,
   Embedding,
   findSpan,
@@ -585,6 +587,33 @@ describe('telemetry', () => {
     expect(attempts.length).toBe(2);
     expect(attempts[0]!.attributes['ai_retry.attempt.outcome']).toBe('retry');
     expect(attempts[1]!.attributes['ai_retry.attempt.outcome']).toBe('success');
+  });
+
+  it('should record the finish reason an error attempt carries', async () => {
+    // Arrange: the refusal cannot be parsed into the requested object, so the
+    // attempt fails with an error that keeps the generation's finish reason.
+    const { exporter, tracer } = createSpanExporter();
+    const primary = MockLanguageModel.from(contentFilterRefusalResult);
+    const fallback = MockLanguageModel.from('{"summary":"ok"}');
+
+    // Act
+    await retryableGenerateText({
+      model: primary,
+      prompt,
+      output: Output.object({ schema: z.object({ summary: z.string() }) }),
+      retry: {
+        retries: [finishReason('content-filter').switch({ model: fallback })],
+        telemetry: { isEnabled: true, tracer },
+      },
+    });
+
+    // Assert
+    const attempts = attemptSpans(exporter);
+    expect(attempts.length).toBe(2);
+    expect(attempts[0]!.attributes['ai_retry.attempt.outcome']).toBe('retry');
+    expect(attempts[0]!.attributes['ai_retry.attempt.finish_reason']).toBe(
+      'content-filter',
+    );
   });
 
   it('should make the attempt the active span, so callees nest under it', async () => {
