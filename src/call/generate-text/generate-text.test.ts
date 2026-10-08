@@ -1,7 +1,14 @@
-import { generateText, RetryError, tool } from 'ai';
+import {
+  generateText,
+  NoObjectGeneratedError,
+  Output,
+  RetryError,
+  tool,
+} from 'ai';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import {
+  contentFilterRefusalResult,
   createRetryableModel,
   MockLanguageModel,
   mockResult,
@@ -10,9 +17,14 @@ import {
   retryableError,
 } from '../../internal/test-utils.js';
 import { AiRetryError } from '../../internal/ai-retry-error.js';
-import { error } from '../../model/language-model/conditions/index.js';
+import { error as modelError } from '../../model/language-model/conditions/index.js';
 import type { LanguageModel } from '../../types.js';
-import { finishReason, result as resultCondition } from './conditions/index.js';
+import {
+  error,
+  finishReason,
+  not,
+  result as resultCondition,
+} from './conditions/index.js';
 import { retryableGenerateText } from './generate-text.js';
 
 const prompt = 'Hello!';
@@ -158,6 +170,145 @@ describe('retryableGenerateText', () => {
       expect(fallback.doGenerate.mock.calls.length).toBe(1);
     });
 
+    it('should fall over on a content-filter refusal of a structured output', async () => {
+      // Arrange: the filter answers with plain text, so parsing it as the
+      // requested object throws, and the attempt arrives as an error carrying
+      // the finish reason instead of as a result.
+      const primary = MockLanguageModel.from({
+        doGenerate: contentFilterRefusalResult,
+      });
+      const answering = MockLanguageModel.from('{"summary":"ok"}');
+      const otherRefusing = MockLanguageModel.from({
+        doGenerate: contentFilterRefusalResult,
+      });
+
+      // Act
+      const result = await retryableGenerateText({
+        model: primary,
+        prompt,
+        output: Output.object({ schema: z.object({ summary: z.string() }) }),
+        retry: [
+          finishReason('content-filter').switch({ model: answering }),
+          error(() => true).switch({ model: otherRefusing }),
+        ],
+      });
+
+      // Assert
+      expect(result.output).toEqual({ summary: 'ok' });
+      expect(answering.doGenerate.mock.calls.length).toBe(1);
+      expect(otherRefusing.doGenerate.mock.calls.length).toBe(0);
+    });
+
+    it('should fall over on a content-filter refusal of an enforced tool choice', async () => {
+      // Arrange: the filter answers with text where a tool call is required,
+      // so the SDK throws, and the error carries the finish reason.
+      const primary = MockLanguageModel.from({
+        doGenerate: contentFilterRefusalResult,
+      });
+      const answering = MockLanguageModel.from({
+        content: [
+          {
+            type: 'tool-call',
+            toolCallId: '1',
+            toolName: 'lookup',
+            input: '{"city":"Berlin"}',
+          },
+        ],
+        finishReason: 'tool-calls',
+      });
+      const otherRefusing = MockLanguageModel.from({
+        doGenerate: contentFilterRefusalResult,
+      });
+      const tools = {
+        lookup: tool({
+          description: 'look a city up',
+          inputSchema: z.object({ city: z.string() }),
+        }),
+      };
+
+      // Act
+      const result = await retryableGenerateText({
+        model: primary,
+        prompt,
+        tools,
+        toolChoice: 'required',
+        retry: [
+          finishReason('content-filter').switch({ model: answering }),
+          error(() => true).switch({ model: otherRefusing }),
+        ],
+      });
+
+      // Assert
+      expect(result.toolCalls.length).toBe(1);
+      expect(answering.doGenerate.mock.calls.length).toBe(1);
+      expect(otherRefusing.doGenerate.mock.calls.length).toBe(0);
+    });
+
+    it('should not fall over on a structured-output error with another finish reason', async () => {
+      // Arrange: the text is cut off rather than filtered.
+      const primary = MockLanguageModel.from({
+        content: [{ type: 'text', text: '{"summary":' }],
+        finishReason: 'length',
+      });
+      const fallback = MockLanguageModel.from('{"summary":"ok"}');
+
+      // Act
+      const result = retryableGenerateText({
+        model: primary,
+        prompt,
+        output: Output.object({ schema: z.object({ summary: z.string() }) }),
+        retry: [finishReason('content-filter').switch({ model: fallback })],
+      });
+
+      // Assert
+      await expect(result).rejects.toThrow(NoObjectGeneratedError);
+      expect(fallback.doGenerate.mock.calls.length).toBe(0);
+    });
+
+    it('should not match a normal finish reason on a structured-output error', async () => {
+      // Arrange: the model finished normally, but its JSON does not fit the
+      // schema. The content failed, not the finish, so 'stop' must not match.
+      const primary = MockLanguageModel.from({
+        content: [{ type: 'text', text: '{"title":"ok"}' }],
+        finishReason: 'stop',
+      });
+      const fallback = MockLanguageModel.from('{"summary":"ok"}');
+
+      // Act
+      const result = retryableGenerateText({
+        model: primary,
+        prompt,
+        output: Output.object({ schema: z.object({ summary: z.string() }) }),
+        retry: [finishReason('stop').switch({ model: fallback })],
+      });
+
+      // Assert
+      await expect(result).rejects.toThrow(NoObjectGeneratedError);
+      expect(fallback.doGenerate.mock.calls.length).toBe(0);
+    });
+
+    it('should keep an inverted normal finish reason matching a structured-output error', async () => {
+      // Arrange: the same schema mismatch. An inverted 'stop' matched every
+      // error before errors were read, and must still match this one.
+      const primary = MockLanguageModel.from({
+        content: [{ type: 'text', text: '{"title":"ok"}' }],
+        finishReason: 'stop',
+      });
+      const fallback = MockLanguageModel.from('{"summary":"ok"}');
+
+      // Act
+      const result = await retryableGenerateText({
+        model: primary,
+        prompt,
+        output: Output.object({ schema: z.object({ summary: z.string() }) }),
+        retry: [not(finishReason('stop')).switch({ model: fallback })],
+      });
+
+      // Assert
+      expect(result.output).toEqual({ summary: 'ok' });
+      expect(fallback.doGenerate.mock.calls.length).toBe(1);
+    });
+
     it('should give a result condition the generated text', async () => {
       // Arrange — a condition that reads the text, not just the finish reason.
       // `text` is the SDK's flat field; a provider result would carry `content`.
@@ -259,7 +410,7 @@ describe('retryableGenerateText', () => {
     const wrap = (primary: MockLanguageModel, fallback: MockLanguageModel) =>
       createRetryableModel({
         model: primary,
-        retries: [error.isRetryable(true).switch({ model: fallback })],
+        retries: [modelError.isRetryable(true).switch({ model: fallback })],
       });
 
     it('should not re-run a fallback the model level already tried', async () => {

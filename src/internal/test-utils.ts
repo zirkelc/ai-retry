@@ -250,6 +250,16 @@ export const contentFilterResult: LanguageModelResult = Language.result([], {
 });
 
 /**
+ * A content filter that answers with a plain-text refusal instead of an empty
+ * response. Neither an object nor a tool call can be read from it, so a call
+ * that requires one fails after the generation completed.
+ */
+export const contentFilterRefusalResult: LanguageModelResult = Language.result(
+  [Language.text("I'm sorry, but I cannot assist with that request.")],
+  { finishReason: 'content-filter' },
+);
+
+/**
  * Conditions that always match and never match, for exercising the combinators
  * without involving a real predicate.
  */

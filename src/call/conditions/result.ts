@@ -1,11 +1,7 @@
 import { Condition } from '../../internal/conditions/condition.js';
 import { isResultAttempt } from '../../internal/guards.js';
 import type { AnyResolvableModel, ModelRetryAttempt } from '../../types.js';
-import type {
-  CallFinishReason,
-  CallRetryContext,
-  CallRetryResultAttempt,
-} from '../types.js';
+import type { CallRetryContext, CallRetryResultAttempt } from '../types.js';
 
 /**
  * The result-side condition helpers of the call layer, shared by the entry
@@ -79,34 +75,4 @@ export function createCallResultAPI<
   }
 
   return { result };
-}
-
-/**
- * Build the `finishReason` helper for an entry point whose commit result
- * reports one. Language entry points do; embeddings and images have no such
- * notion.
- */
-export function createFinishReasonAPI<
-  BOUND extends AnyResolvableModel,
-  COMMIT extends { finishReason: CallFinishReason },
->() {
-  /**
-   * Match the result's finish reason against one of the given values.
-   *
-   * **Important:** returns a `Condition`, not a retryable. Call `.switch()` or
-   * `.retry()` to plug it into `retry: [...]`.
-   *
-   * @example
-   * finishReason('content-filter').switch({ model: fallback })
-   * finishReason('length').retry({ maxAttempts: 3 })
-   */
-  function finishReason<MODEL extends BOUND = BOUND>(
-    ...reasons: Array<CallFinishReason>
-  ): Condition<MODEL, 'call', COMMIT> {
-    return resultCondition<MODEL, COMMIT>((res) =>
-      reasons.includes(res.finishReason),
-    );
-  }
-
-  return { finishReason };
 }

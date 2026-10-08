@@ -14,15 +14,17 @@
  * discriminant, nothing to narrow. A condition that reads it is accepted only
  * where that result is actually produced; one that reads only the error, as
  * every helper below except `result` and `finishReason` does, fits any entry
- * point of this family.
+ * point of this family. `finishReason` sits between the two: it fits any entry
+ * point whose result reports a finish reason.
  */
 
 import type { ToolSet } from 'ai';
 import type { Condition } from '../../../internal/conditions/condition.js';
 import type { ResolvableLanguageModel } from '../../../types.js';
 import { createErrorAPI } from '../../../internal/conditions/error.js';
+import { createFinishReasonAPI } from '../../conditions/finish-reason.js';
 import { resultCondition } from '../../conditions/result.js';
-import type { CallFinishReason, CallRetryContext } from '../../types.js';
+import type { CallRetryContext } from '../../types.js';
 import type { GenerateTextCommitResult } from '../types.js';
 
 export { and } from '../../../internal/conditions/and.js';
@@ -39,30 +41,8 @@ export const { error, httpStatus, timeout, aborted } = createErrorAPI<
   'call'
 >();
 
-/**
- * Match the result's finish reason against one of the given values.
- *
- * Spelled out rather than destructured off the shared factory for the same
- * reason `result` is: the commit result is an SDK type whose own defaults
- * reference names `ai` does not export, so an inferred signature cannot be
- * written to a declaration file. Naming the return type keeps the alias intact.
- *
- * **Important:** returns a `Condition`, not a retryable. Call `.switch()` or
- * `.retry()` to plug it into `retry: [...]`.
- *
- * @example
- * finishReason('content-filter').switch({ model: fallback })
- * finishReason('length').retry({ maxAttempts: 3 })
- */
-export function finishReason<
-  MODEL extends ResolvableLanguageModel = ResolvableLanguageModel,
->(
-  ...reasons: Array<CallFinishReason>
-): Condition<MODEL, 'call', GenerateTextCommitResult> {
-  return resultCondition<MODEL, GenerateTextCommitResult>((res) =>
-    reasons.includes(res.finishReason),
-  );
-}
+export const { finishReason } =
+  createFinishReasonAPI<ResolvableLanguageModel>();
 
 /**
  * Build a condition from a predicate over the completed generation. The
@@ -98,4 +78,5 @@ export function result<
 }
 
 export type { GenerateTextCommitResult } from '../types.js';
+export type { FinishReasonCommitResult } from '../../conditions/finish-reason.js';
 export type { CallFinishReason, CallLanguageModelUsage } from '../../types.js';

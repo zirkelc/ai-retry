@@ -16,19 +16,15 @@ import type { EmbedCommitResult } from '../embed/types.js';
 import type { GenerateImageCommitResult } from '../generate-image/types.js';
 import type { GenerateTextCommitResult } from '../generate-text/types.js';
 import type { StreamTextCommitResult } from '../stream-text/types.js';
-import { createCallResultAPI, createFinishReasonAPI } from './result.js';
+import { createCallResultAPI } from './result.js';
 
 /**
- * The shared result-side factories, exercised once here. What each entry point
- * does with them — which commit result it binds, and whether it takes
- * `finishReason` at all — is asserted beside that entry point instead.
+ * The shared result-side factories, exercised once here. Which commit result
+ * each entry point binds is asserted beside that entry point instead. The
+ * finish-reason helper is tested in its own file.
  */
 
 const { result } = createCallResultAPI<
-  MockLanguageModel,
-  GenerateTextCommitResult
->();
-const { finishReason } = createFinishReasonAPI<
   MockLanguageModel,
   GenerateTextCommitResult
 >();
@@ -152,60 +148,6 @@ describe('result (call layer)', () => {
 
     // Assert
     expect(matched).toBe(true);
-  });
-});
-
-describe('finishReason (call layer)', () => {
-  it('should match a single reason', async () => {
-    // Arrange
-    const cond = finishReason<MockLanguageModel>('stop');
-
-    // Act
-    const matched = await cond.evaluate(
-      buildCallResultContext(await callGenerateTextResult()),
-    );
-
-    // Assert
-    expect(matched).toBe(true);
-  });
-
-  it('should match any of several reasons', async () => {
-    // Arrange
-    const cond = finishReason<MockLanguageModel>('content-filter', 'stop');
-
-    // Act
-    const matched = await cond.evaluate(
-      buildCallResultContext(await callGenerateTextResult()),
-    );
-
-    // Assert
-    expect(matched).toBe(true);
-  });
-
-  it('should not match a different reason', async () => {
-    // Arrange
-    const cond = finishReason<MockLanguageModel>('content-filter');
-
-    // Act
-    const matched = await cond.evaluate(
-      buildCallResultContext(await callGenerateTextResult()),
-    );
-
-    // Assert
-    expect(matched).toBe(false);
-  });
-
-  it('should return false on error attempts', async () => {
-    // Arrange
-    const cond = finishReason<MockLanguageModel>('stop');
-
-    // Act
-    const matched = await cond.evaluate(
-      buildCallErrorContext(new Error('boom')),
-    );
-
-    // Assert
-    expect(matched).toBe(false);
   });
 });
 

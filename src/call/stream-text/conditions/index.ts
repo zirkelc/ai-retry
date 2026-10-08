@@ -20,10 +20,8 @@
 
 import { createErrorAPI } from '../../../internal/conditions/error.js';
 import type { ResolvableLanguageModel } from '../../../types.js';
-import {
-  createCallResultAPI,
-  createFinishReasonAPI,
-} from '../../conditions/result.js';
+import { createFinishReasonAPI } from '../../conditions/finish-reason.js';
+import { createCallResultAPI } from '../../conditions/result.js';
 import type { StreamTextCommitResult } from '../types.js';
 
 export { and } from '../../../internal/conditions/and.js';
@@ -45,10 +43,9 @@ export const { result } = createCallResultAPI<
   StreamTextCommitResult
 >();
 
-export const { finishReason } = createFinishReasonAPI<
-  ResolvableLanguageModel,
-  StreamTextCommitResult
->();
+export const { finishReason } =
+  createFinishReasonAPI<ResolvableLanguageModel>();
 
 export type { StreamTextCommitResult } from '../types.js';
+export type { FinishReasonCommitResult } from '../../conditions/finish-reason.js';
 export type { CallFinishReason, CallLanguageModelUsage } from '../../types.js';

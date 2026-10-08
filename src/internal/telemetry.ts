@@ -50,7 +50,10 @@ export interface AttemptEnd {
   outcome: AttemptOutcome;
   /** Backoff delay scheduled before the next attempt, in milliseconds. */
   delayMs?: number;
-  /** Unified finish reason, for result-based outcomes. */
+  /**
+   * Unified finish reason, for a result or for an error that carries the
+   * finish reason of the generation it rejected.
+   */
   finishReason?: string;
   /** The error that ended the attempt, if any. */
   error?: unknown;

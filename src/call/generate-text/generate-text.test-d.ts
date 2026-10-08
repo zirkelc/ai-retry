@@ -5,6 +5,7 @@ import {
   MockEmbeddingModel,
   MockLanguageModel,
 } from '../../internal/test-utils.js';
+import { finishReason } from './conditions/index.js';
 import { retryableGenerateText } from './generate-text.js';
 
 /**
@@ -237,6 +238,25 @@ describe('retryableGenerateText', () => {
         output: Output.object({ schema }),
       });
       expectTypeOf(wrapped.output).toEqualTypeOf<typeof direct.output>();
+      expectTypeOf(wrapped.output).toEqualTypeOf<{ a: string }>();
+    });
+  });
+
+  it('should keep the output type when a retry judges the finish reason', () => {
+    // Arrange: a condition typed against the whole commit result pins its
+    // tools and output to their defaults, so `Output.object` fails to assign.
+    // The finish reason is all `finishReason` reads, and all it names.
+    const schema = z.object({ a: z.string() });
+
+    // Assert
+    void (async () => {
+      const wrapped = await retryableGenerateText({
+        model,
+        prompt: 'hi',
+        tools: { weather },
+        output: Output.object({ schema }),
+        retry: [finishReason('content-filter').switch({ model })],
+      });
       expectTypeOf(wrapped.output).toEqualTypeOf<{ a: string }>();
     });
   });
