@@ -15,6 +15,16 @@
  *
  * Run:
  *   pnpm build && pnpm tsx examples/multi-step-stream.ts
+ *
+ * Output:
+ *   retryable call only:
+ *     steps: anthropic/claude-sonnet-4-5 -> tool-calls
+ *     text:  ""
+ *     error: Overloaded
+ *   retryable call + retryable model:
+ *     steps: anthropic/claude-sonnet-4-5 -> tool-calls, openai/gpt-4o -> stop
+ *     text:  "It is sunny in Berlin, 24°C."
+ *     error: none
  */
 import { APICallError, isStepCount, tool } from 'ai';
 import { createRetryableModel, httpStatus } from 'ai-retry/language-model';

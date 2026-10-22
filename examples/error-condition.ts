@@ -1,56 +1,62 @@
-import { anthropic } from '@ai-sdk/anthropic';
-import { openai } from '@ai-sdk/openai';
-import { APICallError, generateText } from 'ai';
-import {
-  createRetryableModel,
-  error,
-  timeout,
-} from '../src/model/language-model/index.js';
-
 /**
- * The `error(predicate)` condition takes an arbitrary predicate over the
- * failed attempt's error. Reach for it whenever the higher-level helpers
- * (`httpStatus`, `error.statusCode`, `error.message`, `error.isRetryable`)
- * do not cover the field you need.
+ * Match a field that no helper reads, with `error(predicate)`.
+ *
+ * `error(predicate)` takes any predicate over the error of the failed attempt.
+ * Use it when `httpStatus()`, `error.statusCode()`, `error.message()` and
+ * `error.isRetryable()` do not read the field that you need. Here, the field is
+ * an OpenAI-style error code at `data.error.code`.
+ *
+ * Offline: all models are mocks, no API key needed.
+ *
+ * Run:
+ *   pnpm build && pnpm tsx examples/error-condition.ts
+ *
+ * Output:
+ *   retry with anthropic/claude-haiku-4-5
+ *   text: Hello! How can I help?
  */
+import { APICallError, generateText } from 'ai';
+import { createRetryableModel, error } from 'ai-retry/language-model';
+import { MockLanguageModel } from 'ai-test-kit/language';
+
+const baseModel = MockLanguageModel.from(
+  new APICallError({
+    message: 'The response was filtered',
+    statusCode: 400,
+    url: 'https://api.openai.com/v1/responses',
+    requestBodyValues: {},
+    data: { error: { code: 'content_filter' } },
+    isRetryable: false,
+  }),
+  { provider: 'openai', modelId: 'gpt-4o' },
+);
+
+const fallbackModel = MockLanguageModel.from('Hello! How can I help?', {
+  provider: 'anthropic',
+  modelId: 'claude-haiku-4-5',
+});
+
+/** `e` is `unknown`, so check the error class first. */
+const isContentFilter = (e: unknown) => {
+  if (!APICallError.isInstance(e)) return false;
+  const data = e.data as { error?: { code?: string } } | undefined;
+  return data?.error?.code === 'content_filter';
+};
+
 const retryableModel = createRetryableModel({
-  model: openai('gpt-4o'),
-  retries: [
-    timeout().switch({
-      model: openai('gpt-4o-mini'),
-      timeout: 30_000, // 30 second timeout for the fallback
-    }),
-
-    // 1. OpenAI-style error code, nested at `data.error.code`
-    error((e, ctx) => {
-      if (!APICallError.isInstance(e)) return false;
-      const data = e.data as { error?: { code?: string } } | undefined;
-      return data?.error?.code === 'content_filter';
-    }).switch({ model: anthropic('claude-3-haiku-20240307') }),
-
-    // // 2. Anthropic-style error envelope, top-level `data.type`
-    // error((e) => {
-    //   if (!APICallError.isInstance(e)) return false;
-    //   const data = e.data as { type?: string } | undefined;
-    //   return data?.type === 'overloaded_error';
-    // }).switch({ model: openai('gpt-4o-mini') }),
-
-    // // 3. Regex match against the error message
-    // error(
-    //   (e) => e instanceof Error && /quota.*exceeded/i.test(e.message),
-    // ).switch({ model: anthropic('claude-3-haiku-20240307') }),
-
-    // // 4. Inspect a custom response header
-    // error((e) => {
-    //   if (!APICallError.isInstance(e)) return false;
-    //   return e.responseHeaders?.['x-fallback'] === 'true';
-    // }).switch({ model: openai('gpt-4o-mini') }),
-  ],
+  model: baseModel,
+  retries: [error(isContentFilter).switch({ model: fallbackModel })],
+  onRetry: ({ current }) => {
+    console.log(
+      `retry with ${current.model.provider}/${current.model.modelId}`,
+    );
+  },
 });
 
 const result = await generateText({
   model: retryableModel,
   prompt: 'Hello, world!',
+  maxRetries: 0,
 });
 
-console.log(result.text);
+console.log(`text: ${result.text}`);

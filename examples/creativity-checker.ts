@@ -1,81 +1,91 @@
-import { anthropic } from '@ai-sdk/anthropic';
-import { openai } from '@ai-sdk/openai';
-import { generateObject, generateText } from 'ai';
-import { isResultAttempt, type LanguageModel, type Retryable } from 'ai-retry';
+/**
+ * Retry with a higher temperature until a judge model rates the text as creative.
+ *
+ * A retryable is a function that gets the retry context and returns a `Retry`
+ * or `undefined`. A hand-written retryable can compute the next attempt from
+ * the current attempt. Here, each retry increases the temperature by 0.2.
+ *
+ * Offline: all models are mocks, no API key needed.
+ *
+ * Run:
+ *   pnpm build && pnpm tsx examples/creativity-checker.ts
+ *
+ * Output:
+ *   score 3 at temperature 0.3
+ *   score 8 at temperature 0.5
+ *   text: The lighthouse robot collected lost echoes and played them back to ships.
+ */
+import { generateText, Output } from 'ai';
+import {
+  isResultAttempt,
+  type LanguageModel,
+  type ModelRetryable,
+} from 'ai-retry';
 import { createRetryableModel } from 'ai-retry/language-model';
+import { MockLanguageModel } from 'ai-test-kit/language';
 import { z } from 'zod';
 
-const creativityChecker: Retryable<LanguageModel> = async (context) => {
+/** The first story is generic, the second is creative. */
+const storyModel = MockLanguageModel.from(
+  [
+    'A robot woke up and did its job.',
+    'The lighthouse robot collected lost echoes and played them back to ships.',
+  ],
+  { provider: 'openai', modelId: 'gpt-4.1' },
+);
+
+/** Rates the first story 3, and the second story 8. */
+const judgeModel = MockLanguageModel.from(
+  [JSON.stringify({ score: 3 }), JSON.stringify({ score: 8 })],
+  { provider: 'openai', modelId: 'gpt-4.1-mini' },
+);
+
+const creativityChecker: ModelRetryable<LanguageModel> = async (context) => {
   const { current } = context;
 
-  // Retryables are called for errors and results
-  // We can check the current attempt to see if it's an error or a result
-  if (isResultAttempt(current)) {
-    // Result comes from generateText or generateObject
-    const { result } = current;
+  // Retryables run for errors and for results. This one checks results only.
+  if (!isResultAttempt(current)) return undefined;
+  if (current.finishReason !== 'stop') return undefined;
 
-    // If the model finished the generation, we can check the content
-    if (result.finishReason.unified === 'stop') {
-      const content = result.content
-        .filter((c) => c.type === 'text')
-        .map((c) => c.text)
-        .join('\n');
+  const text = current.result.content
+    .filter((part) => part.type === 'text')
+    .map((part) => part.text)
+    .join('\n');
 
-      // Use a small model to judge creativity
-      const { object } = await generateObject({
-        model: openai('gpt-4.1-mini'),
-        prompt: `
-          You are a creativity judge.
-          Rate the following text for creativity on a scale of 1-10.
-          A score below 5 means the text is generic, predictable, or boring.
-          A score of 5 or above means the text is creative, unique, or interesting.
+  const { output } = await generateText({
+    model: judgeModel,
+    output: Output.object({
+      schema: z.object({ score: z.number().min(1).max(10) }),
+    }),
+    prompt: `Rate this text for creativity from 1 to 10:\n\n${text}`,
+  });
 
-          Text to evaluate:
-          ${content}
-        `,
-        schema: z.object({
-          score: z.number().min(1).max(10),
-        }),
-      });
+  console.log(
+    `score ${output.score} at temperature ${current.options.temperature}`,
+  );
+  if (output.score >= 5) return undefined;
 
-      // If the content is not creative enough, retry with higher temperature
-      if (object.score < 5) {
-        // Get the temperature from the current attempt, default to 0.5
-        const currentTemperature = current.options.temperature ?? 0.5;
+  const temperature = current.options.temperature ?? 0.5;
+  if (temperature >= 1) return undefined;
 
-        // Increase temperature by 0.1
-        const newTemperature = currentTemperature + 0.1;
-
-        // If we've maxed out temperature, give up
-        if (currentTemperature >= 1.0) {
-          return undefined;
-        }
-
-        // Retry with the same model but higher temperature
-        return {
-          model: current.model,
-          options: {
-            temperature: newTemperature,
-          },
-          maxAttempts: 5, // Stop at 5 attempts
-        };
-      }
-    }
-  }
-
-  // Skip to next retryable or finish
-  return undefined;
+  // Retry the same model with a higher temperature
+  return {
+    model: current.model,
+    options: { temperature: Math.min(temperature + 0.2, 1) },
+    maxAttempts: 5,
+  };
 };
 
-// Create a retryable model with the creativity checker
 const retryableModel = createRetryableModel({
-  model: openai('gpt-4.1'), // Base model
+  model: storyModel,
   retries: [creativityChecker],
 });
 
-// Use like any other AI SDK model
 const result = await generateText({
   model: retryableModel,
   prompt: 'Write a short story about a robot.',
-  temperature: 0.3, // Start with low temperature
+  temperature: 0.3,
+  maxRetries: 0,
 });
+
+console.log(`text: ${result.text}`);

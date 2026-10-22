@@ -1,58 +1,69 @@
-import { anthropic } from '@ai-sdk/anthropic';
-import { openai } from '@ai-sdk/openai';
-import { generateObject, generateText } from 'ai';
-import { isResultAttempt, type LanguageModel, type Retryable } from 'ai-retry';
-import { createRetryableModel } from 'ai-retry/language-model';
+/**
+ * Switch to a different model when a judge model rates the result as unsafe.
+ *
+ * `result(predicate)` is a result condition. Its predicate can be `async`, so it
+ * can call a second model to judge the result. When the predicate returns
+ * `true`, the condition switches to the fallback model.
+ *
+ * Offline: all models are mocks, no API key needed.
+ *
+ * Run:
+ *   pnpm build && pnpm tsx examples/guardrail.ts
+ *
+ * Output:
+ *   judge: unsafe
+ *   judge: safe
+ *   text: Why do programmers prefer dark mode? Because light attracts bugs.
+ */
+import { generateText, Output } from 'ai';
+import { createRetryableModel, result } from 'ai-retry/language-model';
+import { MockLanguageModel } from 'ai-test-kit/language';
 import { z } from 'zod';
 
-const guardrail: Retryable<LanguageModel> = async (context) => {
-  // Current attempt: error or result
-  const { current } = context;
+const baseModel = MockLanguageModel.from('A joke that is not safe for work.', {
+  provider: 'openai',
+  modelId: 'gpt-4o',
+});
 
-  // Retryables are called for errors and results
-  // We can check the current attempt to see if it's an error or a result
-  if (isResultAttempt(current)) {
-    // Result comes from generateText or generateObject
-    const { result } = current;
+const fallbackModel = MockLanguageModel.from(
+  'Why do programmers prefer dark mode? Because light attracts bugs.',
+  { provider: 'anthropic', modelId: 'claude-sonnet-4-5' },
+);
 
-    // If the model finished the generation, we can check the content
-    if (result.finishReason.unified === 'stop') {
-      const content = result.content
-        .filter((c) => c.type === 'text')
-        .map((c) => c.text)
-        .join('\n');
+/** Rates the first text as unsafe, and the second as safe. */
+const judgeModel = MockLanguageModel.from(
+  [JSON.stringify({ safe: false }), JSON.stringify({ safe: true })],
+  { provider: 'openai', modelId: 'gpt-4.1-mini' },
+);
 
-      // Use a small model to judge the content for safety
-      const { object } = await generateObject({
-        model: openai('gpt-4.1-mini'),
-        prompt: `
-          You are a helpful assistant that determines if the generated content is safe for work.
-          Content: ${content}
-        `,
-        schema: z.object({
-          safe: z.boolean(),
-        }),
-      });
-
-      // If the content is not safe, retry with a different model
-      if (object.safe) {
-        return { model: anthropic('claude-sonnet-4-0') };
-      }
-    }
-  }
-
-  // Skip to next retryable or finish
-  return undefined;
+/** Asks the judge model if the text is safe for work. */
+const isUnsafe = async (text: string) => {
+  const { output } = await generateText({
+    model: judgeModel,
+    output: Output.object({ schema: z.object({ safe: z.boolean() }) }),
+    prompt: `Is this text safe for work?\n\n${text}`,
+  });
+  console.log(`judge: ${output.safe ? 'safe' : 'unsafe'}`);
+  return !output.safe;
 };
 
-// Create a retryable model with the guardrail
 const retryableModel = createRetryableModel({
-  model: openai('gpt-4'), // Base model
-  retries: [guardrail],
+  model: baseModel,
+  retries: [
+    result((res) => {
+      const text = res.content
+        .filter((part) => part.type === 'text')
+        .map((part) => part.text)
+        .join('\n');
+      return isUnsafe(text);
+    }).switch({ model: fallbackModel }),
+  ],
 });
 
-// Use like any other AI SDK model
-const result = await generateText({
+const response = await generateText({
   model: retryableModel,
-  prompt: 'Tell me a dirty joke',
+  prompt: 'Tell me a joke.',
+  maxRetries: 0,
 });
+
+console.log(`text: ${response.text}`);

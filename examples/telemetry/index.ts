@@ -1,129 +1,79 @@
 /**
- * ai-retry telemetry → Langfuse example.
+ * Export the retry attempts to Langfuse as OpenTelemetry spans.
  *
- * Run with: pnpm tsx examples/telemetry/index.ts
- *
- * A flaky primary model reports itself as overloaded (HTTP 529). The retry
- * layer falls back to a second model, and both attempts are exported to
- * Langfuse as OpenTelemetry spans. The example runs once with `generateText`
- * and once with `streamText`. The AI SDK's own spans come from its v7
- * `@ai-sdk/otel` integration, registered in `./instrumentation.ts`, so the
- * Langfuse traces look like:
+ * The base model fails with HTTP 529. The retryable model retries it, then
+ * switches to the fallback model, and each attempt is a span. The example runs
+ * one time with `generateText` and one time with `streamText`. The AI SDK spans
+ * come from `@ai-sdk/otel`, which `./instrumentation.ts` registers. In Langfuse,
+ * the traces look like this:
  *
  *   ai.generateText                          ai.streamText
  *   └─ ai.generateText.doGenerate            └─ ai.streamText.doStream
  *      └─ ai_retry.doGenerate                   └─ ai_retry.doStream
- *         ├─ ai_retry.attempt #1 (529)            ├─ ai_retry.attempt #1 (529)
- *         └─ ai_retry.attempt #2 (ok)             └─ ai_retry.attempt #2 (ok)
+ *         ├─ ai_retry.attempt #1 (529)             ├─ ai_retry.attempt #1 (529)
+ *         ├─ ai_retry.attempt #2 (529)             ├─ ai_retry.attempt #2 (529)
+ *         └─ ai_retry.attempt #3 (ok)              └─ ai_retry.attempt #3 (ok)
  *
- * Requires LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY / LANGFUSE_BASE_URL in
- * .env. No LLM provider key is needed — both models are mocks.
+ * Requires: LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY and LANGFUSE_BASE_URL in
+ * `.env`. All models are mocks, so no LLM provider key is needed.
+ *
+ * Run:
+ *   pnpm build && pnpm tsx examples/telemetry/index.ts
  */
 import { langfuseSpanProcessor } from './instrumentation.js';
-import {
-  APICallError,
-  generateText,
-  simulateReadableStream,
-  streamText,
-} from 'ai';
-import { MockLanguageModelV4 } from 'ai/test';
-import {
-  createRetryableModel,
-  httpStatus,
-} from '../../src/model/language-model/index.js';
+import { APICallError, generateText, streamText } from 'ai';
+import { createRetryableModel, httpStatus } from 'ai-retry/language-model';
+import { MockLanguageModel } from 'ai-test-kit/language';
 
-const usage = {
-  inputTokens: { total: 8, noCache: 8, cacheRead: 0, cacheWrite: 0 },
-  outputTokens: { total: 5, text: 5, reasoning: 0 },
-};
-
-const overloaded = () =>
+/** Fails with HTTP 529 on every call. */
+const baseModel = MockLanguageModel.from(
   new APICallError({
-    message: 'Service overloaded',
-    url: 'https://example.com/v1/chat',
-    requestBodyValues: {},
+    message: 'Overloaded',
     statusCode: 529,
+    url: 'https://api.openai.com/v1/responses',
+    requestBodyValues: {},
     isRetryable: true,
-  });
-
-/** A primary model that always reports itself as overloaded (HTTP 529). */
-const flakyModel = new MockLanguageModelV4({
-  provider: 'openai',
-  modelId: 'gpt-5',
-  doGenerate: async () => {
-    throw overloaded();
-  },
-  doStream: async () => ({
-    stream: simulateReadableStream({
-      chunks: [
-        { type: 'stream-start', warnings: [] },
-        { type: 'error', error: overloaded() },
-      ],
-    }),
   }),
-});
+  { provider: 'openai', modelId: 'gpt-5' },
+);
 
-/** A reliable fallback model that returns a static answer. */
-const reliableModel = new MockLanguageModelV4({
+const fallbackModel = MockLanguageModel.from('Hello!', {
   provider: 'anthropic',
-  modelId: 'claude-opus-4.6',
-  doGenerate: async () => ({
-    finishReason: { unified: 'stop', raw: 'stop' },
-    usage,
-    content: [{ type: 'text', text: 'Hello!' }],
-    warnings: [],
-  }),
-  doStream: async () => ({
-    stream: simulateReadableStream({
-      chunks: [
-        { type: 'stream-start', warnings: [] },
-        { type: 'text-start', id: '1' },
-        {
-          type: 'text-delta',
-          id: '1',
-          delta: 'Hello!',
-        },
-        { type: 'text-end', id: '1' },
-        {
-          type: 'finish',
-          finishReason: { unified: 'stop', raw: 'stop' },
-          usage,
-        },
-      ],
-    }),
-  }),
+  modelId: 'claude-opus-4-5',
 });
 
-const model = createRetryableModel({
-  model: flakyModel,
+const retryableModel = createRetryableModel({
+  model: baseModel,
   retries: [
     httpStatus(529, 'overloaded').retry(),
-    httpStatus(529, 'overloaded').switch({ model: reliableModel }),
+    httpStatus(529, 'overloaded').switch({ model: fallbackModel }),
   ],
   telemetry: { isEnabled: true },
 });
 
-/** Disable the AI SDK's own retries so each trace shows one model call. */
 const telemetry = { isEnabled: true, functionId: 'telemetry-example' };
 
-const { text } = await generateText({
-  model,
+const generated = await generateText({
+  model: retryableModel,
   prompt: 'Say hello.',
   maxRetries: 0,
-  telemetry: telemetry,
+  telemetry,
 });
-console.log('generateText:', text);
 
-// const result = streamText({
-//   model,
-//   prompt: 'Say hello, streaming.',
-//   maxRetries: 0,
-//   telemetry: telemetry,
-// });
-// let streamed = '';
-// for await (const chunk of result.textStream) streamed += chunk;
-// console.log('streamText:', streamed);
+console.log(`generateText: ${generated.text}`);
 
-/** Flush spans before the process exits. */
+const streamed = streamText({
+  model: retryableModel,
+  prompt: 'Say hello, streaming.',
+  maxRetries: 0,
+  telemetry,
+});
+
+let text = '';
+for await (const chunk of streamed.textStream) text += chunk;
+
+console.log(`streamText: ${text}`);
+
+/** Send the spans before the process exits. */
 await langfuseSpanProcessor.forceFlush();
-console.log('Spans flushed to Langfuse.');
+console.log('Spans sent to Langfuse.');

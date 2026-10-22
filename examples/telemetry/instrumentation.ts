@@ -1,32 +1,30 @@
 /**
- * OpenTelemetry + Langfuse setup for the telemetry example.
+ * The OpenTelemetry and Langfuse setup for the telemetry example.
  *
- * Import this module before anything that emits spans: starting the Node SDK
- * registers the global tracer and context manager that ai-retry and the AI
- * SDK write into. Without an active context manager, ai-retry's spans cannot
- * nest under the AI SDK's `ai.generateText` trace.
+ * Import this module before all code that emits spans. When the Node SDK
+ * starts, it registers the global tracer and the context manager that ai-retry
+ * and the AI SDK use. Without an active context manager, the ai-retry spans
+ * cannot be child spans of the `ai.generateText` span.
  *
- * In AI SDK v7 the SDK no longer emits OpenTelemetry spans on its own: its
- * OTel integration moved to `@ai-sdk/otel` and must be registered explicitly
- * via `registerTelemetry(new OpenTelemetry())`. ai-retry's own spans do not
- * need this (they talk to OpenTelemetry directly) — registering it is what
- * makes the AI SDK's `ai.generateText` / `ai.streamText` parent spans appear,
- * so ai-retry's attempts nest under them.
+ * In AI SDK v7, the AI SDK does not emit OpenTelemetry spans by default. You
+ * must register `@ai-sdk/otel` with `registerTelemetry(new OpenTelemetry())`.
+ * The ai-retry spans do not need it, because ai-retry uses OpenTelemetry
+ * directly. It adds the `ai.generateText` and `ai.streamText` parent spans.
  */
 import { OpenTelemetry } from '@ai-sdk/otel';
 import { LangfuseSpanProcessor } from '@langfuse/otel';
-// Langfuse ships its own AI SDK integration (`@langfuse/vercel-ai-sdk`) that
-// renames AI SDK spans to GenAI-semantic names (invoke_agent / chat / ...).
-// Swap the registration below for it if you prefer Langfuse-shaped traces:
+// Langfuse has its own AI SDK integration (`@langfuse/vercel-ai-sdk`), which
+// gives the AI SDK spans GenAI names (invoke_agent, chat, ...). To use it,
+// replace the registration at the end of this file:
 //   import { LangfuseVercelAiSdkIntegration } from '@langfuse/vercel-ai-sdk';
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { registerTelemetry } from 'ai';
 
-/** Load LANGFUSE_* and OPENAI_API_KEY from .env before reading them below. */
+/** Load the LANGFUSE_* variables from `.env`. */
 process.loadEnvFile();
 
 export const langfuseSpanProcessor = new LangfuseSpanProcessor({
-  /** Export each span as it ends — ideal for short-lived scripts. */
+  /** Export each span when it ends, for a script that runs only a short time. */
   exportMode: 'immediate',
   publicKey: process.env.LANGFUSE_PUBLIC_KEY,
   secretKey: process.env.LANGFUSE_SECRET_KEY,
@@ -41,10 +39,10 @@ const sdk = new NodeSDK({
 sdk.start();
 
 /**
- * Register the AI SDK's OpenTelemetry integration so `generateText` /
- * `streamText` emit spans into the tracer the Node SDK just registered.
- * `usage` adds token-usage attributes to the trace.
+ * Register the OpenTelemetry integration of the AI SDK, so that `generateText`
+ * and `streamText` emit spans to the tracer of the Node SDK. `usage` adds
+ * token usage attributes to the trace.
  */
 registerTelemetry(new OpenTelemetry({ usage: true }));
-// Langfuse-shaped alternative:
+// The Langfuse alternative:
 // registerTelemetry(new LangfuseVercelAiSdkIntegration());

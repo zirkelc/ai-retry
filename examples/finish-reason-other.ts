@@ -1,37 +1,48 @@
-import { openai } from '@ai-sdk/openai';
+/**
+ * Retry the same model when it finishes with the reason `other`.
+ *
+ * `finishReason()` is a result condition. It examines a successful response, so
+ * it can retry a response that did not fail but is not usable.
+ *
+ * Offline: all models are mocks, no API key needed.
+ *
+ * Run:
+ *   pnpm build && pnpm tsx examples/finish-reason-other.ts
+ *
+ * Output:
+ *   retry after finish reason other
+ *   text: The meaning of life is 42.
+ *   finish reason: stop
+ */
 import { generateText } from 'ai';
-import { isResultAttempt, type LanguageModel, type Retryable } from 'ai-retry';
-import { createRetryableModel } from 'ai-retry/language-model';
+import { isResultAttempt } from 'ai-retry';
+import { createRetryableModel, finishReason } from 'ai-retry/language-model';
+import { Language, MockLanguageModel } from 'ai-test-kit/language';
 
-const finishReasonOther: Retryable<LanguageModel> = async (context) => {
-  // Current attempt: error or result
-  const { current } = context;
+/** The first response finishes with `other`, the second with `stop`. */
+const baseModel = MockLanguageModel.from(
+  [
+    { content: [Language.text('The meaning of')], finishReason: 'other' },
+    'The meaning of life is 42.',
+  ],
+  { provider: 'openai', modelId: 'gpt-4o' },
+);
 
-  // Retryables are called for errors and results
-  // We can check the current attempt to see if it's an error or a result
-  if (isResultAttempt(current)) {
-    // Result comes from generateText or generateObject
-    const { result, model } = current;
-
-    // The model finished with an other reason
-    if (result.finishReason.unified === 'other') {
-      // Retry with the base model 3 times
-      return { model, maxAttempts: 3 };
-    }
-  }
-
-  // Skip to next retryable or finish
-  return undefined;
-};
-
-// Create a retryable model with the guardrail
 const retryableModel = createRetryableModel({
-  model: openai('gpt-4'), // Base model
-  retries: [finishReasonOther],
+  model: baseModel,
+  retries: [finishReason('other').retry({ maxAttempts: 3 })],
+  onRetry: ({ current }) => {
+    if (isResultAttempt(current)) {
+      console.log(`retry after finish reason ${current.finishReason}`);
+    }
+  },
 });
 
-// Use like any other AI SDK model
 const result = await generateText({
   model: retryableModel,
   prompt: 'What is the meaning of life?',
+  maxRetries: 0,
 });
+
+console.log(`text: ${result.text}`);
+console.log(`finish reason: ${result.finishReason}`);
