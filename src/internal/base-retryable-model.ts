@@ -5,6 +5,10 @@ import type {
   AnyModel,
   ModelFailureContext,
   ModelRetryAttempt,
+  ModelSettledAttempt,
+  ModelSettledEvent,
+  ModelSuccessAttempt,
+  ModelSuccessContext,
   RetryableModelOptions,
   RetryTimeout,
 } from '../types.js';
@@ -94,6 +98,26 @@ export abstract class BaseRetryableModel<MODEL extends AnyModel> {
   }
 
   /**
+   * Report a successful operation. `attempts` holds the attempts before the
+   * successful one, which `onSettled` reports at the end of its list.
+   */
+  protected emitSuccess(
+    current: ModelSuccessAttempt<MODEL>,
+    attempts: Array<ModelRetryAttempt<MODEL>>,
+  ): void {
+    this.options.onSettled?.({
+      outcome: 'success',
+      model: current.model,
+      attempts: [...attempts, current] as Array<ModelSettledAttempt<MODEL>>,
+      result: current.result,
+    } as unknown as ModelSettledEvent<MODEL>);
+    this.options.onSuccess?.({
+      current,
+      attempts,
+    } as unknown as ModelSuccessContext<MODEL>);
+  }
+
+  /**
    * Report a terminally failed operation. The final attempt (last entry of
    * `attempts`) is surfaced as `current`, so it has to be an error attempt: an
    * operation that ended some other way, such as a callback throwing, has no
@@ -103,14 +127,17 @@ export abstract class BaseRetryableModel<MODEL extends AnyModel> {
     attempts: Array<ModelRetryAttempt<MODEL>>,
     error: unknown,
     stop: RetryStop,
-    onFailure:
-      | ((context: ModelFailureContext<MODEL>) => void)
-      | undefined = this.options.onFailure,
   ): void {
-    if (!onFailure) return;
     const current = attempts.at(-1);
     if (!current || !isErrorAttempt(current)) return;
-    onFailure({
+    this.options.onSettled?.({
+      outcome: 'failure',
+      model: current.model,
+      attempts: [...attempts] as Array<ModelSettledAttempt<MODEL>>,
+      error,
+      aborted: stop.aborted,
+    } as unknown as ModelSettledEvent<MODEL>);
+    this.options.onFailure?.({
       current,
       attempts,
       error,

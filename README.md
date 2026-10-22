@@ -454,7 +454,7 @@ const retryableModel = createRetryableModel({
 });
 ```
 
-Each layer adds its own terminal callbacks, documented in its section below.
+Both layers report the final outcome once through `onSettled`. See "Outcome callbacks" in the [model layer](#model-layer) and the [call layer](#call-layer) sections.
 
 ## Condition reference
 
@@ -704,27 +704,44 @@ const retryableModel = createRetryableModel({
 
 ### Outcome callbacks
 
-- `onSuccess` fires after a successful request, with the model that handled it.
-- `onFailure` fires when the request ultimately fails and no retry recovered it: no retryable matched, all retries were exhausted, the retry itself failed, a stream failed after its content started, or the call was aborted.
-- Exactly one of the two fires per request. Neither fires when retries are disabled.
+`onSettled` is the terminal hook: called exactly once per request with its final outcome. It has the same shape as `onSettled` on the [call layer](#call-layer).
 
-`onFailure` context:
+```typescript
+const retryableModel = createRetryableModel({
+  model: openai('gpt-4o'),
+  retries: [anthropic('claude-sonnet-4-5')],
+  onSettled: ({ outcome, attempts }) =>
+    metrics.increment(
+      `ai_retry.${outcome}.${attempts.length > 1 ? 'retried' : 'first_try'}`,
+    ),
+});
+```
 
-| Field      | Description                                                                                                                                                                            |
-| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `current`  | The final failed attempt                                                                                                                                                               |
-| `attempts` | All attempts                                                                                                                                                                           |
-| `error`    | The error surfaced to the caller: a `RetryError` that wraps every attempt error when more than one attempt was made, otherwise the original error. An abort error is surfaced as it is |
-| `aborted`  | `true` when the caller cancelled the call or a deadline on the call itself fired, `false` when the attempts failed. A deadline surfaces a `TimeoutError`                               |
+| Field      | Description                                                                                                                                                                                        |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `outcome`  | `success` or `failure`                                                                                                                                                                             |
+| `model`    | The model that settled the request, or the one whose failure ended it                                                                                                                              |
+| `attempts` | Every attempt, in order, ending with the one that settled the request                                                                                                                              |
+| `result`   | The result, on success                                                                                                                                                                             |
+| `error`    | On failure, the error surfaced to the caller: a `RetryError` that wraps every attempt error when more than one attempt was made, otherwise the original error. An abort error is surfaced as it is |
+| `aborted`  | On failure, `true` when an abort stopped the request (a cancel, or a deadline on the call), `false` when the attempts failed. A deadline surfaces a `TimeoutError`                                 |
+
+- A request settles when its outcome is final. For a stream, that is when the stream ends, so a stream that fails after its content started settles as a failure.
+- It stays silent when retries are `disabled`, and when the request ended with no failed attempt (one of your own callbacks throwing).
+- A retry that times out on its own `timeout` is a failure, not an abort. `aborted` has the same meaning on the [call layer](#call-layer).
 
 To alert on failures but not on user cancels:
 
 ```typescript
-onFailure: ({ aborted, error }) => {
+onSettled: ({ outcome, aborted, error }) => {
+  if (outcome === 'success') return;
   if (aborted && error.name !== 'TimeoutError') return; // a user cancel
   console.error(error);
 },
 ```
+
+> [!NOTE]
+> `onSuccess` and `onFailure` are deprecated. Use `onSettled`: it reports the same success with `outcome: 'success'` and the same failure with `outcome: 'failure'`.
 
 ### Reset
 
@@ -837,7 +854,7 @@ const result = await retryableGenerateText({
 | failed, no retry        | `failure` | 1                 |
 | failed after retrying   | `failure` | > 1               |
 
-The event also carries `model` (the one that settled it, or the one whose failure ended the loop), `result` on success, and `error` and `aborted` on failure. `aborted` is `true` when the caller cancelled the call through its `abortSignal`, so a cancel can be kept out of a failure metric. Each entry in `attempts` says how it ended: `error`, `result` (judged, then retried) or `success`.
+The event also carries `model` (the one that settled it, or the one whose failure ended the loop), `result` on success, and `error` and `aborted` on failure. `aborted` has the same meaning as on the [model layer](#model-layer): `true` when an abort stopped the call (your `abortSignal`, or your `timeout` when no retry recovered it), `false` when the attempts failed. A deadline surfaces a `TimeoutError`, and a retry that times out on its own `timeout` is a failure. Each entry in `attempts` says how it ended: `error`, `result` (judged, then retried) or `success`.
 
 - For `streamText` it settles at the **commit point**, the first content part, not at the end of the stream. A stream you never consume still settles; for end-to-end stream health, use `streamText`'s own `onFinish` and `onError` on the same call.
 - It stays silent when retries are `disabled`, and when the rejection came from no attempt at all (one of your own callbacks throwing).
@@ -997,7 +1014,10 @@ interface RetryableModelOptions<
   onRetry?: (
     context: ModelRetryContext<MODEL>,
   ) => void | OnRetryOverrides<MODEL> | Promise<void | OnRetryOverrides<MODEL>>;
+  onSettled?: (event: ModelSettledEvent<MODEL>) => void;
+  /** @deprecated Use `onSettled` */
   onSuccess?: (context: ModelSuccessContext<MODEL>) => void;
+  /** @deprecated Use `onSettled` */
   onFailure?: (context: ModelFailureContext<MODEL>) => void;
 }
 ```
@@ -1070,14 +1090,14 @@ Result attempts only fire for language models; the embedding and image wrappers 
 
 Types belonging to one retry layer carry its prefix, so the two never read alike:
 
-| model layer (`createRetryableModel`)          | call layer (the retry functions)  |
-| --------------------------------------------- | --------------------------------- |
-| `ModelRetryContext`                           | `CallRetryContext`                |
-| `ModelRetryAttempt`                           | `CallRetryAttempt`                |
-| `ModelRetryable` / `ModelRetries`             | `CallRetryable` / `CallRetries`   |
-| `ModelSuccessContext` / `ModelFailureContext` | `CallSettledEvent` (`onSettled`)  |
-| `ModelCallOptions` (provider options)         | `CallArgs` (entry point args)     |
-| `ModelResult` (provider result)               | `*CommitResult` (per entry point) |
+| model layer (`createRetryableModel`)  | call layer (the retry functions)  |
+| ------------------------------------- | --------------------------------- |
+| `ModelRetryContext`                   | `CallRetryContext`                |
+| `ModelRetryAttempt`                   | `CallRetryAttempt`                |
+| `ModelRetryable` / `ModelRetries`     | `CallRetryable` / `CallRetries`   |
+| `ModelSettledEvent` (`onSettled`)     | `CallSettledEvent` (`onSettled`)  |
+| `ModelCallOptions` (provider options) | `CallArgs` (entry point args)     |
+| `ModelResult` (provider result)       | `*CommitResult` (per entry point) |
 
 `Retry`, `OnRetryOverrides`, `Reset` and `RetryTelemetrySettings` are genuinely shared and carry no prefix. `Condition<MODEL, LAYER, COMMIT>` underlies both layers; `LAYER` decides which context the predicate sees and which retryable comes out.
 

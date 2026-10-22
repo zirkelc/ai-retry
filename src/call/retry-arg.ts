@@ -81,8 +81,11 @@ export type CallSettledEvent<
    */
   error?: unknown;
   /**
-   * On failure: whether the caller aborted the call through its
-   * `abortSignal`, rather than its attempts failing. Undefined on success.
+   * On failure: whether an abort stopped the call, rather than its attempts
+   * failing. Both a cancel and a deadline on the call count: the caller's
+   * `abortSignal`, and the call's own `timeout` when no retry recovered it. A
+   * deadline surfaces a `TimeoutError`. A retry timing out on its own `timeout`
+   * is a failure, not an abort. Undefined on success.
    */
   aborted?: boolean;
 };
@@ -143,15 +146,6 @@ export type CallRetryOptions<
     | void
     | OnRetryOverrides<MODEL, OVERRIDE>
     | Promise<void | OnRetryOverrides<MODEL, OVERRIDE>>;
-  /**
-   * Called once the call terminally fails: no retry matched, every candidate
-   * was tried, the caller's signal was already aborted, or the caller aborted
-   * during a backoff delay.
-   *
-   * Reports attempt failures only, so it stays silent for a rejection no
-   * attempt caused — a callback of your own throwing, for instance. Also
-   * silent when retries are disabled.
-   */
   /** Called once, with what the whole call amounted to. */
   onSettled?: (event: CallSettledEvent<MODEL, RESULT, COMMIT>) => void;
 };

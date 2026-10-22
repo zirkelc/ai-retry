@@ -517,6 +517,140 @@ describe('hooks', () => {
       expect(onSettled.mock.calls[0]![0].aborted).toBe(true);
     });
 
+    describe('a deadline on the call', () => {
+      /** Waits until the attempt's signal fires, then rejects with its reason. */
+      const stalls = async ({ abortSignal }: { abortSignal?: AbortSignal }) =>
+        new Promise<never>((_, reject) => {
+          abortSignal?.addEventListener(
+            'abort',
+            () => reject(abortSignal.reason),
+            {
+              once: true,
+            },
+          );
+        });
+
+      it('should flag a generateText timeout that no retry recovers as aborted', async () => {
+        // Arrange
+        const onSettled = vi.fn();
+
+        // Act
+        const result = retryableGenerateText({
+          model: MockLanguageModel.from({ doGenerate: stalls }),
+          prompt,
+          timeout: { totalMs: 20 },
+          retry: { retries: [], onSettled },
+        });
+
+        // Assert
+        await expect(result).rejects.toMatchObject({ name: 'TimeoutError' });
+        const event = onSettled.mock.calls[0]![0];
+        expect(event.outcome).toBe('failure');
+        expect(event.aborted).toBe(true);
+      });
+
+      it('should flag a streamText timeout before content that no retry recovers as aborted', async () => {
+        // Arrange
+        const onSettled = vi.fn();
+
+        // Act
+        const result = retryableStreamText({
+          model: MockLanguageModel.from({
+            doStream: async ({ abortSignal }) => ({
+              stream: new ReadableStream({
+                start(controller) {
+                  abortSignal?.addEventListener(
+                    'abort',
+                    () => controller.error(abortSignal.reason),
+                    { once: true },
+                  );
+                },
+              }),
+            }),
+          }),
+          prompt,
+          timeout: { totalMs: 20 },
+          retry: { retries: [], onSettled },
+        });
+
+        // Assert
+        await expect(result).rejects.toMatchObject({ name: 'TimeoutError' });
+        const event = onSettled.mock.calls[0]![0];
+        expect(event.outcome).toBe('failure');
+        expect(event.aborted).toBe(true);
+      });
+
+      it('should flag an embed timeout that no retry recovers as aborted', async () => {
+        // Arrange
+        const model = MockEmbeddingModel.from();
+        model.doEmbed.mockImplementation(stalls);
+        const onSettled = vi.fn();
+
+        // Act
+        const result = retryableEmbed({
+          model,
+          value: 'sunny day at the beach',
+          timeout: 20,
+          retry: { retries: [], onSettled },
+        });
+
+        // Assert
+        await expect(result).rejects.toMatchObject({ name: 'TimeoutError' });
+        expect(onSettled.mock.calls[0]![0].aborted).toBe(true);
+      });
+
+      it('should flag a retry that times out on its own timeout as not aborted', async () => {
+        // Arrange
+        const onSettled = vi.fn();
+
+        // Act
+        const result = retryableGenerateText({
+          model: MockLanguageModel.from(retryableError),
+          prompt,
+          timeout: { totalMs: 5_000 },
+          retry: {
+            retries: [
+              {
+                model: MockLanguageModel.from({ doGenerate: stalls }),
+                timeout: 20,
+              },
+            ],
+            onSettled,
+          },
+        });
+
+        // Assert
+        await expect(result).rejects.toThrow();
+        const event = onSettled.mock.calls[0]![0];
+        expect(event.outcome).toBe('failure');
+        expect(event.attempts.length).toBe(2);
+        expect(event.aborted).toBe(false);
+      });
+
+      it('should flag a TimeoutError as not aborted when the call has no timeout', async () => {
+        // Arrange
+        const onSettled = vi.fn();
+
+        // Act
+        const result = retryableGenerateText({
+          model: MockLanguageModel.from({
+            doGenerate: async () => {
+              throw new DOMException(
+                'The operation timed out.',
+                'TimeoutError',
+              );
+            },
+          }),
+          prompt,
+          retry: { retries: [], onSettled },
+        });
+
+        // Assert
+        await expect(result).rejects.toMatchObject({ name: 'TimeoutError' });
+        expect(onSettled.mock.calls[0]![0].aborted).toBe(false);
+      });
+    });
+
     it('should fire exactly once, whichever way the call goes', async () => {
       // Arrange
       const onSettled = vi.fn();

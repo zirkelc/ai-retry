@@ -32,6 +32,7 @@ type OnError = Required<RetryableModelOptions<LanguageModel>>['onError'];
 type OnRetry = Required<RetryableModelOptions<LanguageModel>>['onRetry'];
 type OnSuccess = Required<RetryableModelOptions<LanguageModel>>['onSuccess'];
 type OnFailure = Required<RetryableModelOptions<LanguageModel>>['onFailure'];
+type OnSettled = Required<RetryableModelOptions<LanguageModel>>['onSettled'];
 
 const prompt = 'Hello!';
 
@@ -1052,6 +1053,174 @@ describe('generateText', () => {
       await expect(result).rejects.toThrow();
 
       expect(onSuccessSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('onSettled', () => {
+    it('should report a success without retry with the successful attempt last', async () => {
+      // Arrange
+      const baseModel = MockLanguageModel.from({ doGenerate: mockResult });
+      const onSettled = vi.fn<OnSettled>();
+
+      // Act
+      await generateText({
+        model: createRetryableModel({
+          model: baseModel,
+          retries: [],
+          onSettled,
+        }),
+        prompt,
+      });
+
+      // Assert
+      expect(onSettled.mock.calls.length).toBe(1);
+      const event = onSettled.mock.calls[0]![0];
+      expect(event.outcome).toBe('success');
+      expect(event.model).toBe(baseModel);
+      expect(event.attempts.length).toBe(1);
+      expect(event.attempts[0]!.type).toBe('success');
+      expect(event.result).toBeDefined();
+      expect(event.error).toBe(undefined);
+      expect(event.aborted).toBe(undefined);
+    });
+
+    it('should report a success after a retry with every attempt', async () => {
+      // Arrange
+      const baseModel = MockLanguageModel.from({ doGenerate: retryableError });
+      const fallbackModel = MockLanguageModel.from({ doGenerate: mockResult });
+      const onSettled = vi.fn<OnSettled>();
+
+      // Act
+      await generateText({
+        model: createRetryableModel({
+          model: baseModel,
+          retries: [fallbackModel],
+          onSettled,
+        }),
+        prompt,
+      });
+
+      // Assert
+      expect(onSettled.mock.calls.length).toBe(1);
+      const event = onSettled.mock.calls[0]![0];
+      expect(event.outcome).toBe('success');
+      expect(event.model).toBe(fallbackModel);
+      expect(event.attempts.map((attempt) => attempt.type)).toEqual([
+        'error',
+        'success',
+      ]);
+    });
+
+    it('should report a failure with the error surfaced to the caller', async () => {
+      // Arrange
+      const baseModel = MockLanguageModel.from({ doGenerate: retryableError });
+      const fallbackModel = MockLanguageModel.from({
+        doGenerate: nonRetryableError,
+      });
+      const onSettled = vi.fn<OnSettled>();
+
+      // Act
+      const result = generateText({
+        model: createRetryableModel({
+          model: baseModel,
+          retries: [fallbackModel],
+          onSettled,
+        }),
+        prompt,
+        maxRetries: 0,
+      });
+      await expect(result).rejects.toThrow();
+
+      // Assert
+      expect(onSettled.mock.calls.length).toBe(1);
+      const event = onSettled.mock.calls[0]![0];
+      expect(event.outcome).toBe('failure');
+      expect(event.model).toBe(fallbackModel);
+      expect(event.attempts.map((attempt) => attempt.type)).toEqual([
+        'error',
+        'error',
+      ]);
+      expect(RetryError.isInstance(event.error)).toBe(true);
+      expect(event.aborted).toBe(false);
+      expect(event.result).toBe(undefined);
+    });
+
+    it('should flag a cancel after a failover as aborted', async () => {
+      // Arrange
+      const controller = new AbortController();
+      const onSettled = vi.fn<OnSettled>();
+      const model = createRetryableModel({
+        model: MockLanguageModel.from(retryableError),
+        retries: [
+          MockLanguageModel.from({
+            doGenerate: async () => {
+              controller.abort();
+              throw new DOMException(
+                'The operation was aborted.',
+                'AbortError',
+              );
+            },
+          }),
+        ],
+        onSettled,
+      });
+
+      // Act
+      const result = model.doGenerate({
+        ...MockLanguageModel.callOptions(),
+        abortSignal: controller.signal,
+      });
+      await expect(result).rejects.toMatchObject({ name: 'AbortError' });
+
+      // Assert
+      expect(onSettled.mock.calls.length).toBe(1);
+      const event = onSettled.mock.calls[0]![0];
+      expect(event.outcome).toBe('failure');
+      expect(event.aborted).toBe(true);
+    });
+
+    it('should not report when retries are disabled', async () => {
+      // Arrange
+      const baseModel = MockLanguageModel.from({ doGenerate: mockResult });
+      const onSettled = vi.fn<OnSettled>();
+
+      // Act
+      await generateText({
+        model: createRetryableModel({
+          model: baseModel,
+          retries: [],
+          disabled: true,
+          onSettled,
+        }),
+        prompt,
+      });
+
+      // Assert
+      expect(onSettled.mock.calls.length).toBe(0);
+    });
+
+    it('should report alongside the deprecated onSuccess and onFailure', async () => {
+      // Arrange
+      const onSettled = vi.fn<OnSettled>();
+      const onSuccess = vi.fn<OnSuccess>();
+      const onFailure = vi.fn<OnFailure>();
+
+      // Act
+      await generateText({
+        model: createRetryableModel({
+          model: MockLanguageModel.from({ doGenerate: mockResult }),
+          retries: [],
+          onSettled,
+          onSuccess,
+          onFailure,
+        }),
+        prompt,
+      });
+
+      // Assert
+      expect(onSettled.mock.calls.length).toBe(1);
+      expect(onSuccess.mock.calls.length).toBe(1);
+      expect(onFailure.mock.calls.length).toBe(0);
     });
   });
 
@@ -2747,7 +2916,7 @@ describe('streamText', () => {
               "response": {
                 "headers": undefined,
                 "id": "aitxt-mock-id",
-                "modelId": "mock-model-148",
+                "modelId": "mock-model-157",
                 "timestamp": 1970-01-01T00:00:00.000Z,
               },
               "type": "finish-step",
@@ -2856,7 +3025,7 @@ describe('streamText', () => {
               "response": {
                 "headers": undefined,
                 "id": "aitxt-mock-id",
-                "modelId": "mock-model-150",
+                "modelId": "mock-model-159",
                 "timestamp": 1970-01-01T00:00:00.000Z,
               },
               "type": "finish-step",
@@ -3988,6 +4157,68 @@ describe('streamText', () => {
       const successCall = onSuccessSpy.mock.calls[0]![0];
       expect(successCall.current.model).toBe(baseModel);
       expect(successCall.attempts.length).toBe(0);
+    });
+  });
+
+  describe('onSettled', () => {
+    it('should settle a stream when it ends, not when it opens', async () => {
+      // Arrange
+      const onSettled = vi.fn<OnSettled>();
+      const model = createRetryableModel({
+        model: MockLanguageModel.from({ doStream: mockStreamChunks }),
+        retries: [],
+        onSettled,
+      });
+
+      // Act
+      const { stream } = await model.doStream(MockLanguageModel.callOptions());
+      const callsBeforeRead = onSettled.mock.calls.length;
+      await Streams.toArray(stream);
+
+      // Assert
+      expect(callsBeforeRead).toBe(0);
+      expect(onSettled.mock.calls.length).toBe(1);
+      const event = onSettled.mock.calls[0]![0];
+      expect(event.outcome).toBe('success');
+      expect(event.attempts.length).toBe(1);
+      expect(event.attempts[0]!.type).toBe('success');
+    });
+
+    it('should report a stream that fails after its content started as a failure', async () => {
+      // Arrange
+      const onSettled = vi.fn<OnSettled>();
+      const model = createRetryableModel({
+        model: MockLanguageModel.from({
+          doStream: async () => ({
+            stream: new ReadableStream<LanguageModelStreamPart>({
+              start(controller) {
+                controller.enqueue(Language.streamStart());
+                controller.enqueue({ type: 'text-start', id: '0' });
+                controller.enqueue({
+                  type: 'text-delta',
+                  id: '0',
+                  delta: 'Hi',
+                });
+                controller.enqueue({ type: 'error', error: nonRetryableError });
+                controller.close();
+              },
+            }),
+          }),
+        }),
+        retries: [],
+        onSettled,
+      });
+
+      // Act
+      const { stream } = await model.doStream(MockLanguageModel.callOptions());
+      await Streams.toArray(stream);
+
+      // Assert
+      expect(onSettled.mock.calls.length).toBe(1);
+      const event = onSettled.mock.calls[0]![0];
+      expect(event.outcome).toBe('failure');
+      expect(event.error).toBe(nonRetryableError);
+      expect(event.aborted).toBe(false);
     });
   });
 

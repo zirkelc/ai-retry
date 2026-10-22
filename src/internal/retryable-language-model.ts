@@ -417,15 +417,15 @@ export class RetryableLanguageModel
 
     this.updateStickyModel(startModel);
 
-    this.options.onSuccess?.({
-      current: {
+    this.emitSuccess(
+      {
         type: 'success',
         model: this.currentModel,
         result,
         options: finalCallOptions,
       },
       attempts,
-    });
+    );
 
     return result;
   }
@@ -1016,15 +1016,15 @@ export class RetryableLanguageModel
 
           this.updateStickyModel(startModel);
 
-          this.options.onSuccess?.({
-            current: {
+          this.emitSuccess(
+            {
               type: 'success',
               model: this.currentModel,
               result,
               options: finalCallOptions,
             },
             attempts,
-          });
+          );
         } catch (error) {
           /**
            * Anything that escaped the loop without reaching one of its

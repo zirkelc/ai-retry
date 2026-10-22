@@ -46,7 +46,31 @@ export type RetryLoopArgs = {
   model: AnyResolvableModel;
   abortSignal?: AbortSignal;
   maxRetries?: number;
+  /** The call's own deadline, whatever shape the entry point takes it in. */
+  timeout?: unknown;
 };
+
+/**
+ * Whether `error` is the call's own `timeout` firing on the attempt that ended
+ * the loop. A deadline is reported as a `TimeoutError`, by the SDK and by the
+ * signal this library lends to entry points without a `timeout` argument.
+ *
+ * It counts only when the call has a `timeout` and the attempt ran without a
+ * retry `timeout`: a retry that times out on its own deadline has failed, the
+ * call was not aborted. The abort reason does not say which window fired, so a
+ * retry that narrows one window counts as its own deadline for all of them.
+ */
+function isCallDeadline(
+  error: unknown,
+  callTimeout: unknown,
+  retryTimeout: unknown,
+): boolean {
+  return (
+    callTimeout !== undefined &&
+    retryTimeout === undefined &&
+    (error as { name?: unknown } | undefined)?.name === 'TimeoutError'
+  );
+}
 
 /**
  * The outcome of an attempt that returned rather than threw.
@@ -247,8 +271,9 @@ export async function runRetryLoop<
   let operationError: unknown;
   /**
    * Why the loop stopped, decided where it stops rather than guessed from the
-   * error it throws: a cancel stops it whatever the last attempt failed with.
-   * Undefined when it stopped some other way, such as a callback throwing.
+   * error it throws: a cancel stops it whatever the last attempt failed with,
+   * and the call's own deadline stops it when no retry recovers it. Undefined
+   * when it stopped some other way, such as a callback throwing.
    */
   let aborted: boolean | undefined;
   /** The backoff wait, where a cancel stops the loop between attempts. */
@@ -346,7 +371,9 @@ export async function runRetryLoop<
          * more than one attempt was made and the caller did not cancel.
          */
         if (!evaluation.retryModel) {
-          aborted = isCallAbort(error, callerSignal);
+          aborted =
+            isCallAbort(error, callerSignal) ||
+            isCallDeadline(error, args.timeout, attemptTimeout);
           recorder?.endAttempt({
             attempt: attemptNumber,
             outcome: 'failure',
