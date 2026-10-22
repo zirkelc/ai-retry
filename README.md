@@ -119,8 +119,30 @@ A `timeout` argument belongs to the call, not to the model. This is why the two 
 - Use a **retryable model** for code that takes only a `model` parameter. The retry configuration is part of the model.
 - Use a **retryable call** to recover call timeouts. The retry configuration is next to the call.
 
-> [!TIP]
-> You can [use both layers together](./docs/timeouts.md#why-the-call-layer-recovers-what-a-retryable-model-cannot). A retryable model below the call handles provider failover, and a retryable call above it handles timeouts.
+### Using both layers
+
+Give a retryable model as the `model` of a retryable call. The retryable model handles provider errors, and the retryable call handles call timeouts.
+
+```typescript
+const retryableModel = createRetryableModel({
+  model: anthropic('claude-sonnet-4-5'),
+  retries: [httpStatus(529).switch({ model: openai('gpt-4o') })],
+});
+
+const result = await retryableStreamText({
+  model: retryableModel,
+  prompt: 'Invent a new holiday.',
+  timeout: { firstChunkMs: 2_000 },
+  retry: [timeout().switch({ model: openai('gpt-4o-mini') })],
+});
+```
+
+- The retryable model handles a failure first. The retryable call gets the error only when the retryable model stops.
+- The retryable call counts the models that the retryable model already tried, and does not try them again.
+- When the retryable model made more than one attempt, it throws a `RetryError`. Error conditions of the retryable call do not look inside a `RetryError`, so `httpStatus(529)` on the call does not match it. On the call, use `timeout()` and fallback models. A fallback model matches every error.
+- A call retry that switches to a plain model runs that attempt without the retryable model.
+
+For why each layer recovers different failures, see [docs/timeouts.md](./docs/timeouts.md#why-the-call-layer-recovers-what-a-retryable-model-cannot).
 
 ## Installation
 
@@ -689,7 +711,7 @@ The overridable fields per model family:
 - If the request signal already fired as a deadline, `ai-retry` drops it. The attempt uses only the fresh deadline.
 - Without a retry `timeout`, `ai-retry` does not retry after the request signal aborted. It throws the original error again. `onError` fires, and `onRetry` does not.
 - `ai-retry` never retries after a cancel, with or without `timeout`. A cancel is any abort reason other than a deadline, for example `controller.abort()`.
-- `ai-retry` does not wrap an abort. The caller gets the `AbortError`, not a `RetryError`. A stream rejects with it, so `streamText` reports it through `onAbort`.
+- `ai-retry` does not wrap an abort. The caller gets the `AbortError` or `TimeoutError`, not a `RetryError`. A stream rejects with it, so `streamText` reports it through `onAbort`.
 
 For all details, see [docs/timeouts.md](./docs/timeouts.md).
 
@@ -945,7 +967,7 @@ const retryableModel = createRetryableModel({
 
 ## Telemetry
 
-`ai-retry` can emit [OpenTelemetry](https://opentelemetry.io/) spans for each request and each attempt. It creates the spans on the active OpenTelemetry context, so they are below the spans of the AI SDK when its telemetry is on. One trace then shows each attempt, with its model, the reason for the retry, and the backoff.
+`ai-retry` can emit [OpenTelemetry](https://opentelemetry.io/) spans for each request and each attempt. It creates the spans on the active OpenTelemetry context, so they are child spans of the AI SDK spans when the AI SDK telemetry is on. One trace then shows each attempt, with its model, the reason for the retry, and the backoff.
 
 Telemetry uses the optional peer dependency `@opentelemetry/api`. Install [`@ai-sdk/otel`](https://ai-sdk.dev/docs/ai-sdk-core/telemetry) or `@opentelemetry/api`, and register an OpenTelemetry SDK one time at startup. Then turn on telemetry for each model or call:
 
@@ -1000,7 +1022,7 @@ ai_retry.doGenerate            outcome=success, attempts=2
 | `ai_retry.attempt.timeout_ms`                                                        | timeout budget, when the retry set one                                   |
 | `ai_retry.attempt.error.{name,message,status,cause.name,cause.message,cause.status}` | the error (error attempts); `status` when it carries an HTTP status code |
 
-Attempt spans also have the standard `gen_ai.request.model` and `gen_ai.provider.name` attributes, so that observability tools such as Langfuse can show them. While an attempt runs, its span is the **active** span. Thus the spans of the AI SDK and of the provider are below the attempt that made them. A stream retries only before the first content chunk, so a `doStream` attempt gets `success` when the content starts.
+Attempt spans also have the standard `gen_ai.request.model` and `gen_ai.provider.name` attributes, so that observability tools such as Langfuse can show them. While an attempt runs, its span is the **active** span. Thus the spans of the AI SDK and of the provider are child spans of the attempt that made them. A stream retries only before the first content chunk, so a `doStream` attempt gets `success` when the content starts.
 
 See [`examples/telemetry`](./examples/telemetry) for a runnable example that exports to Langfuse.
 
