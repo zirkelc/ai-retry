@@ -1199,6 +1199,67 @@ describe('generateText', () => {
       expect(onSettled.mock.calls.length).toBe(0);
     });
 
+    it('should still call the deprecated onSuccess when onSettled throws', async () => {
+      // Arrange
+      const hookError = new Error('metrics client down');
+      const onSettled = vi.fn<OnSettled>(() => {
+        throw hookError;
+      });
+      const onSuccess = vi.fn<OnSuccess>();
+
+      // Act
+      const result = generateText({
+        model: createRetryableModel({
+          model: MockLanguageModel.from({ doGenerate: mockResult }),
+          retries: [],
+          onSettled,
+          onSuccess,
+        }),
+        prompt,
+        maxRetries: 0,
+      });
+
+      // Assert
+      await expect(result).rejects.toBe(hookError);
+      expect(onSettled.mock.calls.length).toBe(1);
+      expect(onSuccess.mock.calls.length).toBe(1);
+    });
+
+    it('should report a failure when onRetry throws after a result-based retry', async () => {
+      // Arrange
+      const callbackError = new Error('onRetry failed');
+      const fallbackRetryable: ModelRetryable<LanguageModel> = (context) =>
+        isResultAttempt(context.current)
+          ? { model: MockLanguageModel.from({ doGenerate: mockResult }) }
+          : undefined;
+      const onSettled = vi.fn<OnSettled>();
+      const onFailure = vi.fn<OnFailure>();
+
+      // Act
+      const result = generateText({
+        model: createRetryableModel({
+          model: MockLanguageModel.from({ doGenerate: contentFilterResult }),
+          retries: [fallbackRetryable],
+          onRetry: () => {
+            throw callbackError;
+          },
+          onSettled,
+          onFailure,
+        }),
+        prompt,
+        maxRetries: 0,
+      });
+
+      // Assert
+      await expect(result).rejects.toBe(callbackError);
+      expect(onSettled.mock.calls.length).toBe(1);
+      const event = onSettled.mock.calls[0]![0];
+      expect(event.outcome).toBe('failure');
+      expect(event.error).toBe(callbackError);
+      expect(event.attempts.map((attempt) => attempt.type)).toEqual(['result']);
+      expect(onFailure.mock.calls.length).toBe(0);
+    });
+
     it('should report alongside the deprecated onSuccess and onFailure', async () => {
       // Arrange
       const onSettled = vi.fn<OnSettled>();
@@ -2916,7 +2977,7 @@ describe('streamText', () => {
               "response": {
                 "headers": undefined,
                 "id": "aitxt-mock-id",
-                "modelId": "mock-model-157",
+                "modelId": "mock-model-160",
                 "timestamp": 1970-01-01T00:00:00.000Z,
               },
               "type": "finish-step",
@@ -3025,7 +3086,7 @@ describe('streamText', () => {
               "response": {
                 "headers": undefined,
                 "id": "aitxt-mock-id",
-                "modelId": "mock-model-159",
+                "modelId": "mock-model-162",
                 "timestamp": 1970-01-01T00:00:00.000Z,
               },
               "type": "finish-step",
@@ -4182,6 +4243,27 @@ describe('streamText', () => {
       expect(event.outcome).toBe('success');
       expect(event.attempts.length).toBe(1);
       expect(event.attempts[0]!.type).toBe('success');
+    });
+
+    it('should report a successful stream once when onSettled throws', async () => {
+      // Arrange
+      const onSettled = vi.fn<OnSettled>(() => {
+        throw new Error('metrics client down');
+      });
+      const model = createRetryableModel({
+        model: MockLanguageModel.from({ doStream: retryableError }),
+        retries: [MockLanguageModel.from({ doStream: mockStreamChunks })],
+        onSettled,
+      });
+
+      // Act
+      const { stream } = await model.doStream(MockLanguageModel.callOptions());
+      const parts = await Streams.toArray(stream);
+
+      // Assert
+      expect(onSettled.mock.calls.length).toBe(1);
+      expect(onSettled.mock.calls[0]![0].outcome).toBe('success');
+      expect(parts.some((part) => part.type === 'error')).toBe(false);
     });
 
     it('should report a stream that fails after its content started as a failure', async () => {

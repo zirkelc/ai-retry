@@ -1,4 +1,5 @@
 import { evaluateError } from '../internal/evaluate-error.js';
+import { isTimeoutError } from '../internal/guards.js';
 import { isCallAbort, waitBeforeRetry } from '../internal/retry-signal.js';
 import { findRetryModel } from '../internal/find-retry-model.js';
 import { resolveBackoffDelay } from '../internal/resolve-backoff-delay.js';
@@ -68,7 +69,7 @@ function isCallDeadline(
   return (
     callTimeout !== undefined &&
     retryTimeout === undefined &&
-    (error as { name?: unknown } | undefined)?.name === 'TimeoutError'
+    isTimeoutError(error)
   );
 }
 
@@ -368,19 +369,23 @@ export async function runRetryLoop<
 
         /**
          * No retry matched. Surface the error, wrapped in a `RetryError` when
-         * more than one attempt was made and the caller did not cancel.
+         * more than one attempt was made, unless an abort stopped the call: a
+         * cancel or the call's own deadline is surfaced as it is.
          */
         if (!evaluation.retryModel) {
-          aborted =
-            isCallAbort(error, callerSignal) ||
-            isCallDeadline(error, args.timeout, attemptTimeout);
+          const callDeadline = isCallDeadline(
+            error,
+            args.timeout,
+            attemptTimeout,
+          );
+          aborted = isCallAbort(error, callerSignal) || callDeadline;
           recorder?.endAttempt({
             attempt: attemptNumber,
             outcome: 'failure',
             finishReason: errorFinishReason(error),
             error,
           });
-          throw evaluation.finalError;
+          throw callDeadline ? error : evaluation.finalError;
         }
 
         /**
@@ -503,8 +508,10 @@ export async function runRetryLoop<
      * Reporting once at the boundary is what makes it impossible to reject
      * without telling `onSettled` and the operation span about it.
      *
-     * A rejection no attempt caused — one of your own callbacks throwing —
-     * leaves `attempts` empty, and there is no call outcome to report.
+     * A callback of the caller that throws after an attempt is reported as a
+     * failure too: the call rejects, so it failed. `attempts` is empty only
+     * when the loop stopped before its first attempt, and then there is no
+     * call outcome to report.
      */
     operationError = error;
     if (attempts.length > 0) {

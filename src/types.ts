@@ -310,8 +310,9 @@ export type ModelSettledEvent<MODEL extends AnyResolvableModel> = {
   /** The model that settled the request, or the one whose failure ended it. */
   model: ResolvedModel<MODEL>;
   /**
-   * Every attempt, in order, ending with the one that settled the request.
-   * Never empty: a request always makes at least one attempt.
+   * Every attempt, in order, ending with the last one. On success that is the
+   * successful attempt. Never empty: a request always makes at least one
+   * attempt.
    */
   attempts: Array<ModelSettledAttempt<ResolvedModel<MODEL>>>;
   /** The result, on success. */

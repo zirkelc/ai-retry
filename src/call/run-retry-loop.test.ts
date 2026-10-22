@@ -599,6 +599,29 @@ describe('hooks', () => {
         expect(onSettled.mock.calls[0]![0].aborted).toBe(true);
       });
 
+      it('should surface a timeout after a failover as its TimeoutError, not a RetryError', async () => {
+        // Arrange
+        const onSettled = vi.fn();
+
+        // Act
+        const result = retryableGenerateText({
+          model: MockLanguageModel.from(retryableError),
+          prompt,
+          timeout: { totalMs: 20 },
+          retry: {
+            retries: [MockLanguageModel.from({ doGenerate: stalls })],
+            onSettled,
+          },
+        });
+
+        // Assert
+        await expect(result).rejects.toMatchObject({ name: 'TimeoutError' });
+        const event = onSettled.mock.calls[0]![0];
+        expect(event.attempts.length).toBe(2);
+        expect(event.aborted).toBe(true);
+        expect(RetryError.isInstance(event.error)).toBe(false);
+      });
+
       it('should flag a retry that times out on its own timeout as not aborted', async () => {
         // Arrange
         const onSettled = vi.fn();
@@ -649,6 +672,33 @@ describe('hooks', () => {
         await expect(result).rejects.toMatchObject({ name: 'TimeoutError' });
         expect(onSettled.mock.calls[0]![0].aborted).toBe(false);
       });
+    });
+
+    it('should report a failure when onRetry throws', async () => {
+      // Arrange
+      const callbackError = new Error('onRetry failed');
+      const onSettled = vi.fn();
+
+      // Act
+      const result = retryableGenerateText({
+        model: MockLanguageModel.from(retryableError),
+        prompt,
+        retry: {
+          retries: [MockLanguageModel.from(mockResultText)],
+          onRetry: () => {
+            throw callbackError;
+          },
+          onSettled,
+        },
+      });
+
+      // Assert
+      await expect(result).rejects.toBe(callbackError);
+      expect(onSettled.mock.calls.length).toBe(1);
+      const event = onSettled.mock.calls[0]![0];
+      expect(event.outcome).toBe('failure');
+      expect(event.error).toBe(callbackError);
+      expect(event.aborted).toBe(false);
     });
 
     it('should fire exactly once, whichever way the call goes', async () => {

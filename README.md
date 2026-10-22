@@ -727,7 +727,7 @@ const retryableModel = createRetryableModel({
 | `aborted`  | On failure, `true` when an abort stopped the request (a cancel, or a deadline on the call), `false` when the attempts failed. A deadline surfaces a `TimeoutError`                                 |
 
 - A request settles when its outcome is final. For a stream, that is when the stream ends, so a stream that fails after its content started settles as a failure.
-- It stays silent when retries are `disabled`, and when the request ended with no failed attempt (one of your own callbacks throwing).
+- It fires exactly once per request, also when one of your own callbacks throws after an attempt: the request rejects, so it is reported as a failure. It stays silent only when retries are `disabled`.
 - A retry that times out on its own `timeout` is a failure, not an abort. `aborted` has the same meaning on the [call layer](#call-layer).
 
 To alert on failures but not on user cancels:
@@ -857,7 +857,7 @@ const result = await retryableGenerateText({
 The event also carries `model` (the one that settled it, or the one whose failure ended the loop), `result` on success, and `error` and `aborted` on failure. `aborted` has the same meaning as on the [model layer](#model-layer): `true` when an abort stopped the call (your `abortSignal`, or your `timeout` when no retry recovered it), `false` when the attempts failed. A deadline surfaces a `TimeoutError`, and a retry that times out on its own `timeout` is a failure. Each entry in `attempts` says how it ended: `error`, `result` (judged, then retried) or `success`.
 
 - For `streamText` it settles at the **commit point**, the first content part, not at the end of the stream. A stream you never consume still settles; for end-to-end stream health, use `streamText`'s own `onFinish` and `onError` on the same call.
-- It stays silent when retries are `disabled`, and when the rejection came from no attempt at all (one of your own callbacks throwing).
+- It fires exactly once per call, also when one of your own callbacks throws after an attempt: the call rejects, so it is reported as a failure. It stays silent only when retries are `disabled`.
 
 **It mirrors the operation span**, so a metric built on the hook and one built on [telemetry](#telemetry) agree by construction:
 
