@@ -1,11 +1,11 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { experimental_retryableEmbed } from './call/embed/index.js';
-import { experimental_retryableEmbedMany } from './call/embed-many/index.js';
-import { experimental_retryableGenerateImage } from './call/generate-image/index.js';
-import { experimental_retryableGenerateText } from './call/generate-text/index.js';
-import { experimental_retryableStreamText } from './call/stream-text/index.js';
+import { retryableEmbed } from './call/embed/index.js';
+import { retryableEmbedMany } from './call/embed-many/index.js';
+import { retryableGenerateImage } from './call/generate-image/index.js';
+import { retryableGenerateText } from './call/generate-text/index.js';
+import { retryableStreamText } from './call/stream-text/index.js';
 import { createRetryable, isErrorAttempt, isResultAttempt } from './index.js';
 import { createRetryableModel } from './internal/create-retryable-model.js';
 import {
@@ -33,11 +33,11 @@ const packageJson = JSON.parse(
 describe('the per-entry-point barrels', () => {
   it('should export each call-level function from its own path', () => {
     // Assert
-    expect(typeof experimental_retryableGenerateText).toBe('function');
-    expect(typeof experimental_retryableStreamText).toBe('function');
-    expect(typeof experimental_retryableEmbed).toBe('function');
-    expect(typeof experimental_retryableEmbedMany).toBe('function');
-    expect(typeof experimental_retryableGenerateImage).toBe('function');
+    expect(typeof retryableGenerateText).toBe('function');
+    expect(typeof retryableStreamText).toBe('function');
+    expect(typeof retryableEmbed).toBe('function');
+    expect(typeof retryableEmbedMany).toBe('function');
+    expect(typeof retryableGenerateImage).toBe('function');
   });
 
   it('should reach a real call through a published name', async () => {
@@ -45,7 +45,7 @@ describe('the per-entry-point barrels', () => {
     const model = MockLanguageModel.from(mockResultText);
 
     // Act
-    const result = await experimental_retryableGenerateText({
+    const result = await retryableGenerateText({
       model,
       prompt: 'Hello!',
     });

@@ -27,8 +27,6 @@
     "./embed-many/conditions": "./dist/call/embed-many/conditions/index.mjs",
     "./embedding-model": "./dist/model/embedding-model/index.mjs",
     "./embedding-model/conditions": "./dist/model/embedding-model/conditions/index.mjs",
-    "./experimental/call": "./dist/experimental/call/index.mjs",
-    "./experimental/stream": "./dist/experimental/stream/index.mjs",
     "./generate-image": "./dist/call/generate-image/index.mjs",
     "./generate-image/conditions": "./dist/call/generate-image/conditions/index.mjs",
     "./generate-text": "./dist/call/generate-text/index.mjs",
