@@ -123,6 +123,8 @@ A `timeout` argument belongs to the call, not to the model. This is why the two 
 
 Give a retryable model as the `model` of a retryable call. The retryable model handles provider errors, and the retryable call handles call timeouts.
 
+This agent calls a tool in step 1, then asks the model for the answer in step 2:
+
 ```typescript
 const retryableModel = createRetryableModel({
   model: anthropic('claude-sonnet-4-5'),
@@ -131,11 +133,18 @@ const retryableModel = createRetryableModel({
 
 const result = await retryableStreamText({
   model: retryableModel,
-  prompt: 'Invent a new holiday.',
+  tools: { weather },
+  stopWhen: isStepCount(3),
+  prompt: 'What is the weather in Berlin?',
   timeout: { firstChunkMs: 2_000 },
   retry: [timeout().switch({ model: openai('gpt-4o-mini') })],
 });
 ```
+
+- If step 2 fails with HTTP 529, only the retryable model can recover it. The tool call of step 1 is content, so the call was committed before step 2 started. The AI SDK calls `doStream` one time for each step, so the retryable model retries step 2 alone. Step 1 and the tool result stay. See [`examples/multi-step-stream.ts`](./examples/multi-step-stream.ts).
+- If step 1 sends no content in 2 seconds, only the retryable call can recover it. It runs the call again on its fallback model.
+
+These rules apply when you use both layers:
 
 - The retryable model handles a failure first. The retryable call gets the error only when the retryable model stops.
 - The retryable call counts the models that the retryable model already tried, and does not try them again.
