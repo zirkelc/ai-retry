@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.8.0](https://github.com/zirkelc/ai-retry/compare/v2.7.1...v2.8.0) (2026-10-23)
+
+
+### Features
+
+* promote call-level retry functions to stable ([#79](https://github.com/zirkelc/ai-retry/issues/79)) ([2f8da5d](https://github.com/zirkelc/ai-retry/commit/2f8da5d0c927dbc1df1e165058c6bf4e7914d269))
+
+
+### Documentation
+
+* use timeout instead of deadline, update badges and features ([372064c](https://github.com/zirkelc/ai-retry/commit/372064c28e7113db2fa8cb589a1e6095db668b8f))
+
 ## [2.7.1](https://github.com/zirkelc/ai-retry/compare/v2.7.0...v2.7.1) (2026-10-08)
 
 
