@@ -12,7 +12,7 @@
   by <a href="https://x.com/zirkelc">@zirkelc</a>
 </p>
 <p align="center">
-  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/github/license/zirkelc/ai-retry" alt="License"></a> <a href="https://www.npmjs.com/package/ai-retry"><img src="https://img.shields.io/npm/dw/ai-retry" alt="Weekly downloads"></a> <a href="https://github.com/zirkelc/ai-retry"><img src="https://img.shields.io/github/stars/zirkelc/ai-retry" alt="GitHub stars"></a> <a href="https://github.com/zirkelc/ai-retry/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/zirkelc/ai-retry/ci.yml?branch=main" alt="CI"></a>
+  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/github/license/zirkelc/ai-retry" alt="License"></a> <a href="https://www.npmjs.com/package/ai-retry"><img src="https://img.shields.io/npm/dw/ai-retry" alt="Weekly downloads"></a> <a href="https://www.npmjs.com/package/ai-retry"><img src="https://img.shields.io/npm/dt/ai-retry" alt="Total downloads"></a> <a href="https://github.com/zirkelc/ai-retry"><img src="https://img.shields.io/github/stars/zirkelc/ai-retry" alt="GitHub stars"></a>
 </p>
 
 </div>
@@ -28,13 +28,13 @@ You declare a list of typed **conditions**, for example `httpStatus(529)`, `fini
 
 ## Features
 
-- **Two layers** Retry the model request, or run the whole AI SDK call again.
-- **Typed conditions** Match errors and results with `error()`, `httpStatus()`, `finishReason()`, `timeout()`, `result()` and others.
-- **Retry or switch** Try the same model again, or switch to a different model.
-- **Fallbacks** Give a list of models or providers to try in sequence.
-- **Timeouts** Recover a request or a stream that times out.
-- **Streaming** Recover a stream that fails before the first content part arrives.
-- **Telemetry** Get an OpenTelemetry span for each request and each attempt.
+- **Two layers:** Retry the model request, or run the whole AI SDK call again.
+- **Typed conditions:** Match errors and results with `error()`, `httpStatus()`, `finishReason()`, `timeout()`, `result()` and others.
+- **Retry or switch:** Try the same model again, or switch to a different model.
+- **Fallbacks:** Give a list of models or providers to try in sequence.
+- **Timeouts:** Recover a request or a stream that times out.
+- **Streaming:** Recover a stream that fails before the first content part arrives.
+- **Telemetry:** Get an OpenTelemetry span for each request and each attempt.
 
 ## Two layers
 
@@ -123,7 +123,7 @@ sequenceDiagram
 | Call timeout                        | `generateText` | on the call    | recovers                              | recovers                                |
 | Call timeout                        | `streamText`   | on the call    | discarded                             | recovers                                |
 | Caller `abortSignal`: cancel        | any            | on the call    | not retried                           | not retried                             |
-| Caller `abortSignal`: deadline      | `generateText` | on the call    | recovers, if the retry sets `timeout` | not retried; use the `timeout` argument |
+| Caller `abortSignal`: timeout       | `generateText` | on the call    | recovers, if the retry sets `timeout` | not retried; use the `timeout` argument |
 | Error after the first content chunk | `streamText`   | after commit   | committed                             | committed                               |
 
 A `timeout` argument belongs to the call, not to the model. This is why the two "Call timeout" rows are different. For all details, see [docs/timeouts.md](./docs/timeouts.md).
@@ -269,7 +269,7 @@ import { finishReason, httpStatus } from 'ai-retry/generate-text/conditions';
 const result = await retryableGenerateText({
   model: anthropic('claude-sonnet-4-5'),
   prompt: 'Invent a new holiday.',
-  /** A whole-call deadline, recoverable here because the retry re-issues the call. */
+  /** A whole-call timeout, recoverable here because the retry re-issues the call. */
   timeout: { totalMs: 20_000 },
   retry: [
     /** Overloaded upstream: same prompt, different provider. */
@@ -375,7 +375,7 @@ const { images } = await retryableGenerateImage({
 
 `ai-retry` tries the entries of a list in order. On a retryable model, the list is the `retries` option. On a retryable function, it is the `retry` argument, and its object form also names the list `retries`. The list has two kinds of entries:
 
-- **Fallbacks** are model instances or gateway strings. They always match.
+- **Fallbacks:** are model instances or gateway strings. They always match.
 - **Conditions** are typed predicates from helpers such as `error()` or `httpStatus()`, each with a `.switch()` or `.retry()` action. They match only when their predicate is true.
 
 The array works like an `if-else` chain. Each condition is an `if` branch for an error or a result, and each fallback is an `else` branch for all other cases. `ai-retry` checks the array from top to bottom and uses the first match. When no entry is left, it throws a `RetryError` (see [Error handling](#error-handling)).
@@ -436,17 +436,17 @@ error
 
 Each entry in the list (a fallback model, a `.switch()` or a `.retry()`) has the same `Retry` object:
 
-| Field           | Description                                                                                                                         |
-| --------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `model`         | Model for the next attempt                                                                                                          |
-| `maxAttempts`   | Attempts allowed per unique model (`provider/modelId`). Defaults: `1` for fallbacks and `.switch()`, `2` for `.retry()`             |
-| `delay`         | Milliseconds to wait before the attempt                                                                                             |
-| `backoffFactor` | Multiplier applied to `delay` on every further attempt                                                                              |
-| `timeout`       | Fresh deadline for the attempt. Accepted shape depends on the layer (see [Model layer](#model-layer) and [Call layer](#call-layer)) |
-| `options`       | Argument overrides for the attempt. Shape depends on the layer                                                                      |
+| Field           | Description                                                                                                                        |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `model`         | Model for the next attempt                                                                                                         |
+| `maxAttempts`   | Attempts allowed per unique model (`provider/modelId`). Defaults: `1` for fallbacks and `.switch()`, `2` for `.retry()`            |
+| `delay`         | Milliseconds to wait before the attempt                                                                                            |
+| `backoffFactor` | Multiplier applied to `delay` on every further attempt                                                                             |
+| `timeout`       | Fresh timeout for the attempt. Accepted shape depends on the layer (see [Model layer](#model-layer) and [Call layer](#call-layer)) |
+| `options`       | Argument overrides for the attempt. Shape depends on the layer                                                                     |
 
 - `ai-retry` counts attempts per unique model. If the same model is in several retryables, they share one budget.
-- A delay stops when the abort signal of the request fires, so you can cancel a retry that waits. A delay before a retry that sets its own `timeout` ignores a request deadline that fired before.
+- A delay stops when the abort signal of the request fires, so you can cancel a retry that waits. A delay before a retry that sets its own `timeout` ignores a request timeout that fired before.
 
 ```typescript
 const retryableModel = createRetryableModel({
@@ -559,7 +559,7 @@ httpStatus(/^5\d\d$/).switch({ model: fallback }); // any 5xx
 
 #### `timeout()`
 
-Alias for `error.isTimeout()`. It matches when `AbortSignal.timeout()` fires (`Error.name === 'TimeoutError'`). Give the action a new `timeout`, so that the fallback gets its own deadline.
+Alias for `error.isTimeout()`. It matches when `AbortSignal.timeout()` fires (`Error.name === 'TimeoutError'`). Give the action a new `timeout`, so that the fallback gets its own timeout.
 
 ```typescript
 timeout().switch({ model: fallback, timeout: 30_000 });
@@ -730,10 +730,10 @@ The overridable fields per model family:
 ### Timeouts
 
 - A retry `timeout` (milliseconds) creates a fresh `AbortSignal.timeout()` for that attempt.
-- `ai-retry` combines the fresh signal with a live request signal. A cancel still stops the attempt, but the attempt ignores a request deadline (`TimeoutError`) that fires later.
-- If the request signal already fired as a deadline, `ai-retry` drops it. The attempt uses only the fresh deadline.
+- `ai-retry` combines the fresh signal with a live request signal. A cancel still stops the attempt, but the attempt ignores a request timeout (`TimeoutError`) that fires later.
+- If the request signal already fired as a timeout, `ai-retry` drops it. The attempt uses only the fresh timeout.
 - Without a retry `timeout`, `ai-retry` does not retry after the request signal aborted. It throws the original error again. `onError` fires, and `onRetry` does not.
-- `ai-retry` never retries after a cancel, with or without `timeout`. A cancel is any abort reason other than a deadline, for example `controller.abort()`.
+- `ai-retry` never retries after a cancel, with or without `timeout`. A cancel is any abort reason other than a timeout, for example `controller.abort()`.
 - `ai-retry` does not wrap an abort. The caller gets the `AbortError` or `TimeoutError`, not a `RetryError`. A stream rejects with it, so `streamText` reports it through `onAbort`.
 
 For all details, see [docs/timeouts.md](./docs/timeouts.md).
@@ -769,7 +769,7 @@ const retryableModel = createRetryableModel({
 | `attempts` | Every attempt, in order, ending with the one that settled the request                                                                                                                              |
 | `result`   | The result, on success                                                                                                                                                                             |
 | `error`    | On failure, the error surfaced to the caller: a `RetryError` that wraps every attempt error when more than one attempt was made, otherwise the original error. An abort error is surfaced as it is |
-| `aborted`  | On failure, `true` when an abort stopped the request (a cancel, or a deadline on the call), `false` when the attempts failed. A deadline surfaces a `TimeoutError`                                 |
+| `aborted`  | On failure, `true` when an abort stopped the request (a cancel, or a timeout on the call), `false` when the attempts failed. A timeout surfaces a `TimeoutError`                                   |
 
 - A request settles when its outcome is final. For a stream, that is when the stream ends, so a stream that fails after its content started settles as a failure.
 - It fires one time per request, also when one of your callbacks throws after an attempt. In that case the request rejects, and `onSettled` reports a failure. It does not fire only when retries are `disabled`.
@@ -855,7 +855,7 @@ retry: [{ model: fallbackModel, options: { prompt: 'Answer in one sentence.' } }
 
 ### Timeouts
 
-`Retry.timeout` gives each attempt a fresh deadline. A number is a total budget in milliseconds. An object is the timeout configuration of the AI SDK, and `ai-retry` **merges** it key by key into the timeout of the call. The shapes that a retry accepts depend on the retryable function.
+`Retry.timeout` gives each attempt a fresh timeout. A number is a total budget in milliseconds. An object is the timeout configuration of the AI SDK, and `ai-retry` **merges** it key by key into the timeout of the call. The shapes that a retry accepts depend on the retryable function.
 
 The AI SDK gives `embed`, `embedMany` and `generateImage` no `timeout` argument. Their retryable functions add one, and make a new `AbortSignal` from it for each attempt. For details and tables, see [docs/timeouts.md](./docs/timeouts.md#retry-timeouts-at-the-call-layer).
 
@@ -906,7 +906,7 @@ The event also has these fields:
 - `model` is the model that settled the call, or the model whose failure stopped the loop.
 - `result` is the result, on success.
 - `error` is the error that the call throws, on failure.
-- `aborted` has the same meaning as on the [model layer](#model-layer). It is `true` when an abort stopped the call (your `abortSignal`, or your `timeout` when no retry recovered it), and `false` when the attempts failed. A deadline gives a `TimeoutError`. A retry that times out on its own `timeout` is a failure.
+- `aborted` has the same meaning as on the [model layer](#model-layer). It is `true` when an abort stopped the call (your `abortSignal`, or your `timeout` when no retry recovered it), and `false` when the attempts failed. A timeout gives a `TimeoutError`. A retry that times out on its own `timeout` is a failure.
 
 The `type` of each entry in `attempts` shows how the attempt ended: `error`, `result` (judged, then retried) or `success`.
 
@@ -1103,7 +1103,7 @@ interface Retry<MODEL> {
   maxAttempts?: number; // default: 1 for switch, 2 for retry
   delay?: number; // ms before the attempt
   backoffFactor?: number; // exponential multiplier
-  timeout?: RetryTimeout; // fresh deadline for this attempt
+  timeout?: RetryTimeout; // fresh timeout for this attempt
   options?: ModelRetryCallOptions<MODEL>; // call layer: the entry point arguments instead
 }
 ```

@@ -1,31 +1,31 @@
 # Timeouts
 
-This document is the deep dive behind the README's [recovery matrix](../README.md#recovery-matrix): which deadline fires when, which retry layer can recover it, and why. Throughout, "deadline" means one configured timeout window, or the moment it fires.
+This document is the deep dive behind the README's [recovery matrix](../README.md#recovery-matrix): which timeout fires when, which retry layer can recover it, and why.
 
-## Who owns a deadline
+## Who owns a timeout
 
 A `timeout` you pass to `generateText` or `streamText` belongs to **the call**, not to the model. The SDK merges every `timeout.*` window plus your `abortSignal` into one abort signal and tears the call down when any of them fires.
 
 - `createRetryableModel` wraps the model and retries _underneath_ the call, so it cannot undo something the call has already done to itself.
-- The call-level functions (`retryableGenerateText`, `retryableStreamText`, …) re-run the whole call, signal included, so a fresh attempt gets a fresh deadline.
+- The call-level functions (`retryableGenerateText`, `retryableStreamText`, …) re-run the whole call, signal included, so a fresh attempt gets a fresh timeout.
 
-A deadline a retry sets _itself_ is a different matter: a retry's own `timeout` aborts only that attempt, never the call, so it recovers under both entry points.
+A timeout a retry sets _itself_ is a different matter: a retry's own `timeout` aborts only that attempt, never the call, so it recovers under both entry points.
 
-## Which deadline fires when
+## Which timeout fires when
 
-In both tables, "Outcome" is what a **retryable model** can do about that deadline. The call-level functions recover every row (except a genuine caller cancel, which is honored, not retried).
+In both tables, "Outcome" is what a **retryable model** can do about that timeout. The call-level functions recover every row (except a genuine caller cancel, which is honored, not retried).
 
 **Under `generateText`**
 
-| Deadline             | Clock                           | Outcome                                                                                                |
-| -------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `timeout.totalMs`    | the whole call, from call start | recovers                                                                                               |
-| `timeout.stepMs`     | one step, from step start       | recovers                                                                                               |
-| caller `abortSignal` | whenever the caller aborts      | recovers a deadline (`AbortSignal.timeout()`) when the retry sets its own `timeout`; a cancel does not |
+| Timeout              | Clock                           | Outcome                                                                                               |
+| -------------------- | ------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `timeout.totalMs`    | the whole call, from call start | recovers                                                                                              |
+| `timeout.stepMs`     | one step, from step start       | recovers                                                                                              |
+| caller `abortSignal` | whenever the caller aborts      | recovers a timeout (`AbortSignal.timeout()`) when the retry sets its own `timeout`; a cancel does not |
 
 **Under `streamText`**
 
-| Deadline               | Clock                                                                 | Outcome                    |
+| Timeout                | Clock                                                                 | Outcome                    |
 | ---------------------- | --------------------------------------------------------------------- | -------------------------- |
 | `timeout.totalMs`      | the whole call, from call start                                       | discarded                  |
 | `timeout.stepMs`       | one step, from step start                                             | discarded                  |
@@ -37,7 +37,7 @@ In both tables, "Outcome" is what a **retryable model** can do about that deadli
 
 Three sharp edges in those tables:
 
-- `firstChunkMs` and `chunkMs` are streaming-only, but all four keys share one type, so `generateText` accepts them and then never reads them. A `generateText` call configured with only those keys has no deadline at all, and a stalled model hangs indefinitely.
+- `firstChunkMs` and `chunkMs` are streaming-only, but all four keys share one type, so `generateText` accepts them and then never reads them. A `generateText` call configured with only those keys has no timeout at all, and a stalled model hangs indefinitely.
 - `chunkMs` measures the gap _between_ content chunks, so its timer is only armed once the first content chunk arrives. It never catches a model that stalls before producing anything, and once it can fire the attempt is already committed.
 - Where a table says "recovers", the retry must still supply its own `timeout` whenever the inbound signal has already fired, otherwise `ai-retry` re-throws instead of retrying against a dead signal (see [Retry timeouts at the model layer](#retry-timeouts-at-the-model-layer)).
 
@@ -69,22 +69,22 @@ re-checks the signal before forwarding each chunk"]
 
   you -- "prompt" --> ds
   ds -- "chunks" --> gate
-  sig -. "once a deadline fires, the gate
+  sig -. "once a timeout fires, the gate
 drops everything and closes the stream" .-> gate
   gate -- "textStream / fullStream" --> you
 ```
 
 The nesting decides what a retry can recover:
 
-- **`createRetryableModel` swaps the model**, the innermost box. The signal and the gate survive the swap, so the fallback runs and produces chunks, and the gate drops every one of them: the signal it checks latched the moment the deadline fired.
+- **`createRetryableModel` swaps the model**, the innermost box. The signal and the gate survive the swap, so the fallback runs and produces chunks, and the gate drops every one of them: the signal it checks latched the moment the timeout fired.
 - **`retryableStreamText` swaps the call**, signal and gate included, so the fallback gets fresh ones and its output reaches you.
 
-`generateText` has the same layering minus the gate, which is why a retryable model recovers `generateText` deadlines but not `streamText` ones.
+`generateText` has the same layering minus the gate, which is why a retryable model recovers `generateText` timeouts but not `streamText` ones.
 
-| Layer       | What a retry replaces                     | `generateText` deadlines | `streamText` deadlines |
-| ----------- | ----------------------------------------- | ------------------------ | ---------------------- |
-| Model layer | `doGenerate` / `doStream`, below the call | recovers                 | cannot recover         |
-| Call layer  | the whole call, above the model           | recovers                 | recovers               |
+| Layer       | What a retry replaces                     | `generateText` timeouts | `streamText` timeouts |
+| ----------- | ----------------------------------------- | ----------------------- | --------------------- |
+| Model layer | `doGenerate` / `doStream`, below the call | recovers                | cannot recover        |
+| Call layer  | the whole call, above the model           | recovers                | recovers              |
 
 ## When each timer runs
 
@@ -111,19 +111,19 @@ Note where the commit point falls: `chunkMs` cannot arm until the first content 
 
 ## Retry timeouts at the model layer
 
-When a retry specifies a `timeout`, a fresh `AbortSignal.timeout()` is created for that attempt. If the original `abortSignal` is still alive, the fresh deadline is composed with it so user cancellation still works, while a request-level deadline (`TimeoutError`) firing later is ignored. If the original signal already fired as a deadline, it is dropped so the retry runs against the fresh deadline alone.
+When a retry specifies a `timeout`, a fresh `AbortSignal.timeout()` is created for that attempt. If the original `abortSignal` is still alive, the fresh timeout is composed with it so user cancellation still works, while a request-level timeout (`TimeoutError`) firing later is ignored. If the original signal already fired as a timeout, it is dropped so the retry runs against the fresh timeout alone.
 
-If the original `abortSignal` is already aborted at the time of retry and the retry does **not** supply a `timeout`, `ai-retry` re-throws the original error rather than firing a misleading retry against the dead signal. `onError` still fires for observability; `onRetry` is skipped. Setting `timeout` is the explicit opt-in for retrying past a request-level deadline. A cancellation (any other abort reason, such as a plain `controller.abort()`) is never retried past, `timeout` or not.
+If the original `abortSignal` is already aborted at the time of retry and the retry does **not** supply a `timeout`, `ai-retry` re-throws the original error rather than firing a misleading retry against the dead signal. `onError` still fires for observability; `onRetry` is skipped. Setting `timeout` is the explicit opt-in for retrying past a request-level timeout. A cancellation (any other abort reason, such as a plain `controller.abort()`) is never retried past, `timeout` or not.
 
 An abort of the request is surfaced as it is: after a failover, the caller gets the `AbortError`, not a `RetryError` wrapping it, and a stream rejects with it rather than carrying it as an error part. So `streamText` reports it through `onAbort`, the same as without a retryable model.
 
-A delay before a retry that sets its own `timeout` ignores a request deadline that has fired, as the retry does, so the wait does not end the retry before it starts.
+A delay before a retry that sets its own `timeout` ignores a request timeout that has fired, as the retry does, so the wait does not end the retry before it starts.
 
-Below a model the deadline can only be a plain number of milliseconds: a retryable model applies its deadline by building an `AbortSignal`, which carries a wall-clock budget and nothing else.
+Below a model the timeout can only be a plain number of milliseconds: a retryable model applies its timeout by building an `AbortSignal`, which carries a wall-clock budget and nothing else.
 
 ## Retry timeouts at the call layer
 
-`Retry.timeout` gives each attempt a fresh deadline; the first attempt's clock is already spent by the time it fails.
+`Retry.timeout` gives each attempt a fresh timeout; the first attempt's clock is already spent by the time it fails.
 
 A number is a total budget in milliseconds. An object is the SDK's own timeout configuration, and is **merged** into whatever the call already carried, key by key, so narrowing one window leaves the others standing:
 
@@ -151,8 +151,8 @@ const result = await retryableStreamText({
 | `generateText`                        | `number \| { totalMs, stepMs, toolMs, tools }` |
 | `streamText`                          | the above plus `{ firstChunkMs, chunkMs }`     |
 
-Naming a window the destination cannot measure is a **type error** rather than a deadline that never fires. So `{ chunkMs: 100 }` on a `generateText` retry is rejected, where the SDK's own `timeout` argument would accept it on the same call and then never read it.
+Naming a window the destination cannot measure is a **type error** rather than a timeout that never fires. So `{ chunkMs: 100 }` on a `generateText` retry is rejected, where the SDK's own `timeout` argument would accept it on the same call and then never read it.
 
-**`embed`, `embedMany` and `generateImage` take a `timeout` of their own here**, which the SDK does not give them. It is this library's argument, turned into a fresh `AbortSignal` per attempt and never passed on. Composing a deadline into `abortSignal` yourself would not work: it reads as a cancellation, so it kills the first attempt and every retry with it.
+**`embed`, `embedMany` and `generateImage` take a `timeout` of their own here**, which the SDK does not give them. It is this library's argument, turned into a fresh `AbortSignal` per attempt and never passed on. Composing a timeout into `abortSignal` yourself would not work: it reads as a cancellation, so it kills the first attempt and every retry with it.
 
-Your own `abortSignal` is never treated as a deadline. If it aborts, the call is cancelled and no fail-over is attempted; a genuine cancel is not a failure to recover from.
+Your own `abortSignal` is never treated as a timeout. If it aborts, the call is cancelled and no fail-over is attempted; a genuine cancel is not a failure to recover from.

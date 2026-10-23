@@ -7,7 +7,7 @@
  * runs the whole call again with the next model, so it recovers the timeout for
  * both `generateText` and `streamText`.
  *
- * `.switch({ timeout })` gives the retry a fresh deadline, because the deadline
+ * `.switch({ timeout })` gives the retry a fresh timeout, because the timeout
  * of the first attempt is used up when it fails.
  *
  * Offline: all models are mocks, no API key needed.
@@ -27,7 +27,7 @@ import { Language, MockLanguageModel } from 'ai-test-kit/language';
 
 /**
  * `doGenerate` answers after 5 seconds, and `doStream` opens a stream that sends
- * no content. Both stop when their abort signal fires, so a shorter deadline
+ * no content. Both stop when their abort signal fires, so a shorter timeout
  * stops them before they commit.
  */
 const slowModel = MockLanguageModel.from(
@@ -58,7 +58,7 @@ const fastModel = MockLanguageModel.from('A fast answer.', {
 });
 
 /**
- * On a timeout, switch to the fast model with a fresh deadline of 1 second.
+ * On a timeout, switch to the fast model with a fresh timeout of 1 second.
  *
  * Both functions can use this list. `timeout()` reads only the error, so it is
  * not tied to the entry point that it comes from. A `result()` or
@@ -77,7 +77,7 @@ const generated = await retryableGenerateText({
 
 console.log(`generateText: ${generated.text}`);
 
-/** The stream sends no content, so the deadline fires before the commit. */
+/** The stream sends no content, so the timeout fires before the commit. */
 const streamed = await retryableStreamText({
   model: slowModel,
   prompt,

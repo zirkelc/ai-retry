@@ -3,7 +3,7 @@
  *
  * The `timeout` argument of `generateText` aborts the request. `timeout()`
  * matches the `TimeoutError`, and `.switch({ timeout })` gives the fallback a
- * fresh deadline. This works for `generateText` only. For `streamText`, use a
+ * fresh timeout. This works for `generateText` only. For `streamText`, use a
  * retryable call, see `examples/retryable-timeout-switch.ts`.
  *
  * Offline: all models are mocks, no API key needed.
@@ -19,7 +19,7 @@ import { generateText } from 'ai';
 import { createRetryableModel, timeout } from 'ai-retry/language-model';
 import { Language, MockLanguageModel } from 'ai-test-kit/language';
 
-/** Answers after 5 seconds, so a shorter deadline fires first. */
+/** Answers after 5 seconds, so a shorter timeout fires first. */
 const slowModel = MockLanguageModel.from(
   { content: [Language.text('A slow answer.')], delayInMs: 5_000 },
   { provider: 'openai', modelId: 'gpt-4o' },
@@ -33,7 +33,7 @@ const fastModel = MockLanguageModel.from('A fast answer.', {
 const retryableModel = createRetryableModel({
   model: slowModel,
   retries: [
-    // On a timeout, switch to the fast model with a fresh deadline of 30 seconds
+    // On a timeout, switch to the fast model with a fresh timeout of 30 seconds
     timeout().switch({ model: fastModel, timeout: 30_000 }),
   ],
   onRetry: ({ current }) => {
