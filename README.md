@@ -6,21 +6,35 @@
   <img src="assets/logo-light.png" alt="ai-retry logo" width="320" />
 </picture>
 
-<p align="center">Retries and fallbacks for the AI SDK</p>
 <p align="center">
-  <a href="https://www.npmjs.com/package/ai-retry" alt="ai-retry"><img src="https://img.shields.io/npm/dt/ai-retry?label=ai-retry"></a> <a href="https://github.com/zirkelc/ai-retry/actions/workflows/ci.yml" alt="CI"><img src="https://img.shields.io/github/actions/workflow/status/zirkelc/ai-retry/ci.yml?branch=main"></a>
+  Retries and fallbacks for the AI SDK
+  <br/>
+  by <a href="https://x.com/zirkelc">@zirkelc</a>
+</p>
+<p align="center">
+  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/github/license/zirkelc/ai-retry" alt="License"></a> <a href="https://www.npmjs.com/package/ai-retry"><img src="https://img.shields.io/npm/dw/ai-retry" alt="Weekly downloads"></a> <a href="https://github.com/zirkelc/ai-retry"><img src="https://img.shields.io/github/stars/zirkelc/ai-retry" alt="GitHub stars"></a> <a href="https://github.com/zirkelc/ai-retry/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/zirkelc/ai-retry/ci.yml?branch=main" alt="CI"></a>
 </p>
 
 </div>
 
 `ai-retry` handles API failures, content filters, timeouts and other errors. It retries the request, or switches to a different model or provider.
 
-You declare a list of typed **conditions**, for example `httpStatus(529)`, `finishReason('content-filter')` or `timeout()`. Each condition ends with an **action**. `.retry()` tries the same model again, and `.switch()` tries a fallback model. When a request fails, or succeeds with a result that is not good enough, `ai-retry` checks the list from top to bottom and uses the first match. It counts attempts per model, so a chain cannot loop.
+You declare a list of typed **conditions**, for example `httpStatus(529)`, `finishReason('content-filter')` or `timeout()`. Each condition ends with an **action**. `.retry()` tries the same model again, and `.switch()` tries a fallback model. When a request fails, or succeeds with a bad result, `ai-retry` checks the list from top to bottom and uses the first match. It counts attempts per model, so a chain cannot loop.
 
 `ai-retry` covers two kinds of failure:
 
-- **Error-based.** The model throws, for example on a timeout, a rate limit or an API error.
-- **Result-based.** The response is successful but not usable, for example on a content filter, a schema mismatch or empty output.
+- **Error-based:** The model throws, for example on a timeout, a rate limit or an API error.
+- **Result-based:** The response is successful but not usable, for example on a content filter, a schema mismatch or empty output.
+
+## Features
+
+- **Two layers** Retry the model request, or run the whole AI SDK call again.
+- **Typed conditions** Match errors and results with `error()`, `httpStatus()`, `finishReason()`, `timeout()`, `result()` and others.
+- **Retry or switch** Try the same model again, or switch to a different model.
+- **Fallbacks** Give a list of models or providers to try in sequence.
+- **Timeouts** Recover a request or a stream that times out.
+- **Streaming** Recover a stream that fails before the first content part arrives.
+- **Telemetry** Get an OpenTelemetry span for each request and each attempt.
 
 ## Two layers
 
