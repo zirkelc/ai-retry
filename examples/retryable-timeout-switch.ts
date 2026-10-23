@@ -1,82 +1,73 @@
 /**
- * Fail over from a slow model to a fast one on a timeout, at the CALL level,
- * for both `retryableGenerateText` and `retryableStreamText`.
+ * Switch from a slow model to a fast model on a timeout, on the call layer.
  *
- * A `generateText` / `streamText` timeout lives ON the call, above the model, so
- * `createRetryableModel` (which retries below) can't recover it: once the
- * deadline fires the SDK tears the call down and discards whatever a lower retry
- * produced (issue #50). The call-level functions re-run the whole call with the
- * next model, so fail-over works.
+ * The `timeout` argument belongs to the call, not to the model. When it fires
+ * in a `streamText` call, the AI SDK stops the call and discards the result of
+ * a retry below it, so a retryable model cannot recover it. A retryable call
+ * runs the whole call again with the next model, so it recovers the timeout for
+ * both `generateText` and `streamText`.
  *
- * Each takes the entry point's own arguments plus `retry`. The deadline goes
- * where that entry point takes one — `timeout` for these two — and a matched
- * `.switch({ timeout })` gives the retry a fresh one, since the first attempt's
- * clock is already spent by the time it fails.
+ * `.switch({ timeout })` gives the retry a fresh deadline, because the deadline
+ * of the first attempt is used up when it fails.
  *
- * Offline (no API key): the slow model only answers after 5s (generate) or
- * stalls its stream open with no content (stream), so any shorter deadline trips
- * first and fails over to the fast model.
+ * Offline: all models are mocks, no API key needed.
  *
  * Run:
  *   pnpm build && pnpm tsx examples/retryable-timeout-switch.ts
+ *
+ * Output:
+ *   generateText: A fast answer.
+ *   streamText: A fast answer.
  */
-import { experimental_retryableGenerateText as retryableGenerateText } from 'ai-retry/generate-text';
-import { timeout } from 'ai-retry/generate-text/conditions';
-import { experimental_retryableStreamText as retryableStreamText } from 'ai-retry/stream-text';
-import { Language, MockLanguageModel } from 'ai-test-kit/language';
 import type { LanguageModelV4CallOptions } from '@ai-sdk/provider';
+import { retryableGenerateText } from 'ai-retry/generate-text';
+import { timeout } from 'ai-retry/generate-text/conditions';
+import { retryableStreamText } from 'ai-retry/stream-text';
+import { Language, MockLanguageModel } from 'ai-test-kit/language';
 
 /**
- * A slow upstream stand-in: `doGenerate` answers only after 5s, and `doStream`
- * opens its stream then never sends content. Both reject when their abort signal
- * fires, which is what the per-attempt deadline does, so any shorter deadline
- * pre-empts either call before it can commit.
+ * `doGenerate` answers after 5 seconds, and `doStream` opens a stream that sends
+ * no content. Both stop when their abort signal fires, so a shorter deadline
+ * stops them before they commit.
  */
-const slowModel = MockLanguageModel.from({
-  doGenerate: ({ abortSignal }: LanguageModelV4CallOptions) =>
-    new Promise((resolve, reject) => {
-      const timer = setTimeout(
-        () => resolve(Language.result('...eventually, a slow answer.')),
-        5_000,
-      );
-      abortSignal?.addEventListener(
-        'abort',
-        () => {
-          clearTimeout(timer);
-          reject(abortSignal.reason);
+const slowModel = MockLanguageModel.from(
+  {
+    doGenerate: {
+      content: [Language.text('A slow answer.')],
+      delayInMs: 5_000,
+    },
+    doStream: async ({ abortSignal }: LanguageModelV4CallOptions) => ({
+      stream: new ReadableStream({
+        start(controller) {
+          controller.enqueue(Language.streamStart());
+          abortSignal?.addEventListener(
+            'abort',
+            () => controller.error(abortSignal.reason),
+            { once: true },
+          );
         },
-        { once: true },
-      );
+      }),
     }),
-  doStream: async ({ abortSignal }: LanguageModelV4CallOptions) => ({
-    stream: new ReadableStream({
-      start(controller) {
-        controller.enqueue(Language.streamStart());
-        abortSignal?.addEventListener(
-          'abort',
-          () => controller.error(abortSignal.reason),
-          { once: true },
-        );
-      },
-    }),
-  }),
+  },
+  { provider: 'openai', modelId: 'gpt-4o' },
+);
+
+const fastModel = MockLanguageModel.from('A fast answer.', {
+  provider: 'openai',
+  modelId: 'gpt-4o-mini',
 });
 
-const fastModel = MockLanguageModel.from('A fast, complete answer.');
-
 /**
- * On a timeout, switch to the fast model under a fresh 1s deadline.
+ * On a timeout, switch to the fast model with a fresh deadline of 1 second.
  *
- * One list, both entry points: `timeout()` reads only the error, never the
- * result, so it is not tied to the entry point it was imported from. A `result`
- * or `finishReason` condition would be, and `ai-retry/stream-text/conditions`
- * would have to supply it.
+ * Both functions can use this list. `timeout()` reads only the error, so it is
+ * not tied to the entry point that it comes from. A `result()` or
+ * `finishReason()` condition is tied to its entry point.
  */
 const retry = [timeout().switch({ model: fastModel, timeout: 1_000 })];
 
 const prompt = 'Invent a new holiday and describe its traditions.';
 
-/** generateText: the deadline is the call's own `timeout` argument. */
 const generated = await retryableGenerateText({
   model: slowModel,
   prompt,
@@ -84,13 +75,9 @@ const generated = await retryableGenerateText({
   retry,
 });
 
-console.log(`generateText -> ${JSON.stringify(generated.text)}`);
+console.log(`generateText: ${generated.text}`);
 
-/**
- * streamText: a pre-content deadline. The slow stream stalls before emitting
- * anything, so it trips before the attempt can commit and fail-over is still
- * possible.
- */
+/** The stream sends no content, so the deadline fires before the commit. */
 const streamed = await retryableStreamText({
   model: slowModel,
   prompt,
@@ -100,6 +87,5 @@ const streamed = await retryableStreamText({
 
 let text = '';
 for await (const chunk of streamed.textStream) text += chunk;
-console.log(`streamText   -> ${JSON.stringify(text)}`);
 
-process.exit(0);
+console.log(`streamText: ${text}`);

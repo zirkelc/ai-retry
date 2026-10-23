@@ -31,6 +31,7 @@ type OnError = Required<RetryableModelOptions<ImageModel>>['onError'];
 type OnRetry = Required<RetryableModelOptions<ImageModel>>['onRetry'];
 type OnSuccess = Required<RetryableModelOptions<ImageModel>>['onSuccess'];
 type OnFailure = Required<RetryableModelOptions<ImageModel>>['onFailure'];
+type OnSettled = Required<RetryableModelOptions<ImageModel>>['onSettled'];
 
 describe('generateImage', () => {
   it('should generate image successfully when no errors occur', async () => {
@@ -444,6 +445,60 @@ describe('generateImage', () => {
       await expect(result).rejects.toThrow();
 
       expect(onSuccessSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('onSettled', () => {
+    it('should report a success after a retry with every attempt', async () => {
+      // Arrange
+      const baseModel = MockImageModel.from(retryableError);
+      const fallbackModel = MockImageModel.from(mockImageResult);
+      const onSettled = vi.fn<OnSettled>();
+
+      // Act
+      await generateImage({
+        model: createRetryableModel({
+          model: baseModel,
+          retries: [fallbackModel],
+          onSettled,
+        }),
+        prompt: 'A beautiful sunset',
+      });
+
+      // Assert
+      expect(onSettled.mock.calls.length).toBe(1);
+      const event = onSettled.mock.calls[0]![0];
+      expect(event.outcome).toBe('success');
+      expect(event.model).toBe(fallbackModel);
+      expect(event.attempts.map((attempt) => attempt.type)).toEqual([
+        'error',
+        'success',
+      ]);
+      expect(event.result).toBeDefined();
+    });
+
+    it('should report a failure with the error surfaced to the caller', async () => {
+      // Arrange
+      const onSettled = vi.fn<OnSettled>();
+
+      // Act
+      const result = generateImage({
+        model: createRetryableModel({
+          model: MockImageModel.from(nonRetryableError),
+          retries: [],
+          onSettled,
+        }),
+        prompt: 'A beautiful sunset',
+        maxRetries: 0,
+      });
+      await expect(result).rejects.toThrow();
+
+      // Assert
+      expect(onSettled.mock.calls.length).toBe(1);
+      const event = onSettled.mock.calls[0]![0];
+      expect(event.outcome).toBe('failure');
+      expect(event.error).toBe(nonRetryableError);
+      expect(event.aborted).toBe(false);
     });
   });
 

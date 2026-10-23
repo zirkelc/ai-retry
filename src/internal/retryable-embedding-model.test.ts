@@ -20,6 +20,7 @@ type OnError = Required<RetryableModelOptions<EmbeddingModel>>['onError'];
 type OnRetry = Required<RetryableModelOptions<EmbeddingModel>>['onRetry'];
 type OnSuccess = Required<RetryableModelOptions<EmbeddingModel>>['onSuccess'];
 type OnFailure = Required<RetryableModelOptions<EmbeddingModel>>['onFailure'];
+type OnSettled = Required<RetryableModelOptions<EmbeddingModel>>['onSettled'];
 
 describe('embed', () => {
   it('should embed successfully when no errors occur', async () => {
@@ -678,6 +679,60 @@ describe('embed', () => {
       await expect(result).rejects.toThrow();
 
       expect(onSuccessSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('onSettled', () => {
+    it('should report a success after a retry with every attempt', async () => {
+      // Arrange
+      const baseModel = MockEmbeddingModel.from(retryableError);
+      const fallbackModel = MockEmbeddingModel.from(mockEmbeddings);
+      const onSettled = vi.fn<OnSettled>();
+
+      // Act
+      await embed({
+        model: createRetryableModel({
+          model: baseModel,
+          retries: [fallbackModel],
+          onSettled,
+        }),
+        value: 'Hello!',
+      });
+
+      // Assert
+      expect(onSettled.mock.calls.length).toBe(1);
+      const event = onSettled.mock.calls[0]![0];
+      expect(event.outcome).toBe('success');
+      expect(event.model).toBe(fallbackModel);
+      expect(event.attempts.map((attempt) => attempt.type)).toEqual([
+        'error',
+        'success',
+      ]);
+      expect(event.result).toBeDefined();
+    });
+
+    it('should report a failure with the error surfaced to the caller', async () => {
+      // Arrange
+      const onSettled = vi.fn<OnSettled>();
+
+      // Act
+      const result = embed({
+        model: createRetryableModel({
+          model: MockEmbeddingModel.from(nonRetryableError),
+          retries: [],
+          onSettled,
+        }),
+        value: 'Hello!',
+        maxRetries: 0,
+      });
+      await expect(result).rejects.toThrow();
+
+      // Assert
+      expect(onSettled.mock.calls.length).toBe(1);
+      const event = onSettled.mock.calls[0]![0];
+      expect(event.outcome).toBe('failure');
+      expect(event.error).toBe(nonRetryableError);
+      expect(event.aborted).toBe(false);
     });
   });
 

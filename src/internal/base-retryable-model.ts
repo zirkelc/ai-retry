@@ -5,6 +5,10 @@ import type {
   AnyModel,
   ModelFailureContext,
   ModelRetryAttempt,
+  ModelSettledAttempt,
+  ModelSettledEvent,
+  ModelSuccessAttempt,
+  ModelSuccessContext,
   RetryableModelOptions,
   RetryTimeout,
 } from '../types.js';
@@ -20,6 +24,27 @@ export type RetryStop = {
   /** Whether the operation ended because the call was aborted. */
   aborted: boolean;
 };
+
+/**
+ * Run every callback, even when an earlier one throws, then rethrow the first
+ * error. `onSettled` and the deprecated hook it replaces report the same
+ * outcome, so one that throws must not silence the other.
+ */
+function runEach(...callbacks: Array<() => void>): void {
+  let failed = false;
+  let firstError: unknown;
+  for (const callback of callbacks) {
+    try {
+      callback();
+    } catch (error) {
+      if (!failed) {
+        failed = true;
+        firstError = error;
+      }
+    }
+  }
+  if (failed) throw firstError;
+}
 
 export abstract class BaseRetryableModel<MODEL extends AnyModel> {
   protected baseModel: MODEL;
@@ -94,28 +119,64 @@ export abstract class BaseRetryableModel<MODEL extends AnyModel> {
   }
 
   /**
-   * Report a terminally failed operation. The final attempt (last entry of
-   * `attempts`) is surfaced as `current`, so it has to be an error attempt: an
-   * operation that ended some other way, such as a callback throwing, has no
-   * failed attempt to report and reports nothing.
+   * Report a successful operation. `attempts` holds the attempts before the
+   * successful one, which `onSettled` reports at the end of its list.
+   */
+  protected emitSuccess(
+    current: ModelSuccessAttempt<MODEL>,
+    attempts: Array<ModelRetryAttempt<MODEL>>,
+  ): void {
+    runEach(
+      () =>
+        this.options.onSettled?.({
+          outcome: 'success',
+          model: current.model,
+          attempts: [...attempts, current] as Array<ModelSettledAttempt<MODEL>>,
+          result: current.result,
+        } as unknown as ModelSettledEvent<MODEL>),
+      () =>
+        this.options.onSuccess?.({
+          current,
+          attempts,
+        } as unknown as ModelSuccessContext<MODEL>),
+    );
+  }
+
+  /**
+   * Report a terminally failed operation, once at least one attempt was made.
+   *
+   * `onSettled` reports every such failure, also one where a callback of the
+   * caller threw after an attempt: the request rejects, so it failed. The
+   * deprecated `onFailure` surfaces the final attempt as `current`, which has
+   * to be an error attempt, so it stays silent when the last attempt is a
+   * result attempt.
    */
   protected emitFailure(
     attempts: Array<ModelRetryAttempt<MODEL>>,
     error: unknown,
     stop: RetryStop,
-    onFailure:
-      | ((context: ModelFailureContext<MODEL>) => void)
-      | undefined = this.options.onFailure,
   ): void {
-    if (!onFailure) return;
     const current = attempts.at(-1);
-    if (!current || !isErrorAttempt(current)) return;
-    onFailure({
-      current,
-      attempts,
-      error,
-      aborted: stop.aborted,
-    } as unknown as ModelFailureContext<MODEL>);
+    if (!current) return;
+    runEach(
+      () =>
+        this.options.onSettled?.({
+          outcome: 'failure',
+          model: current.model,
+          attempts: [...attempts] as Array<ModelSettledAttempt<MODEL>>,
+          error,
+          aborted: stop.aborted,
+        } as unknown as ModelSettledEvent<MODEL>),
+      () => {
+        if (!isErrorAttempt(current)) return;
+        this.options.onFailure?.({
+          current,
+          attempts,
+          error,
+          aborted: stop.aborted,
+        } as unknown as ModelFailureContext<MODEL>);
+      },
+    );
   }
 
   /**

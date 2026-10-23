@@ -417,15 +417,15 @@ export class RetryableLanguageModel
 
     this.updateStickyModel(startModel);
 
-    this.options.onSuccess?.({
-      current: {
+    this.emitSuccess(
+      {
         type: 'success',
         model: this.currentModel,
         result,
         options: finalCallOptions,
       },
       attempts,
-    });
+    );
 
     return result;
   }
@@ -573,6 +573,7 @@ export class RetryableLanguageModel
           controller.enqueue({ type: 'error', error });
           controller.close();
         };
+        let succeeded = false;
         try {
           while (true) {
             /**
@@ -1015,16 +1016,7 @@ export class RetryableLanguageModel
           }
 
           this.updateStickyModel(startModel);
-
-          this.options.onSuccess?.({
-            current: {
-              type: 'success',
-              model: this.currentModel,
-              result,
-              options: finalCallOptions,
-            },
-            attempts,
-          });
+          succeeded = true;
         } catch (error) {
           /**
            * Anything that escaped the loop without reaching one of its
@@ -1042,6 +1034,24 @@ export class RetryableLanguageModel
             modelId: this.currentModel.modelId,
             error: operationError,
           });
+        }
+
+        /**
+         * Reported after the guarded block, as in `doGenerate`: a success
+         * callback that throws must not report the request a second time as a
+         * failure. The stream is already closed here, so its error has no
+         * consumer left to reach.
+         */
+        if (succeeded) {
+          this.emitSuccess(
+            {
+              type: 'success',
+              model: this.currentModel,
+              result,
+              options: finalCallOptions,
+            },
+            attempts,
+          );
         }
       },
     });

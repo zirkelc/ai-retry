@@ -242,6 +242,8 @@ export type ModelSuccessAttempt<MODEL extends AnyModel> = {
 
 /**
  * The context provided to onSuccess with the successful attempt and all previous attempts.
+ *
+ * @deprecated Use `onSettled` and its {@link ModelSettledEvent} instead.
  */
 export type ModelSuccessContext<MODEL extends AnyResolvableModel> = {
   /**
@@ -260,6 +262,8 @@ export type ModelSuccessContext<MODEL extends AnyResolvableModel> = {
  * The context provided to onFailure when an operation terminally fails: no
  * retry matched, retries were exhausted, the retry itself failed, a stream
  * failed after content had already been forwarded, or the call was aborted.
+ *
+ * @deprecated Use `onSettled` and its {@link ModelSettledEvent} instead.
  */
 export type ModelFailureContext<MODEL extends AnyResolvableModel> = {
   /**
@@ -285,6 +289,47 @@ export type ModelFailureContext<MODEL extends AnyResolvableModel> = {
    * an abort.
    */
   aborted: boolean;
+};
+
+/** An attempt as `onSettled` reports it, however it ended. */
+export type ModelSettledAttempt<MODEL extends AnyModel> =
+  | ModelRetryAttempt<MODEL>
+  | ModelSuccessAttempt<MODEL>;
+
+/**
+ * What one request amounted to, reported once, whether it succeeded or not.
+ *
+ * The same shape as the call layer's settled event, so a metric reads the same
+ * way at both layers. A request settles when its outcome is final: a generate
+ * or embed call when it resolves or rejects, a stream when it ends, so a stream
+ * that fails after its content started settles as a failure.
+ */
+export type ModelSettledEvent<MODEL extends AnyResolvableModel> = {
+  /** Whether the request produced a result or failed. */
+  outcome: 'success' | 'failure';
+  /** The model that settled the request, or the one whose failure ended it. */
+  model: ResolvedModel<MODEL>;
+  /**
+   * Every attempt, in order, ending with the last one. On success that is the
+   * successful attempt. Never empty: a request always makes at least one
+   * attempt.
+   */
+  attempts: Array<ModelSettledAttempt<ResolvedModel<MODEL>>>;
+  /** The result, on success. */
+  result?: ModelResult<ResolvedModel<MODEL>>;
+  /**
+   * The error surfaced to the caller, on failure: a `RetryError` wrapping every
+   * attempt error when more than one attempt was made, otherwise the original
+   * error. An aborted request surfaces its abort error as it is.
+   */
+  error?: unknown;
+  /**
+   * On failure: whether an abort stopped the request, rather than its attempts
+   * failing. Both a cancel and a deadline on the call count; a deadline
+   * surfaces a `TimeoutError`. A retry timing out on its own `timeout` is a
+   * failure, not an abort. Undefined on success.
+   */
+  aborted?: boolean;
 };
 
 /**
@@ -368,8 +413,22 @@ export interface RetryableModelOptions<MODEL extends AnyModel> {
   onRetry?: (
     context: ModelRetryContext<MODEL>,
   ) => void | OnRetryOverrides<MODEL> | Promise<void | OnRetryOverrides<MODEL>>;
+  /**
+   * Called once, with what the request amounted to: its outcome, every
+   * attempt, and the result or the error.
+   *
+   * Not called when retries are disabled.
+   */
+  onSettled?: (event: ModelSettledEvent<MODEL>) => void;
+  /**
+   * @deprecated Use `onSettled` instead. It reports the same success with
+   * `outcome: 'success'`.
+   */
   onSuccess?: (context: ModelSuccessContext<MODEL>) => void;
   /**
+   * @deprecated Use `onSettled` instead. It reports the same failure with
+   * `outcome: 'failure'`.
+   *
    * Called once when an operation terminally fails and the error could not
    * be recovered by a retry: no retry matched, all retries were exhausted,
    * the retry itself failed, a stream failed after content had already been
@@ -498,7 +557,7 @@ export type Retry<
    * If both `providerOptions` and `options.providerOptions` are set,
    * `options.providerOptions` takes precedence.
    */
-  // TODO remove in this version
+  // TODO: remove in the next major version
   providerOptions?: SharedV4ProviderOptions;
 };
 

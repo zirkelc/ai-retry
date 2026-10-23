@@ -1,76 +1,55 @@
-import { openai } from '@ai-sdk/openai';
-import type { LanguageModelV4 } from '@ai-sdk/provider';
+/**
+ * Switch to a stronger model when the result does not match the output schema.
+ *
+ * `schemaInvalid()` matches when the result text fails JSON-schema validation
+ * against the `responseFormat` that `Output.object()` sets. Weaker models often
+ * write a free value where the schema has an enum.
+ *
+ * Offline: all models are mocks, no API key needed.
+ *
+ * Run:
+ *   pnpm build && pnpm tsx examples/schema-mismatch.ts
+ *
+ * Output:
+ *   retry with openai/gpt-4.1
+ *   output: {"sentiment":"positive"}
+ */
 import { generateText, Output } from 'ai';
 import { createRetryableModel, schemaInvalid } from 'ai-retry/language-model';
+import { MockLanguageModel } from 'ai-test-kit/language';
 import { z } from 'zod';
 
-/**
- * Creates a mock language model that returns a fixed JSON string.
- */
-function createMockModel(modelId: string, response: string): LanguageModelV4 {
-  return {
-    specificationVersion: `v4`,
-    provider: `mock`,
-    modelId,
-    supportedUrls: {},
-    doGenerate: async () => ({
-      finishReason: { unified: `stop`, raw: undefined },
-      usage: {
-        inputTokens: { total: 10, noCache: 0, cacheRead: 0, cacheWrite: 0 },
-        outputTokens: { total: 20, text: 0, reasoning: 0 },
-      },
-      content: [{ type: `text`, text: response }],
-      warnings: [],
-    }),
-    doStream: async () => {
-      throw new Error(`Not implemented`);
-    },
-  };
-}
-
-/**
- * Primary model returns an enum value outside the allowed set.
- * Weaker models often paraphrase instead of picking an exact enum value.
- */
-const primaryModel = createMockModel(
-  `weak-model`,
-  JSON.stringify({ sentiment: `kind of positive` }),
+/** Returns a value that is not in the enum. */
+const baseModel = MockLanguageModel.from(
+  JSON.stringify({ sentiment: 'kind of positive' }),
+  { provider: 'openai', modelId: 'gpt-4.1-nano' },
 );
 
-/**
- * Fallback model returns a valid enum value.
- */
-const fallbackModel = createMockModel(
-  `strong-model`,
-  JSON.stringify({ sentiment: `positive` }),
+/** Returns a valid enum value. */
+const fallbackModel = MockLanguageModel.from(
+  JSON.stringify({ sentiment: 'positive' }),
+  { provider: 'openai', modelId: 'gpt-4.1' },
 );
 
 const retryableModel = createRetryableModel({
-  // Weaker base model
-  model: primaryModel,
-  // model: openai('gpt-4.1-nano'),
-  retries: [
-    // Retry with a stronger model
-    schemaInvalid().switch({ model: fallbackModel }),
-  ],
+  model: baseModel,
+  retries: [schemaInvalid().switch({ model: fallbackModel })],
   onRetry: ({ current }) => {
-    console.log(`Retrying with model: ${current.model.modelId}`);
+    console.log(
+      `retry with ${current.model.provider}/${current.model.modelId}`,
+    );
   },
 });
 
 const result = await generateText({
   model: retryableModel,
-  maxRetries: 0,
   output: Output.object({
     schema: z.object({
-      sentiment: z.enum([`positive`, `negative`, `neutral`]),
+      sentiment: z.enum(['positive', 'negative', 'neutral']),
     }),
   }),
-  prompt: `Classify the sentiment of: "I really enjoyed this movie!"`,
+  prompt: 'Classify the sentiment of: "I really enjoyed this movie!"',
+  maxRetries: 0,
 });
 
-console.log(`Result:`, result.output);
-// Output:
-// Model response did not match schema: {"sentiment":"kind of positive"}
-// Retrying with model: strong-model
-// Result: { sentiment: 'positive' }
+console.log(`output: ${JSON.stringify(result.output)}`);
